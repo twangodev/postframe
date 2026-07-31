@@ -18,7 +18,9 @@ cli = ["dep:anyhow", "dep:clap", "dep:image"]
 anyhow = { version = "1.0.104", optional = true }
 clap = { version = "4.6.4", features = ["derive"], optional = true }
 image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
+jpeg-encoder = "0.7.1"
 mtb-align = "0.1.0"
 rawler = "0.7.2"
 thiserror = "2.0.19"
+ultrahdr = "0.1.5"
 zune-jpeg = "0.5.15"

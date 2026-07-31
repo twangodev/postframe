@@ -12,11 +12,13 @@ pub mod color;
 pub mod decode;
 pub mod error;
 pub mod fit;
+pub mod hdr;
 
-pub use bracket::{MergeReport, Rendered};
+pub use bracket::{MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
+pub use hdr::UltraHdr;
 
 use std::path::Path;
 
@@ -38,10 +40,10 @@ pub fn measure(raf: &Path, sooc_jpeg: Option<&Path>) -> Result<(Transfer, Report
     fit::transfer::measure(&pairing, frame.sooc.space)
 }
 
-pub fn merge(pairs: &[(&Path, Option<&Path>)], ev: f32) -> Result<(Rendered, MergeReport)> {
+pub fn merge(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
     let frames = pairs
         .iter()
         .map(|(raf, jpeg)| bracket::load(raf, *jpeg))
         .collect::<Result<Vec<_>>>()?;
-    bracket::merge(frames, ev)
+    bracket::merge(frames)
 }

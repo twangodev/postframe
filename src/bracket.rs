@@ -31,6 +31,13 @@ pub struct MergeReport {
     pub radiance_max: f32,
 }
 
+pub struct Merged {
+    pub radiance: Linear,
+    pub transfer: Transfer,
+    pub space: WorkingSpace,
+    pub report: MergeReport,
+}
+
 pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
     let source = RawSource::new(raf)?;
     let external = jpeg.map(std::fs::read).transpose()?;
@@ -76,7 +83,7 @@ pub fn to_working(frame: &Frame, space: WorkingSpace) -> Result<[[f32; 3]; 3]> {
         .ok_or(Error::Unsupported("color matrix is not 3x3"))
 }
 
-pub fn merge(mut frames: Vec<Frame>, ev: f32) -> Result<(Rendered, MergeReport)> {
+pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
     if frames.len() < 2 {
         return Err(Error::Unsupported("a bracket needs at least two frames"));
     }
@@ -118,16 +125,25 @@ pub fn merge(mut frames: Vec<Frame>, ev: f32) -> Result<(Rendered, MergeReport)>
     let (transfer, fit) = fit_transfer(&Pairing { samples, rejected }, space)?;
 
     let (shifts, radiance) = merge_radiance(&frames, &exposures, reference)?;
-    let rendered = render(&radiance, &transfer, ev);
     let radiance_max = radiance.rgb.iter().flatten().copied().fold(0.0, f32::max);
 
-    let report = MergeReport {
-        fit,
-        exposures,
-        shifts: shifts.iter().map(|s| (s.x, s.y)).collect(),
-        radiance_max,
-    };
-    Ok((rendered, report))
+    Ok(Merged {
+        radiance,
+        transfer,
+        space,
+        report: MergeReport {
+            fit,
+            exposures,
+            shifts: shifts.iter().map(|s| (s.x, s.y)).collect(),
+            radiance_max,
+        },
+    })
+}
+
+impl Merged {
+    pub fn render(&self, ev: f32) -> Rendered {
+        render(&self.radiance, &self.transfer, ev)
+    }
 }
 
 fn merge_radiance(

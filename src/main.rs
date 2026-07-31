@@ -41,11 +41,26 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32) -> anyhow::Result<()> {
         .map(|(raf, jpeg)| (raf.as_path(), jpeg.as_deref()))
         .collect();
 
-    let (rendered, report) = postframe::merge(&pairs, ev)?;
-    image::RgbImage::from_raw(rendered.width as u32, rendered.height as u32, rendered.rgb8)
-        .context("rendered buffer size mismatch")?
-        .save(output)?;
+    let merged = postframe::merge(&pairs)?;
 
+    let ultra = output
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
+    if ultra {
+        let encoded = postframe::hdr::encode(&merged)?;
+        std::fs::write(output, &encoded.bytes)?;
+        println!(
+            "hdr headroom    {:.2} stops above SDR white",
+            encoded.boost_stops
+        );
+    } else {
+        let rendered = merged.render(ev);
+        image::RgbImage::from_raw(rendered.width as u32, rendered.height as u32, rendered.rgb8)
+            .context("rendered buffer size mismatch")?
+            .save(output)?;
+    }
+
+    let report = &merged.report;
     println!("exposures       {:?} s", report.exposures);
     println!("shifts          {:?} binned px", report.shifts);
     println!(
