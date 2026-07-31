@@ -43,7 +43,7 @@ pub fn measure(raf: &Path, sooc_jpeg: Option<&Path>) -> Result<(Transfer, Report
 pub fn merge(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
     let frames = pairs
         .iter()
-        .map(|(raf, jpeg)| bracket::load(raf, *jpeg))
+        .map(|(raf, jpeg)| bracket::load_full(raf, *jpeg))
         .collect::<Result<Vec<_>>>()?;
     bracket::merge(frames)
 }

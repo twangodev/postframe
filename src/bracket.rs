@@ -13,10 +13,17 @@ use crate::fit::transfer::{Report, Transfer, measure as fit_transfer};
 
 pub struct Frame {
     pub camera: Linear,
+    pub full: Option<Linear>,
     pub sooc: Sooc,
     pub balance: [f32; 3],
     pub xyz_to_cam: Vec<f32>,
     pub orientation: Orientation,
+}
+
+impl Frame {
+    fn image(&self) -> &Linear {
+        self.full.as_ref().unwrap_or(&self.camera)
+    }
 }
 
 pub struct Rendered {
@@ -40,6 +47,14 @@ pub struct Merged {
 }
 
 pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
+    load_at(raf, jpeg, false)
+}
+
+pub fn load_full(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
+    load_at(raf, jpeg, true)
+}
+
+fn load_at(raf: &Path, jpeg: Option<&Path>, full_resolution: bool) -> Result<Frame> {
     let source = RawSource::new(raf)?;
     let external = jpeg.map(std::fs::read).transpose()?;
     let bytes = match &external {
@@ -50,6 +65,9 @@ pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
 
     let raw = rawler::decode(&source, &RawDecodeParams::default())?;
     let camera = linear::from_raw(&raw)?;
+    let full = full_resolution
+        .then(|| linear::demosaic_full(&raw))
+        .transpose()?;
 
     let [r, g, b, _] = raw.wb_coeffs;
     if [r, g, b].iter().any(|c| !c.is_finite()) {
@@ -68,6 +86,7 @@ pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
     };
     Ok(Frame {
         camera,
+        full,
         sooc,
         balance: [r, g, b],
         xyz_to_cam,
@@ -120,15 +139,18 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
     let balance = frames[reference].balance;
 
     for frame in &mut frames {
-        for pixel in &mut frame.camera.rgb {
-            *pixel = color::apply(
-                &matrix,
-                [
-                    pixel[0] * balance[0],
-                    pixel[1] * balance[1],
-                    pixel[2] * balance[2],
-                ],
-            );
+        let planes = std::iter::once(&mut frame.camera).chain(frame.full.as_mut());
+        for plane in planes {
+            for pixel in &mut plane.rgb {
+                *pixel = color::apply(
+                    &matrix,
+                    [
+                        pixel[0] * balance[0],
+                        pixel[1] * balance[1],
+                        pixel[2] * balance[2],
+                    ],
+                );
+            }
         }
     }
 
@@ -217,10 +239,10 @@ fn merge_radiance(
     exposures: &[f32],
     reference: usize,
 ) -> Result<(Vec<Shift>, Linear)> {
-    let (width, height) = (frames[0].camera.width, frames[0].camera.height);
+    let (width, height) = (frames[0].image().width, frames[0].image().height);
     if frames
         .iter()
-        .any(|f| (f.camera.width, f.camera.height) != (width, height))
+        .any(|f| (f.image().width, f.image().height) != (width, height))
     {
         return Err(Error::Unsupported("bracket frames differ in size"));
     }
@@ -263,12 +285,12 @@ fn merge_radiance(
                 let sx = (crop.x + x) as i64 - shifts[i].x as i64;
                 let sy = (crop.y + y) as i64 - shifts[i].y as i64;
                 let src = sy as usize * width + sx as usize;
-                if frame.camera.clipped[src] {
+                if frame.image().clipped[src] {
                     continue;
                 }
                 let scale = (t_ref / exposures[i]) as f64;
                 let w = exposures[i] as f64;
-                for (total, &channel) in sum.iter_mut().zip(&frame.camera.rgb[src]) {
+                for (total, &channel) in sum.iter_mut().zip(&frame.image().rgb[src]) {
                     *total += channel as f64 * scale * w;
                 }
                 weight += w;
@@ -283,7 +305,7 @@ fn merge_radiance(
                 let sy = (crop.y + y) as i64 - shifts[shortest].y as i64;
                 let src = sy as usize * width + sx as usize;
                 clipped[out] = true;
-                let brightest = frames[shortest].camera.rgb[src]
+                let brightest = frames[shortest].image().rgb[src]
                     .iter()
                     .fold(0.0f32, |m, &v| m.max(v));
                 [brightest * t_ref / exposures[shortest]; 3]

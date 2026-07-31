@@ -12,7 +12,34 @@ pub struct Linear {
 
 pub const CLIP_FRACTION: f32 = 0.99;
 
-pub fn from_raw(raw: &RawImage) -> Result<Linear> {
+struct CfaView<'a> {
+    data: &'a [u16],
+    stride: usize,
+    origin: (usize, usize),
+    size: (usize, usize),
+    black: [f32; 4],
+    white: f32,
+}
+
+impl CfaView<'_> {
+    fn quad_index(x: usize, y: usize) -> usize {
+        (y % 2) * 2 + x % 2
+    }
+
+    fn normalized(&self, x: usize, y: usize) -> f32 {
+        let q = Self::quad_index(x, y);
+        let code = self.data[(self.origin.1 + y) * self.stride + self.origin.0 + x];
+        (code as f32 - self.black[q]) / (self.white - self.black[q])
+    }
+
+    fn is_clipped(&self, x: usize, y: usize) -> bool {
+        let q = Self::quad_index(x, y);
+        let code = self.data[(self.origin.1 + y) * self.stride + self.origin.0 + x];
+        code as f32 >= self.black[q] + CLIP_FRACTION * (self.white - self.black[q])
+    }
+}
+
+fn view(raw: &RawImage) -> Result<CfaView<'_>> {
     let RawImageData::Integer(data) = &raw.data else {
         return Err(Error::Unsupported("floating point raw data"));
     };
@@ -25,21 +52,74 @@ pub fn from_raw(raw: &RawImage) -> Result<Linear> {
     if crop.p.x % 2 != 0 || crop.p.y % 2 != 0 {
         return Err(Error::Unsupported("crop origin breaks the RGGB phase"));
     }
-    let black = quad_black(&raw.blacklevel)?;
-    let white = raw
-        .whitelevel
-        .0
-        .first()
-        .copied()
-        .ok_or(Error::Unsupported("raw carries no white level"))? as f32;
-    Ok(bin_rggb(
+    Ok(CfaView {
         data,
-        raw.width,
-        (crop.p.x, crop.p.y),
-        (crop.width() & !1, crop.height() & !1),
-        black,
-        white,
+        stride: raw.width,
+        origin: (crop.p.x, crop.p.y),
+        size: (crop.width() & !1, crop.height() & !1),
+        black: quad_black(&raw.blacklevel)?,
+        white: raw
+            .whitelevel
+            .0
+            .first()
+            .copied()
+            .ok_or(Error::Unsupported("raw carries no white level"))? as f32,
+    })
+}
+
+pub fn from_raw(raw: &RawImage) -> Result<Linear> {
+    let v = view(raw)?;
+    Ok(bin_rggb(
+        v.data, v.stride, v.origin, v.size, v.black, v.white,
     ))
+}
+
+pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
+    let v = view(raw)?;
+    let (width, height) = v.size;
+
+    let mut mosaic = vec![0.0f32; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            mosaic[y * width + x] = v.normalized(x, y);
+        }
+    }
+    let mut planar = vec![0.0f32; 3 * width * height];
+    demosaic::demosaic(
+        &mosaic,
+        width,
+        height,
+        &demosaic::CfaPattern::bayer_rggb(),
+        demosaic::Algorithm::Mhc,
+        &mut planar,
+    )
+    .map_err(|e| Error::Encode(e.to_string()))?;
+    drop(mosaic);
+
+    let (r, gb) = planar.split_at(width * height);
+    let (g, b) = gb.split_at(width * height);
+    let rgb = (0..width * height).map(|i| [r[i], g[i], b[i]]).collect();
+
+    let mut clipped = Vec::with_capacity(width * height);
+    for y in 0..height {
+        let qy = y & !1;
+        for x in 0..width {
+            let qx = x & !1;
+            clipped.push(
+                v.is_clipped(qx, qy)
+                    || v.is_clipped(qx + 1, qy)
+                    || v.is_clipped(qx, qy + 1)
+                    || v.is_clipped(qx + 1, qy + 1),
+            );
+        }
+    }
+
+    Ok(Linear {
+        width,
+        height,
+        rgb,
+        clipped,
+    })
 }
 
 fn quad_black(black: &BlackLevel) -> Result<[f32; 4]> {

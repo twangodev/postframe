@@ -359,6 +359,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b1e3a325bc115f096c8b77bbf027a7c2592230e70be2d985be950d3d5e60ebe"
 
 [[package]]
+name = "demosaic"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8e7c3f4e7042d592a58e82428b4f482680715f75dd0f774664973e8a88f72f"
+
+[[package]]
 name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1042,6 +1048,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "demosaic",
  "image",
  "jpeg-encoder",
  "mtb-align",
