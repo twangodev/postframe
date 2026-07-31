@@ -16,6 +16,7 @@ pub struct Sooc {
     pub height: usize,
     pub rgb8: Vec<u8>,
     pub space: WorkingSpace,
+    pub exposure: Option<f32>,
 }
 
 pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
@@ -34,17 +35,33 @@ pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
         .exif()
         .and_then(|tiff| working_space(tiff))
         .unwrap_or(WorkingSpace::LinearSrgb);
+    let exposure = decoder.exif().and_then(|tiff| exposure_time(tiff));
     Ok(Sooc {
         width: info.width as usize,
         height: info.height as usize,
         rgb8,
         space,
+        exposure,
     })
 }
 
 const EXIF_ADOBE_RGB: u16 = 2;
 const EXIF_SRGB: u16 = 1;
 const INTEROP_ADOBE_RGB: &str = "R03";
+
+fn exposure_time(exif_tiff: &[u8]) -> Option<f32> {
+    let mut cursor = Cursor::new(exif_tiff);
+    let tiff = GenericTiffReader::new(&mut cursor, 0, 0, None, &[]).ok()?;
+    let seconds = tiff
+        .root_ifd()
+        .sub_ifds()
+        .get(&(TiffCommonTag::ExifIFDPointer as u16))?
+        .first()?
+        .get_entry(ExifTag::ExposureTime)?
+        .value
+        .force_f32(0);
+    (seconds > 0.0).then_some(seconds)
+}
 
 fn working_space(exif_tiff: &[u8]) -> Option<WorkingSpace> {
     let mut cursor = Cursor::new(exif_tiff);
