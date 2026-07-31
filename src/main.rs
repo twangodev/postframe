@@ -16,13 +16,20 @@ enum Cli {
         output: PathBuf,
         #[arg(long, default_value_t = 0.0)]
         ev: f32,
+        #[arg(long)]
+        tone: bool,
     },
 }
 
 fn main() -> anyhow::Result<()> {
     match Cli::parse() {
         Cli::Probe { raf, jpeg } => probe(&raf, jpeg.as_deref()),
-        Cli::Merge { rafs, output, ev } => merge(&rafs, &output, ev),
+        Cli::Merge {
+            rafs,
+            output,
+            ev,
+            tone,
+        } => merge(&rafs, &output, ev, tone),
     }
 }
 
@@ -33,7 +40,7 @@ fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn merge(rafs: &[PathBuf], output: &Path, ev: f32) -> anyhow::Result<()> {
+fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result<()> {
     let jpegs: Vec<Option<PathBuf>> = rafs.iter().map(|raf| sibling_jpeg(raf)).collect();
     let pairs: Vec<(&Path, Option<&Path>)> = rafs
         .iter()
@@ -54,7 +61,11 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32) -> anyhow::Result<()> {
             encoded.boost_stops
         );
     } else {
-        let rendered = merged.render(ev);
+        let rendered = if tone {
+            merged.render_tone_mapped(ev)
+        } else {
+            merged.render(ev)
+        };
         image::RgbImage::from_raw(rendered.width as u32, rendered.height as u32, rendered.rgb8)
             .context("rendered buffer size mismatch")?
             .save(output)?;

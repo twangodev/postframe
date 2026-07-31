@@ -144,6 +144,27 @@ impl Merged {
     pub fn render(&self, ev: f32) -> Rendered {
         render(&self.radiance, &self.transfer, ev)
     }
+
+    // Extended Reinhard on the brightest channel, white point at the bracket's
+    // measured maximum, so recovered highlights roll into SDR range instead of
+    // clipping. The gain is applied as a scalar per pixel to preserve hue.
+    pub fn render_tone_mapped(&self, ev: f32) -> Rendered {
+        let gain = (2.0f32).powf(ev);
+        let white = (self.report.radiance_max * gain).max(1.0);
+        let mut rgb8 = Vec::with_capacity(self.radiance.rgb.len() * 3);
+        for pixel in &self.radiance.rgb {
+            let exposed = pixel.map(|c| c * gain);
+            let brightest = exposed.iter().fold(0.0f32, |m, &c| m.max(c));
+            let compress = (1.0 + brightest / (white * white)) / (1.0 + brightest);
+            let coded = self.transfer.eval(exposed.map(|c| c * compress));
+            rgb8.extend(coded.map(|v| v.round().clamp(0.0, 255.0) as u8));
+        }
+        Rendered {
+            width: self.radiance.width,
+            height: self.radiance.height,
+            rgb8,
+        }
+    }
 }
 
 fn merge_radiance(
@@ -210,11 +231,17 @@ fn merge_radiance(
             rgb[out] = if weight > 0.0 {
                 [0, 1, 2].map(|c| (sum[c] / weight) as f32)
             } else {
+                // Clipped in every frame: the per-channel ratios are meaningless
+                // (each channel saturates at its own ceiling), so render neutral
+                // at the brightest channel's level, as the camera would.
                 let sx = (crop.x + x) as i64 - shifts[shortest].x as i64;
                 let sy = (crop.y + y) as i64 - shifts[shortest].y as i64;
                 let src = sy as usize * width + sx as usize;
                 clipped[out] = true;
-                frames[shortest].camera.rgb[src].map(|v| v * t_ref / exposures[shortest])
+                let brightest = frames[shortest].camera.rgb[src]
+                    .iter()
+                    .fold(0.0f32, |m, &v| m.max(v));
+                [brightest * t_ref / exposures[shortest]; 3]
             };
         }
     }
