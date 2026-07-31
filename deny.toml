@@ -1,6 +1,5 @@
 [licenses]
-# core/ and cli/ are GPL-3.0-or-later, which permits LGPL dependencies.
-# Crates under crates/ are checked separately against a permissive-only list.
+# postframe is GPL-3.0-or-later, which permits LGPL dependencies.
 # Grow this list as dependencies land; an unused entry is a warning.
 allow = [
     "Apache-2.0",

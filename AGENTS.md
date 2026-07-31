@@ -8,8 +8,8 @@ merged radiance.
 ## Layout
 
 ```
-core/    lib. The pipeline. One file per stage.
-cli/     bin "postframe".
+src/core/   lib. The pipeline. One file per stage.
+src/cli/    bin "postframe".
 ```
 
 ## Style
