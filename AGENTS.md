@@ -1,16 +1,13 @@
 # postframe
 
-Merges an exposure bracket into a single HDR image while preserving the camera's
-own rendering. Given a raw file and its paired straight-out-of-camera JPEG, that
-rendering is recovered as a measurable transfer function and applied to the
-merged radiance.
+Post-processing built on your JPEGs.
 
 ## Layout
 
 Single crate. The library is the pipeline; the binary is a thin shell over it.
 
 ```
-src/lib.rs    library root. One file per pipeline stage alongside it.
+src/lib.rs    library root. Pipeline stages in modules alongside it.
 src/main.rs   bin "postframe", behind the `cli` feature.
 ```
 
