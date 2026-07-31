@@ -1,6 +1,3 @@
-#[cfg(feature = "gui")]
-mod gui;
-
 use std::path::{Path, PathBuf};
 
 use anstream::println;
@@ -69,25 +66,8 @@ fn main() -> anyhow::Result<()> {
             tone,
         }) => merge(&rafs, &output, ev, tone),
         Some(Command::Batch { dir, output, tone }) => batch(&dir, &output, tone),
-        None => open_gui(cli.rafs),
+        None => anyhow::bail!("the web ui is not wired up yet; use a subcommand (see --help)"),
     }
-}
-
-#[cfg(feature = "gui")]
-fn open_gui(rafs: Vec<PathBuf>) -> anyhow::Result<()> {
-    let pairs = rafs
-        .into_iter()
-        .map(|raf| {
-            let jpeg = sibling_jpeg(&raf);
-            (raf, jpeg)
-        })
-        .collect();
-    gui::open(pairs)
-}
-
-#[cfg(not(feature = "gui"))]
-fn open_gui(_: Vec<PathBuf>) -> anyhow::Result<()> {
-    anyhow::bail!("this build has no gui; use a subcommand (see --help)")
 }
 
 fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
