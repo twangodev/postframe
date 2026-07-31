@@ -46,3 +46,11 @@ pub fn merge(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
         .collect::<Result<Vec<_>>>()?;
     bracket::merge(frames)
 }
+
+pub fn merge_preview(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
+    let frames = pairs
+        .iter()
+        .map(|(raf, jpeg)| bracket::load(raf, *jpeg))
+        .collect::<Result<Vec<_>>>()?;
+    bracket::merge(frames)
+}

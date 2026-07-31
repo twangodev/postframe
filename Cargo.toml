@@ -11,19 +11,40 @@ name = "postframe"
 required-features = ["cli"]
 
 [features]
-default = ["cli"]
+default = ["cli", "gui"]
 cli = ["dep:anstream", "dep:anstyle", "dep:anyhow", "dep:clap", "dep:image"]
+gui = [
+    "cli",
+    "dep:bytemuck",
+    "dep:egui",
+    "dep:egui-wgpu",
+    "dep:egui-winit",
+    "dep:half",
+    "dep:pollster",
+    "dep:rayon",
+    "dep:wgpu",
+    "dep:winit",
+]
 
 [dependencies]
 anstream = { version = "1.0.0", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
 anstyle = { version = "1.0.14", optional = true }
 anyhow = { version = "1.0.104", optional = true }
 clap = { version = "4.6.4", features = ["derive"], optional = true }
 demosaic = "0.3.0"
+egui = { git = "https://github.com/emilk/egui", rev = "b06f5fea09a472e4b676721406d43d7b0059a1c9", version = "0.35.0", optional = true }
+egui-wgpu = { git = "https://github.com/emilk/egui", rev = "b06f5fea09a472e4b676721406d43d7b0059a1c9", version = "0.35.0", optional = true }
+egui-winit = { git = "https://github.com/emilk/egui", rev = "b06f5fea09a472e4b676721406d43d7b0059a1c9", version = "0.35.0", optional = true }
+half = { version = "2", optional = true }
 image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
 jpeg-encoder = "0.7.1"
 mtb-align = "0.1.0"
+pollster = { version = "1", optional = true }
 rawler = "0.7.2"
+rayon = { version = "1", optional = true }
 thiserror = "2.0.19"
 ultrahdr-rs = { version = "0.3.5", default-features = false }
+wgpu = { version = "30.0.0", optional = true }
+winit = { version = "0.30.13", optional = true }
 zune-jpeg = "0.5.15"

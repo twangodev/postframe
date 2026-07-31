@@ -1,3 +1,6 @@
+#[cfg(feature = "gui")]
+mod gui;
+
 use std::path::{Path, PathBuf};
 
 use anstream::println;
@@ -39,6 +42,10 @@ enum Cli {
         #[arg(long)]
         tone: bool,
     },
+    #[cfg(feature = "gui")]
+    Gui {
+        rafs: Vec<PathBuf>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -51,6 +58,16 @@ fn main() -> anyhow::Result<()> {
             tone,
         } => merge(&rafs, &output, ev, tone),
         Cli::Batch { dir, output, tone } => batch(&dir, &output, tone),
+        #[cfg(feature = "gui")]
+        Cli::Gui { rafs } => {
+            let jpegs: Vec<Option<PathBuf>> = rafs.iter().map(|raf| sibling_jpeg(raf)).collect();
+            let pairs: Vec<(&Path, Option<&Path>)> = rafs
+                .iter()
+                .zip(&jpegs)
+                .map(|(raf, jpeg)| (raf.as_path(), jpeg.as_deref()))
+                .collect();
+            gui::open(&pairs)
+        }
     }
 }
 
