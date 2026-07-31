@@ -8,17 +8,9 @@ merged radiance.
 ## Layout
 
 ```
-core/      GPL-3.0-or-later, lib. The pipeline. One file per stage.
-cli/       GPL-3.0-or-later, bin "postframe".
-crates/    MIT OR Apache-2.0 only. Extraction candidates.
+core/    lib. The pipeline. One file per stage.
+cli/     bin "postframe".
 ```
-
-## Licensing firewall
-
-**Nothing in `crates/` may depend on `core/`, `cli/`, or on any GPL/LGPL
-dependency.** Permissive crates are implemented from published papers, never
-transcribed from GPL codebases; carry the citation and DOI at the top of the
-module. Never vendor papers.
 
 ## Style
 
