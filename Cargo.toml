@@ -12,9 +12,11 @@ required-features = ["cli"]
 
 [features]
 default = ["cli"]
-cli = ["dep:anyhow", "dep:clap", "dep:image"]
+cli = ["dep:anstream", "dep:anstyle", "dep:anyhow", "dep:clap", "dep:image"]
 
 [dependencies]
+anstream = { version = "1.0.0", optional = true }
+anstyle = { version = "1.0.14", optional = true }
 anyhow = { version = "1.0.104", optional = true }
 clap = { version = "4.6.4", features = ["derive"], optional = true }
 demosaic = "0.3.0"

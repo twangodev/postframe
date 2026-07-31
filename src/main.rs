@@ -1,7 +1,20 @@
 use std::path::{Path, PathBuf};
 
+use anstream::println;
+use anstyle::{AnsiColor, Style};
 use anyhow::Context;
 use clap::Parser;
+
+const LABEL: Style = Style::new().dimmed();
+const HEADER: Style = Style::new().bold();
+const OK: Style = AnsiColor::Green.on_default();
+const WARN: Style = AnsiColor::Yellow.on_default();
+const FAIL: Style = AnsiColor::Red.on_default().bold();
+const CHANNEL: [Style; 3] = [
+    AnsiColor::Red.on_default().bold(),
+    AnsiColor::Green.on_default().bold(),
+    AnsiColor::Blue.on_default().bold(),
+];
 
 #[derive(Parser)]
 #[command(name = "postframe", version, about)]
@@ -66,16 +79,19 @@ fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
     for bracket in &brackets {
         let stem = bracket[0].file_stem().unwrap_or_default().to_string_lossy();
         if bracket.len() < 2 {
-            println!("{stem}: skipped, single frame\n");
+            println!("{WARN}{stem}: skipped, single frame{WARN:#}\n");
             continue;
         }
-        println!("=== {stem}: {} frames ===", bracket.len());
+        println!(
+            "{HEADER}{stem}{HEADER:#} {LABEL}({} frames){LABEL:#}",
+            bracket.len()
+        );
         let target = output.join(format!("{stem}.jpg"));
         match merge(bracket, &target, 0.0, tone) {
             Ok(()) => println!(),
             Err(error) => {
                 failures += 1;
-                println!("{stem}: FAILED — {error:#}\n");
+                println!("{FAIL}{stem}: FAILED{FAIL:#} — {error:#}\n");
             }
         }
     }
@@ -109,7 +125,7 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
         let encoded = postframe::hdr::encode(&merged)?;
         std::fs::write(output, &encoded.bytes)?;
         println!(
-            "hdr headroom    {:.2} stops above SDR white",
+            "{LABEL}hdr headroom{LABEL:#}    {HEADER}{:.2}{HEADER:#} stops above SDR white",
             encoded.boost_stops
         );
     } else {
@@ -135,15 +151,15 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
     }
 
     let report = &merged.report;
-    println!("exposures       {:?} s", report.exposures);
-    println!("shifts          {:?} binned px", report.shifts);
+    println!("{LABEL}exposures{LABEL:#}       {:?} s", report.exposures);
+    println!("{LABEL}shifts{LABEL:#}          {:?} px", report.shifts);
     println!(
-        "radiance max    {:.2}x reference white",
+        "{LABEL}radiance max{LABEL:#}    {:.2}x reference white",
         report.radiance_max
     );
     print_fit(&report.fit);
     println!();
-    println!("wrote {}", output.display());
+    println!("{LABEL}wrote{LABEL:#} {OK}{}{OK:#}", output.display());
     Ok(())
 }
 
@@ -155,16 +171,17 @@ fn sibling_jpeg(raf: &Path) -> Option<PathBuf> {
 }
 
 fn print_fit(report: &postframe::Report) {
-    println!("working space   {:?}", report.space);
+    println!("{LABEL}working space{LABEL:#}   {:?}", report.space);
     println!(
-        "tiles           {} accepted, {} rejected",
+        "{LABEL}tiles{LABEL:#}           {} accepted, {} rejected",
         report.accepted, report.rejected
     );
     println!();
-    println!("channel   rms     flat rms   corr(|residual|, gradient)");
+    println!("{LABEL}channel   rms     flat rms   corr(|residual|, gradient){LABEL:#}");
     for (name, c) in ["R", "G", "B"].into_iter().zip(0..) {
+        let style = CHANNEL[c];
         println!(
-            "{name}         {:<8.3}{:<11.3}{:.3}",
+            "{style}{name}{style:#}         {:<8.3}{:<11.3}{:.3}",
             report.rms[c], report.flat_rms[c], report.grad_corr[c]
         );
     }
@@ -172,8 +189,11 @@ fn print_fit(report: &postframe::Report) {
 
 fn print_mix(transfer: &postframe::Transfer) {
     println!();
-    println!("cross-channel mix");
-    for (name, row) in ["R", "G", "B"].into_iter().zip(transfer.mix) {
-        println!("{name}   [{:+.4} {:+.4} {:+.4}]", row[0], row[1], row[2]);
+    println!("{LABEL}cross-channel mix{LABEL:#}");
+    for ((name, row), style) in ["R", "G", "B"].into_iter().zip(transfer.mix).zip(CHANNEL) {
+        println!(
+            "{style}{name}{style:#}   [{:+.4} {:+.4} {:+.4}]",
+            row[0], row[1], row[2]
+        );
     }
 }
