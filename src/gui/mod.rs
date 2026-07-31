@@ -1,9 +1,10 @@
 mod preview;
 mod surface;
 
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::mpsc::Receiver;
 
-use anyhow::Context as _;
 use postframe::Merged;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -13,11 +14,35 @@ use winit::window::{Window, WindowId};
 use preview::Preview;
 use surface::Gpu;
 
-pub fn run(merged: Merged) -> anyhow::Result<()> {
+pub fn open(pairs: Vec<(PathBuf, Option<PathBuf>)>) -> anyhow::Result<()> {
+    let content = if pairs.is_empty() {
+        Content::Empty
+    } else {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let borrowed: Vec<_> = pairs
+                .iter()
+                .map(|(raf, jpeg)| (raf.as_path(), jpeg.as_deref()))
+                .collect();
+            let _ = sender.send(postframe::merge_preview(&borrowed));
+        });
+        Content::Merging(receiver)
+    };
+
     let event_loop = EventLoop::new()?;
-    let mut app = App::new(merged);
+    let mut app = App::new(content);
     event_loop.run_app(&mut app)?;
     app.failure.map_or(Ok(()), Err)
+}
+
+enum Content {
+    Empty,
+    Merging(Receiver<postframe::Result<Merged>>),
+    Ready {
+        merged: Box<Merged>,
+        preview: Preview,
+    },
+    Failed(String),
 }
 
 struct Params {
@@ -26,8 +51,7 @@ struct Params {
 }
 
 struct App {
-    merged: Merged,
-    preview: Preview,
+    content: Content,
     params: Params,
     dirty: bool,
     view: View,
@@ -50,21 +74,21 @@ struct View {
     pan: (f32, f32),
 }
 
+const HOME_VIEW: View = View {
+    zoom: 1.0,
+    pan: (0.0, 0.0),
+};
+
 impl App {
-    fn new(merged: Merged) -> Self {
-        let preview = Preview::new(&merged);
+    fn new(content: Content) -> Self {
         Self {
-            merged,
-            preview,
+            content,
             params: Params {
                 ev: 0.0,
                 tone: false,
             },
             dirty: true,
-            view: View {
-                zoom: 1.0,
-                pan: (0.0, 0.0),
-            },
+            view: HOME_VIEW,
             gpu: None,
             egui: None,
             window: None,
@@ -74,17 +98,40 @@ impl App {
         }
     }
 
+    fn poll_merge(&mut self) {
+        let Content::Merging(receiver) = &self.content else {
+            return;
+        };
+        let Some(gpu) = &mut self.gpu else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(Ok(merged)) => {
+                let preview = Preview::new(&merged);
+                gpu.set_image(preview.width as u32, preview.height as u32);
+                self.dirty = true;
+                self.content = Content::Ready {
+                    merged: Box::new(merged),
+                    preview,
+                };
+            }
+            Ok(Err(error)) => self.content = Content::Failed(error.to_string()),
+            Err(_) => {}
+        }
+    }
+
     fn redraw(&mut self) -> anyhow::Result<()> {
+        self.poll_merge();
         let (Some(gpu), Some(egui), Some(window)) = (&mut self.gpu, &mut self.egui, &self.window)
         else {
             return Ok(());
         };
 
         if self.dirty {
-            let pixels =
-                self.preview
-                    .pixels(&self.merged, self.params.ev, self.params.tone, gpu.hdr);
-            gpu.upload_image(&pixels);
+            if let Content::Ready { merged, preview } = &self.content {
+                let pixels = preview.pixels(merged, self.params.ev, self.params.tone, gpu.hdr);
+                gpu.upload_image(&pixels);
+            }
             self.dirty = false;
         }
 
@@ -95,17 +142,32 @@ impl App {
             egui::Panel::right("controls").show(root, |ui| {
                 ui.heading("postframe");
                 ui.add_space(8.0);
-                let ev = ui.add(egui::Slider::new(&mut self.params.ev, -4.0..=4.0).text("EV"));
-                let tone = ui.checkbox(&mut self.params.tone, "tone-map highlights");
-                if ev.changed() || tone.changed() {
-                    self.dirty = true;
-                }
-                ui.add_space(8.0);
-                if ui.button("reset view").clicked() {
-                    self.view = View {
-                        zoom: 1.0,
-                        pan: (0.0, 0.0),
-                    };
+                match &self.content {
+                    Content::Empty => {
+                        ui.label("no bracket loaded");
+                        ui.label("start with: postframe <RAF files>");
+                    }
+                    Content::Merging(_) => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label("merging bracket…");
+                        });
+                    }
+                    Content::Failed(error) => {
+                        ui.colored_label(egui::Color32::LIGHT_RED, error);
+                    }
+                    Content::Ready { .. } => {
+                        let ev =
+                            ui.add(egui::Slider::new(&mut self.params.ev, -4.0..=4.0).text("EV"));
+                        let tone = ui.checkbox(&mut self.params.tone, "tone-map highlights");
+                        if ev.changed() || tone.changed() {
+                            self.dirty = true;
+                        }
+                        ui.add_space(8.0);
+                        if ui.button("reset view").clicked() {
+                            self.view = HOME_VIEW;
+                        }
+                    }
                 }
                 ui.add_space(12.0);
                 ui.label(format!("surface  {surface_label}"));
@@ -114,18 +176,21 @@ impl App {
         });
         egui.state
             .handle_platform_output(window, output.platform_output);
-        if self.dirty {
+        if self.dirty || matches!(self.content, Content::Merging(_)) {
             window.request_redraw();
         }
 
         let clipped = egui
             .context
             .tessellate(output.shapes, output.pixels_per_point);
-        let transform = transform(
-            (gpu.width() as f32, gpu.height() as f32),
-            (self.preview.width as f32, self.preview.height as f32),
-            self.view,
-        );
+        let transform = match &self.content {
+            Content::Ready { preview, .. } => transform(
+                (gpu.width() as f32, gpu.height() as f32),
+                (preview.width as f32, preview.height as f32),
+                self.view,
+            ),
+            _ => [0.0; 4],
+        };
         gpu.render(
             &clipped,
             output.textures_delta,
@@ -156,11 +221,7 @@ impl ApplicationHandler for App {
             let window = Arc::new(
                 event_loop.create_window(Window::default_attributes().with_title("postframe"))?,
             );
-            let gpu = Gpu::new(
-                window.clone(),
-                self.preview.width as u32,
-                self.preview.height as u32,
-            )?;
+            let gpu = Gpu::new(window.clone())?;
             let context = egui::Context::default();
             let state = egui_winit::State::new(
                 context.clone(),
@@ -170,6 +231,7 @@ impl ApplicationHandler for App {
                 None,
                 None,
             );
+            window.request_redraw();
             self.window = Some(window);
             self.gpu = Some(gpu);
             self.egui = Some(EguiGlue { context, state });
@@ -245,9 +307,4 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
-}
-
-pub fn open(pairs: &[(&std::path::Path, Option<&std::path::Path>)]) -> anyhow::Result<()> {
-    let merged = postframe::merge_preview(pairs).context("merging bracket")?;
-    run(merged)
 }

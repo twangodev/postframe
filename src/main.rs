@@ -20,8 +20,22 @@ const CHANNEL: [Style; 3] = [
 ];
 
 #[derive(Parser)]
-#[command(name = "postframe", version, about)]
-enum Cli {
+#[command(
+    name = "postframe",
+    version,
+    about,
+    args_conflicts_with_subcommands = true
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+    /// Bracket to open in the gui
+    #[arg(value_name = "RAF")]
+    rafs: Vec<PathBuf>,
+}
+
+#[derive(clap::Subcommand)]
+enum Command {
     Probe {
         raf: PathBuf,
         jpeg: Option<PathBuf>,
@@ -42,33 +56,38 @@ enum Cli {
         #[arg(long)]
         tone: bool,
     },
-    #[cfg(feature = "gui")]
-    Gui {
-        rafs: Vec<PathBuf>,
-    },
 }
 
 fn main() -> anyhow::Result<()> {
-    match Cli::parse() {
-        Cli::Probe { raf, jpeg } => probe(&raf, jpeg.as_deref()),
-        Cli::Merge {
+    let cli = Cli::parse();
+    match cli.command {
+        Some(Command::Probe { raf, jpeg }) => probe(&raf, jpeg.as_deref()),
+        Some(Command::Merge {
             rafs,
             output,
             ev,
             tone,
-        } => merge(&rafs, &output, ev, tone),
-        Cli::Batch { dir, output, tone } => batch(&dir, &output, tone),
-        #[cfg(feature = "gui")]
-        Cli::Gui { rafs } => {
-            let jpegs: Vec<Option<PathBuf>> = rafs.iter().map(|raf| sibling_jpeg(raf)).collect();
-            let pairs: Vec<(&Path, Option<&Path>)> = rafs
-                .iter()
-                .zip(&jpegs)
-                .map(|(raf, jpeg)| (raf.as_path(), jpeg.as_deref()))
-                .collect();
-            gui::open(&pairs)
-        }
+        }) => merge(&rafs, &output, ev, tone),
+        Some(Command::Batch { dir, output, tone }) => batch(&dir, &output, tone),
+        None => open_gui(cli.rafs),
     }
+}
+
+#[cfg(feature = "gui")]
+fn open_gui(rafs: Vec<PathBuf>) -> anyhow::Result<()> {
+    let pairs = rafs
+        .into_iter()
+        .map(|raf| {
+            let jpeg = sibling_jpeg(&raf);
+            (raf, jpeg)
+        })
+        .collect();
+    gui::open(pairs)
+}
+
+#[cfg(not(feature = "gui"))]
+fn open_gui(_: Vec<PathBuf>) -> anyhow::Result<()> {
+    anyhow::bail!("this build has no gui; use a subcommand (see --help)")
 }
 
 fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {

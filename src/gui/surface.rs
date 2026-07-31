@@ -8,9 +8,10 @@ pub struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    shader: wgpu::ShaderModule,
     pub hdr: bool,
     hdr_info: String,
-    image: ImagePass,
+    image: Option<ImagePass>,
     ui: UiPass,
     egui_renderer: egui_wgpu::Renderer,
 }
@@ -35,7 +36,7 @@ struct UiPass {
 const UI_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 impl Gpu {
-    pub fn new(window: Arc<Window>, image_width: u32, image_height: u32) -> anyhow::Result<Self> {
+    pub fn new(window: Arc<Window>) -> anyhow::Result<Self> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(
             wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone())),
@@ -76,7 +77,6 @@ impl Gpu {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
-        let image = ImagePass::new(&device, &shader, format, image_width, image_height);
         let ui = UiPass::new(&device, &shader, format, config.width, config.height);
         let egui_renderer =
             egui_wgpu::Renderer::new(&device, UI_FORMAT, egui_wgpu::RendererOptions::default());
@@ -86,12 +86,23 @@ impl Gpu {
             device,
             queue,
             config,
+            shader,
             hdr,
             hdr_info,
-            image,
+            image: None,
             ui,
             egui_renderer,
         })
+    }
+
+    pub fn set_image(&mut self, width: u32, height: u32) {
+        self.image = Some(ImagePass::new(
+            &self.device,
+            &self.shader,
+            self.config.format,
+            width,
+            height,
+        ));
     }
 
     pub fn width(&self) -> u32 {
@@ -119,9 +130,12 @@ impl Gpu {
     }
 
     pub fn upload_image(&mut self, pixels: &[u16]) {
+        let Some(image) = &self.image else {
+            return;
+        };
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.image.texture,
+                texture: &image.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -129,12 +143,12 @@ impl Gpu {
             bytemuck::cast_slice(pixels),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(self.image.width * 8),
-                rows_per_image: Some(self.image.height),
+                bytes_per_row: Some(image.width * 8),
+                rows_per_image: Some(image.height),
             },
             wgpu::Extent3d {
-                width: self.image.width,
-                height: self.image.height,
+                width: image.width,
+                height: image.height,
                 depth_or_array_layers: 1,
             },
         );
@@ -147,8 +161,10 @@ impl Gpu {
         pixels_per_point: f32,
         transform: [f32; 4],
     ) -> anyhow::Result<()> {
-        self.queue
-            .write_buffer(&self.image.uniform, 0, bytemuck::cast_slice(&transform));
+        if let Some(image) = &self.image {
+            self.queue
+                .write_buffer(&image.uniform, 0, bytemuck::cast_slice(&transform));
+        }
 
         use wgpu::CurrentSurfaceTexture::{Lost, Occluded, Outdated, Suboptimal, Success, Timeout};
         let frame = match self.surface.get_current_texture() {
@@ -231,9 +247,11 @@ impl Gpu {
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.image.pipeline);
-            pass.set_bind_group(0, &self.image.bind_group, &[]);
-            pass.draw(0..4, 0..1);
+            if let Some(image) = &self.image {
+                pass.set_pipeline(&image.pipeline);
+                pass.set_bind_group(0, &image.bind_group, &[]);
+                pass.draw(0..4, 0..1);
+            }
             pass.set_pipeline(&self.ui.pipeline);
             pass.set_bind_group(0, &self.ui.bind_group, &[]);
             pass.draw(0..4, 0..1);
