@@ -1,6 +1,4 @@
-use std::ffi::c_void;
-
-use ultrahdr::sys;
+use ultrahdr_rs::{Encoder, GainMapMetadata};
 
 use crate::bracket::Merged;
 use crate::color::WorkingSpace;
@@ -71,84 +69,22 @@ pub fn encode(merged: &Merged) -> Result<UltraHdr> {
         )
         .map_err(|e| Error::Encode(e.to_string()))?;
 
-    let bytes = container(&mut base_jpeg, &mut map_jpeg, boost_stops)?;
+    let bytes = container(base_jpeg, map_jpeg, boost_stops)?;
     Ok(UltraHdr { bytes, boost_stops })
 }
 
-fn container(base_jpeg: &mut [u8], map_jpeg: &mut [u8], boost_stops: f32) -> Result<Vec<u8>> {
-    let max_boost = (2.0f32).powf(boost_stops);
-    let mut meta = sys::uhdr_gainmap_metadata {
-        max_content_boost: [max_boost; 3],
-        min_content_boost: [1.0; 3],
-        gamma: [1.0; 3],
-        offset_sdr: [OFFSET; 3],
-        offset_hdr: [OFFSET; 3],
-        hdr_capacity_min: 1.0,
-        hdr_capacity_max: max_boost,
-        use_base_cg: 1,
-    };
+fn container(base_jpeg: Vec<u8>, map_jpeg: Vec<u8>, boost_stops: f32) -> Result<Vec<u8>> {
+    let mut metadata = GainMapMetadata::default();
+    metadata.gain_map_max = [boost_stops as f64; 3];
+    metadata.alternate_hdr_headroom = boost_stops as f64;
 
-    unsafe {
-        let encoder = Guard(sys::uhdr_create_encoder());
-        if encoder.0.is_null() {
-            return Err(Error::Encode("uhdr encoder allocation failed".into()));
-        }
-
-        let mut base = sys::uhdr_compressed_image {
-            data: base_jpeg.as_mut_ptr() as *mut c_void,
-            data_sz: base_jpeg.len(),
-            capacity: base_jpeg.len(),
-            cg: sys::uhdr_color_gamut::UHDR_CG_BT_709,
-            ct: sys::uhdr_color_transfer::UHDR_CT_SRGB,
-            range: sys::uhdr_color_range::UHDR_CR_FULL_RANGE,
-        };
-        check(sys::uhdr_enc_set_compressed_image(
-            encoder.0,
-            &mut base,
-            sys::uhdr_img_label::UHDR_BASE_IMG,
-        ))?;
-
-        let mut map = sys::uhdr_compressed_image {
-            data: map_jpeg.as_mut_ptr() as *mut c_void,
-            data_sz: map_jpeg.len(),
-            capacity: map_jpeg.len(),
-            cg: sys::uhdr_color_gamut::UHDR_CG_UNSPECIFIED,
-            ct: sys::uhdr_color_transfer::UHDR_CT_UNSPECIFIED,
-            range: sys::uhdr_color_range::UHDR_CR_UNSPECIFIED,
-        };
-        check(sys::uhdr_enc_set_gainmap_image(
-            encoder.0, &mut map, &mut meta,
-        ))?;
-        check(sys::uhdr_encode(encoder.0))?;
-
-        let stream = sys::uhdr_get_encoded_stream(encoder.0);
-        if stream.is_null() {
-            return Err(Error::Encode("uhdr returned no stream".into()));
-        }
-        Ok(std::slice::from_raw_parts((*stream).data as *const u8, (*stream).data_sz).to_vec())
-    }
-}
-
-struct Guard(*mut sys::uhdr_codec_private);
-
-impl Drop for Guard {
-    fn drop(&mut self) {
-        unsafe { sys::uhdr_release_encoder(self.0) }
-    }
-}
-
-fn check(status: sys::uhdr_error_info) -> Result<()> {
-    if status.error_code == sys::uhdr_codec_err::UHDR_CODEC_OK {
-        return Ok(());
-    }
-    let detail = if status.has_detail != 0 {
-        unsafe { std::ffi::CStr::from_ptr(status.detail.as_ptr()) }
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        format!("{:?}", status.error_code)
-    };
-    Err(Error::Encode(detail))
+    let mut encoder = Encoder::new();
+    encoder
+        .set_base_jpeg(base_jpeg)
+        .set_gainmap_jpeg(map_jpeg, metadata);
+    encoder
+        .encode_from_jpegs()
+        .map_err(|e| Error::Encode(e.to_string()))
 }
 
 fn srgb_to_linear(coded: u8) -> f32 {
