@@ -17,6 +17,7 @@ pub struct Sooc {
     pub rgb8: Vec<u8>,
     pub space: WorkingSpace,
     pub exposure: Option<f32>,
+    pub orientation: Option<u16>,
 }
 
 pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
@@ -36,12 +37,14 @@ pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
         .and_then(|tiff| working_space(tiff))
         .unwrap_or(WorkingSpace::LinearSrgb);
     let exposure = decoder.exif().and_then(|tiff| exposure_time(tiff));
+    let orientation = decoder.exif().and_then(|tiff| orientation(tiff));
     Ok(Sooc {
         width: info.width as usize,
         height: info.height as usize,
         rgb8,
         space,
         exposure,
+        orientation,
     })
 }
 
@@ -50,17 +53,39 @@ const EXIF_SRGB: u16 = 1;
 const INTEROP_ADOBE_RGB: &str = "R03";
 
 fn exposure_time(exif_tiff: &[u8]) -> Option<f32> {
+    let seconds = exif_f32(exif_tiff, ExifTag::ExposureTime)?;
+    (seconds > 0.0).then_some(seconds)
+}
+
+pub fn exposure_bias(jpeg: &[u8]) -> Option<f32> {
+    let mut decoder = JpegDecoder::new_with_options(ZCursor::new(jpeg), DecoderOptions::default());
+    decoder.decode_headers().ok()?;
+    exif_f32(decoder.exif()?, ExifTag::ExposureBiasValue)
+}
+
+fn orientation(exif_tiff: &[u8]) -> Option<u16> {
     let mut cursor = Cursor::new(exif_tiff);
     let tiff = GenericTiffReader::new(&mut cursor, 0, 0, None, &[]).ok()?;
-    let seconds = tiff
+    let value = tiff
+        .root_ifd()
+        .get_entry(TiffCommonTag::Orientation)?
+        .value
+        .force_u16(0);
+    (value != 0).then_some(value)
+}
+
+fn exif_f32(exif_tiff: &[u8], tag: ExifTag) -> Option<f32> {
+    let mut cursor = Cursor::new(exif_tiff);
+    let tiff = GenericTiffReader::new(&mut cursor, 0, 0, None, &[]).ok()?;
+    let value = tiff
         .root_ifd()
         .sub_ifds()
         .get(&(TiffCommonTag::ExifIFDPointer as u16))?
         .first()?
-        .get_entry(ExifTag::ExposureTime)?
+        .get_entry(tag)?
         .value
         .force_f32(0);
-    (seconds > 0.0).then_some(seconds)
+    value.is_finite().then_some(value)
 }
 
 fn working_space(exif_tiff: &[u8]) -> Option<WorkingSpace> {

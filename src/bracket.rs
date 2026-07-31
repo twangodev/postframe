@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use mtb_align::{Gray, Options, Shift, align_stack, common_crop};
-use rawler::decoders::RawDecodeParams;
+use rawler::decoders::{Orientation, RawDecodeParams};
 use rawler::imgop::xyz::Illuminant;
 use rawler::rawsource::RawSource;
 
@@ -16,6 +16,7 @@ pub struct Frame {
     pub sooc: Sooc,
     pub balance: [f32; 3],
     pub xyz_to_cam: Vec<f32>,
+    pub orientation: Orientation,
 }
 
 pub struct Rendered {
@@ -61,11 +62,16 @@ pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
         .ok_or(Error::Unsupported("raw carries no color matrix"))?
         .clone();
 
+    let orientation = match sooc.orientation {
+        Some(value) => Orientation::from_u16(value),
+        None => raw.orientation,
+    };
     Ok(Frame {
         camera,
         sooc,
         balance: [r, g, b],
         xyz_to_cam,
+        orientation,
     })
 }
 
@@ -76,6 +82,17 @@ fn embedded_jpeg<'a>(source: &'a RawSource, raf: &Path) -> Result<&'a [u8]> {
         file_len,
     )?;
     Ok(source.subview(offset, len)?)
+}
+
+pub fn exposure_bias(raf: &Path, jpeg: Option<&Path>) -> Result<Option<f32>> {
+    let bias = match jpeg {
+        Some(path) => sooc::exposure_bias(&std::fs::read(path)?),
+        None => {
+            let source = RawSource::new(raf)?;
+            sooc::exposure_bias(embedded_jpeg(&source, raf)?)
+        }
+    };
+    Ok(bias)
 }
 
 pub fn to_working(frame: &Frame, space: WorkingSpace) -> Result<[[f32; 3]; 3]> {
@@ -125,6 +142,7 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
     let (transfer, fit) = fit_transfer(&Pairing { samples, rejected }, space)?;
 
     let (shifts, radiance) = merge_radiance(&frames, &exposures, reference)?;
+    let radiance = upright(radiance, frames[reference].orientation);
     let radiance_max = radiance.rgb.iter().flatten().copied().fold(0.0, f32::max);
 
     Ok(Merged {
@@ -164,6 +182,33 @@ impl Merged {
             height: self.radiance.height,
             rgb8,
         }
+    }
+}
+
+fn upright(linear: Linear, orientation: Orientation) -> Linear {
+    let (w, h) = (linear.width, linear.height);
+    let remap = |source: fn(usize, usize, usize, usize) -> usize, width: usize, height: usize| {
+        let mut rgb = Vec::with_capacity(w * h);
+        let mut clipped = Vec::with_capacity(w * h);
+        for y in 0..height {
+            for x in 0..width {
+                let i = source(x, y, w, h);
+                rgb.push(linear.rgb[i]);
+                clipped.push(linear.clipped[i]);
+            }
+        }
+        Linear {
+            width,
+            height,
+            rgb,
+            clipped,
+        }
+    };
+    match orientation {
+        Orientation::Rotate90 => remap(|x, y, w, h| (h - 1 - x) * w + y, h, w),
+        Orientation::Rotate180 => remap(|x, y, w, h| (h - 1 - y) * w + (w - 1 - x), w, h),
+        Orientation::Rotate270 => remap(|x, y, w, _| x * w + (w - 1 - y), h, w),
+        _ => linear,
     }
 }
 

@@ -19,6 +19,13 @@ enum Cli {
         #[arg(long)]
         tone: bool,
     },
+    Batch {
+        dir: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(long)]
+        tone: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -30,7 +37,52 @@ fn main() -> anyhow::Result<()> {
             ev,
             tone,
         } => merge(&rafs, &output, ev, tone),
+        Cli::Batch { dir, output, tone } => batch(&dir, &output, tone),
     }
+}
+
+fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
+    let mut rafs: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("raf")))
+        .collect();
+    rafs.sort();
+    if rafs.is_empty() {
+        anyhow::bail!("no RAF files in {}", dir.display());
+    }
+    std::fs::create_dir_all(output)?;
+
+    let mut brackets: Vec<Vec<PathBuf>> = Vec::new();
+    for raf in rafs {
+        let bias = postframe::bracket::exposure_bias(&raf, sibling_jpeg(&raf).as_deref())?;
+        let base_frame = bias.is_none_or(|b| b.abs() < 0.01);
+        match brackets.last_mut() {
+            Some(current) if !base_frame => current.push(raf),
+            _ => brackets.push(vec![raf]),
+        }
+    }
+
+    let mut failures = 0;
+    for bracket in &brackets {
+        let stem = bracket[0].file_stem().unwrap_or_default().to_string_lossy();
+        if bracket.len() < 2 {
+            println!("{stem}: skipped, single frame\n");
+            continue;
+        }
+        println!("=== {stem}: {} frames ===", bracket.len());
+        let target = output.join(format!("{stem}.jpg"));
+        match merge(bracket, &target, 0.0, tone) {
+            Ok(()) => println!(),
+            Err(error) => {
+                failures += 1;
+                println!("{stem}: FAILED — {error:#}\n");
+            }
+        }
+    }
+    if failures > 0 {
+        anyhow::bail!("{failures} bracket(s) failed");
+    }
+    Ok(())
 }
 
 fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
