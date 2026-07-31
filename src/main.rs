@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
-    let (_, report) = postframe::measure(raf, jpeg)?;
+    let (transfer, report) = postframe::measure(raf, jpeg)?;
     println!("working space   {:?}", report.space);
     println!(
         "tiles           {} accepted, {} rejected",
@@ -28,6 +28,11 @@ fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
             "{name}         {:<8.3}{:<11.3}{:.3}",
             report.rms[c], report.flat_rms[c], report.grad_corr[c]
         );
+    }
+    println!();
+    println!("cross-channel mix");
+    for (name, row) in ["R", "G", "B"].into_iter().zip(transfer.mix) {
+        println!("{name}   [{:+.4} {:+.4} {:+.4}]", row[0], row[1], row[2]);
     }
     Ok(())
 }
