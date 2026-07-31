@@ -2,10 +2,17 @@
 # postframe is GPL-3.0-or-later, which permits LGPL dependencies.
 # Grow this list as dependencies land; an unused entry is a warning.
 allow = [
+    "0BSD",
     "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
     "GPL-3.0-or-later",
+    "LGPL-2.1",
+    "LGPL-2.1-or-later",
     "MIT",
     "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
 ]
 
 [bans]

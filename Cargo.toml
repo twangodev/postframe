@@ -15,5 +15,6 @@ default = ["cli"]
 cli = ["dep:anyhow", "dep:clap"]
 
 [dependencies]
-anyhow = { version = "1", optional = true }
-clap = { version = "4", features = ["derive"], optional = true }
+anyhow = { version = "1.0.104", optional = true }
+clap = { version = "4.6.4", features = ["derive"], optional = true }
+rawler = "=0.7.2"
