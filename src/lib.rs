@@ -23,12 +23,14 @@ use rawler::decoders::RawDecodeParams;
 use rawler::imgop::xyz::Illuminant;
 use rawler::rawsource::RawSource;
 
-pub fn measure(path: &Path) -> Result<(Transfer, Report)> {
-    let source = RawSource::new(path)?;
-    let file_len = std::fs::metadata(path)?.len();
-    let (offset, len) =
-        decode::raf::jpeg_extent(source.subview(0, decode::raf::HEADER_LEN)?, file_len)?;
-    let sooc = decode::sooc::decode(source.subview(offset, len)?)?;
+pub fn measure(raf: &Path, sooc_jpeg: Option<&Path>) -> Result<(Transfer, Report)> {
+    let source = RawSource::new(raf)?;
+    let external = sooc_jpeg.map(std::fs::read).transpose()?;
+    let jpeg = match &external {
+        Some(bytes) => bytes.as_slice(),
+        None => embedded_jpeg(&source, raf)?,
+    };
+    let sooc = decode::sooc::decode(jpeg)?;
 
     let raw = rawler::decode(&source, &RawDecodeParams::default())?;
     let mut linear = decode::linear::from_raw(&raw)?;
@@ -48,6 +50,13 @@ pub fn measure(path: &Path) -> Result<(Transfer, Report)> {
 
     let pairing = fit::pair::pair(&linear, &sooc)?;
     fit::transfer::measure(&pairing, sooc.space)
+}
+
+fn embedded_jpeg<'a>(source: &'a RawSource, raf: &Path) -> Result<&'a [u8]> {
+    let file_len = std::fs::metadata(raf)?.len();
+    let (offset, len) =
+        decode::raf::jpeg_extent(source.subview(0, decode::raf::HEADER_LEN)?, file_len)?;
+    Ok(source.subview(offset, len)?)
 }
 
 fn camera_to_working(raw: &RawImage, space: WorkingSpace) -> Result<[[f32; 3]; 3]> {

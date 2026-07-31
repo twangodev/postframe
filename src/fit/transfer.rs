@@ -16,6 +16,7 @@ pub struct Report {
     pub accepted: usize,
     pub rejected: usize,
     pub rms: [f32; 3],
+    pub flat_rms: [f32; 3],
     pub grad_corr: [f32; 3],
 }
 
@@ -55,17 +56,24 @@ pub fn measure(
     let transfer = Transfer { channels };
 
     let mut rms = [0.0; 3];
+    let mut flat_rms = [0.0; 3];
     let mut grad_corr = [0.0; 3];
     for c in 0..3 {
-        let residuals: Vec<f32> = samples
+        let mut paired: Vec<(f32, f32)> = samples
             .iter()
-            .map(|s| transfer.channels[c].eval(s.linear[c]) - s.coded[c])
+            .map(|s| {
+                (
+                    transfer.channels[c].eval(s.linear[c]) - s.coded[c],
+                    s.grad[c],
+                )
+            })
             .collect();
-        rms[c] = (residuals.iter().map(|r| (r * r) as f64).sum::<f64>() / residuals.len() as f64)
-            .sqrt() as f32;
-        let magnitudes: Vec<f32> = residuals.iter().map(|r| r.abs()).collect();
-        let grads: Vec<f32> = samples.iter().map(|s| s.grad[c]).collect();
+        rms[c] = root_mean_square(paired.iter().map(|(r, _)| *r));
+        let magnitudes: Vec<f32> = paired.iter().map(|(r, _)| r.abs()).collect();
+        let grads: Vec<f32> = paired.iter().map(|(_, g)| *g).collect();
         grad_corr[c] = pearson(&magnitudes, &grads);
+        paired.sort_by(|a, b| a.1.total_cmp(&b.1));
+        flat_rms[c] = root_mean_square(paired[..paired.len() / 4].iter().map(|(r, _)| *r));
     }
 
     let report = Report {
@@ -73,6 +81,7 @@ pub fn measure(
         accepted: samples.len(),
         rejected: pairing.rejected,
         rms,
+        flat_rms,
         grad_corr,
     };
     Ok((transfer, report))
@@ -120,6 +129,11 @@ fn fit_channel(samples: &[Sample], c: usize) -> Result<Curve> {
         *value = running_max;
     }
     Ok(Curve { knots_log2, coded })
+}
+
+fn root_mean_square(values: impl ExactSizeIterator<Item = f32>) -> f32 {
+    let n = values.len() as f64;
+    (values.map(|v| (v as f64).powi(2)).sum::<f64>() / n).sqrt() as f32
 }
 
 fn pearson(a: &[f32], b: &[f32]) -> f32 {
