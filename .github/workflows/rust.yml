@@ -23,17 +23,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features
-      - run: cargo doc --workspace --no-deps
+      - run: cargo clippy --all-targets --all-features
+      - run: cargo doc --no-deps
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "cli"]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - run: cargo test --workspace
+      # The empty matrix leg builds the library alone. If a pipeline module
+      # reaches for a CLI-only dependency, it fails here.
+      - run: cargo test --no-default-features --features "${{ matrix.features }}"
 
   deny:
     runs-on: ubuntu-latest

@@ -7,10 +7,14 @@ merged radiance.
 
 ## Layout
 
+Single crate. The library is the pipeline; the binary is a thin shell over it.
+
 ```
-src/core/   lib. The pipeline. One file per stage.
-src/cli/    bin "postframe".
+src/lib.rs    library root. One file per pipeline stage alongside it.
+src/main.rs   bin "postframe", behind the `cli` feature.
 ```
+
+Add subfolders when a group earns one; flat until then.
 
 ## Style
 
@@ -24,9 +28,12 @@ as a bug otherwise.
 
 `core` does not print, does not exit, and does not write files. It returns typed
 errors and bytes. Progress, previews, and cancellation go through the `Observer`
-trait; diagnostics go through `tracing`. Image encoding is a `cli` dependency —
-that is what keeps the boundary honest, and why a GUI can be added later without
-touching `core`.
+trait; diagnostics go through `tracing`.
+
+CLI-only dependencies (clap, image encoding, progress bars) live behind the
+`cli` feature, so `cargo build --no-default-features` fails if the library
+reaches for one. That is what keeps the boundary honest, and why a GUI can be
+added later without disturbing the pipeline.
 
 ## Commands
 

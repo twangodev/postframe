@@ -1,15 +1,19 @@
-[workspace]
-members = ["src/core", "src/cli"]
-resolver = "3"
-
-[workspace.package]
-version = "0.1.0" # x-release-please-version
+[package]
+name = "postframe"
+description = "Exposure bracket merging with in-camera rendering recovery"
+version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/twangodev/postframe"
 
-[workspace.dependencies]
-postframe-core = { path = "src/core" }
+[[bin]]
+name = "postframe"
+required-features = ["cli"]
 
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+[features]
+default = ["cli"]
+cli = ["dep:anyhow", "dep:clap"]
+
+[dependencies]
+anyhow = { version = "1", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
