@@ -1,0 +1,17 @@
+[licenses]
+# core/ and cli/ are GPL-3.0-or-later, which permits LGPL dependencies.
+# Crates under crates/ are checked separately against a permissive-only list.
+# Grow this list as dependencies land; an unused entry is a warning.
+allow = [
+    "Apache-2.0",
+    "GPL-3.0-or-later",
+    "MIT",
+    "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

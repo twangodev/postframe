@@ -1,0 +1,17 @@
+[package]
+name = "postframe-cli"
+description = "Command line interface for postframe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "postframe"
+path = "src/main.rs"
+
+[dependencies]
+postframe-core.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
