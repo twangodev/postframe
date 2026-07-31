@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anstream::println;
 use anstyle::{AnsiColor, Style};
 use anyhow::Context;
 use clap::Parser;
+use postframe::FrameData;
 
 const LABEL: Style = Style::new().dimmed();
 const HEADER: Style = Style::new().bold();
@@ -83,7 +85,7 @@ fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
 
     let mut brackets: Vec<Vec<PathBuf>> = Vec::new();
     for raf in rafs {
-        let bias = postframe::bracket::exposure_bias(&raf, sibling_jpeg(&raf).as_deref())?;
+        let bias = frame_bias(&raf)?;
         let base_frame = bias.is_none_or(|b| b.abs() < 0.01);
         match brackets.last_mut() {
             Some(current) if !base_frame => current.push(raf),
@@ -118,21 +120,29 @@ fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
 }
 
 fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
-    let (transfer, report) = postframe::measure(raf, jpeg)?;
+    let data = FrameData {
+        raf: Arc::new(std::fs::read(raf)?),
+        jpeg: jpeg.map(std::fs::read).transpose()?,
+    };
+    let (transfer, report) = postframe::measure(&data)?;
     print_fit(&report);
     print_mix(&transfer);
     Ok(())
 }
 
-fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result<()> {
-    let jpegs: Vec<Option<PathBuf>> = rafs.iter().map(|raf| sibling_jpeg(raf)).collect();
-    let pairs: Vec<(&Path, Option<&Path>)> = rafs
-        .iter()
-        .zip(&jpegs)
-        .map(|(raf, jpeg)| (raf.as_path(), jpeg.as_deref()))
-        .collect();
+fn read_frame(raf: &Path) -> anyhow::Result<FrameData> {
+    Ok(FrameData {
+        raf: Arc::new(std::fs::read(raf)?),
+        jpeg: sibling_jpeg(raf).map(std::fs::read).transpose()?,
+    })
+}
 
-    let merged = postframe::merge(&pairs)?;
+fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result<()> {
+    let frames = rafs
+        .iter()
+        .map(|raf| read_frame(raf))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let merged = postframe::merge(&frames)?;
 
     let jpeg_out = output
         .extension()
@@ -177,6 +187,15 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
     println!();
     println!("{LABEL}wrote{LABEL:#} {OK}{}{OK:#}", output.display());
     Ok(())
+}
+
+fn frame_bias(raf: &Path) -> anyhow::Result<Option<f32>> {
+    match sibling_jpeg(raf) {
+        Some(jpeg) => Ok(postframe::decode::sooc::exposure_bias(&std::fs::read(
+            jpeg,
+        )?)),
+        None => Ok(postframe::bracket::exposure_bias(&read_frame(raf)?)?),
+    }
 }
 
 fn sibling_jpeg(raf: &Path) -> Option<PathBuf> {

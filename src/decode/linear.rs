@@ -3,6 +3,7 @@ use rawler::{RawImage, RawImageData};
 
 use crate::error::{Error, Result};
 
+#[derive(Clone)]
 pub struct Linear {
     pub width: usize,
     pub height: usize,

@@ -12,17 +12,19 @@ pub mod decode;
 pub mod error;
 pub mod fit;
 pub mod hdr;
+pub mod preview;
+#[cfg(feature = "wasm")]
+mod wasm;
 
-pub use bracket::{MergeReport, Merged, Rendered};
+pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use hdr::UltraHdr;
+pub use preview::Preview;
 
-use std::path::Path;
-
-pub fn measure(raf: &Path, sooc_jpeg: Option<&Path>) -> Result<(Transfer, Report)> {
-    let mut frame = bracket::load(raf, sooc_jpeg)?;
+pub fn measure(data: &FrameData) -> Result<(Transfer, Report)> {
+    let mut frame = bracket::load(data)?;
     let matrix = bracket::to_working(&frame, frame.sooc.space)?;
     let balance = frame.balance;
     for pixel in &mut frame.camera.rgb {
@@ -39,18 +41,15 @@ pub fn measure(raf: &Path, sooc_jpeg: Option<&Path>) -> Result<(Transfer, Report
     fit::transfer::measure(&pairing, frame.sooc.space)
 }
 
-pub fn merge(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
-    let frames = pairs
-        .iter()
-        .map(|(raf, jpeg)| bracket::load_full(raf, *jpeg))
-        .collect::<Result<Vec<_>>>()?;
-    bracket::merge(frames)
+pub fn merge(frames: &[FrameData]) -> Result<Merged> {
+    bracket::merge(
+        frames
+            .iter()
+            .map(bracket::load_full)
+            .collect::<Result<_>>()?,
+    )
 }
 
-pub fn merge_preview(pairs: &[(&Path, Option<&Path>)]) -> Result<Merged> {
-    let frames = pairs
-        .iter()
-        .map(|(raf, jpeg)| bracket::load(raf, *jpeg))
-        .collect::<Result<Vec<_>>>()?;
-    bracket::merge(frames)
+pub fn merge_preview(frames: &[FrameData]) -> Result<Merged> {
+    bracket::merge(frames.iter().map(bracket::load).collect::<Result<_>>()?)
 }

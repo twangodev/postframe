@@ -2,16 +2,19 @@ use crate::color::WorkingSpace;
 use crate::error::{Error, Result};
 use crate::fit::pair::Sample;
 
+#[derive(Clone)]
 pub struct Curve {
     knots_log2: Vec<f32>,
     coded: Vec<f32>,
 }
 
+#[derive(Clone)]
 pub struct Transfer {
     pub mix: [[f32; 3]; 3],
     pub channels: [Curve; 3],
 }
 
+#[derive(Clone)]
 pub struct Report {
     pub space: WorkingSpace,
     pub accepted: usize,

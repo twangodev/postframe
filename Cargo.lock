@@ -1059,6 +1059,7 @@ dependencies = [
  "thiserror",
  "ultrahdr-rs",
  "uuid",
+ "wasm-bindgen",
  "zune-jpeg",
 ]
 

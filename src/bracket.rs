@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::sync::Arc;
 
 use mtb_align::{Gray, Options, Shift, align_stack, common_crop};
 use rawler::decoders::{Orientation, RawDecodeParams};
@@ -10,6 +10,11 @@ use crate::decode::{linear, linear::Linear, sooc, sooc::Sooc};
 use crate::error::{Error, Result};
 use crate::fit::pair::{Pairing, pair};
 use crate::fit::transfer::{Report, Transfer, measure as fit_transfer};
+
+pub struct FrameData {
+    pub raf: Arc<Vec<u8>>,
+    pub jpeg: Option<Vec<u8>>,
+}
 
 pub struct Frame {
     pub camera: Linear,
@@ -32,6 +37,7 @@ pub struct Rendered {
     pub rgb8: Vec<u8>,
 }
 
+#[derive(Clone)]
 pub struct MergeReport {
     pub fit: Report,
     pub exposures: Vec<f32>,
@@ -46,20 +52,19 @@ pub struct Merged {
     pub report: MergeReport,
 }
 
-pub fn load(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
-    load_at(raf, jpeg, false)
+pub fn load(data: &FrameData) -> Result<Frame> {
+    load_at(data, false)
 }
 
-pub fn load_full(raf: &Path, jpeg: Option<&Path>) -> Result<Frame> {
-    load_at(raf, jpeg, true)
+pub fn load_full(data: &FrameData) -> Result<Frame> {
+    load_at(data, true)
 }
 
-fn load_at(raf: &Path, jpeg: Option<&Path>, full_resolution: bool) -> Result<Frame> {
-    let source = RawSource::new(raf)?;
-    let external = jpeg.map(std::fs::read).transpose()?;
-    let bytes = match &external {
+fn load_at(data: &FrameData, full_resolution: bool) -> Result<Frame> {
+    let source = RawSource::new_from_shared_vec(data.raf.clone());
+    let bytes = match &data.jpeg {
         Some(bytes) => bytes.as_slice(),
-        None => embedded_jpeg(&source, raf)?,
+        None => embedded_jpeg(&source, data.raf.len() as u64)?,
     };
     let sooc = sooc::decode(bytes)?;
 
@@ -94,8 +99,7 @@ fn load_at(raf: &Path, jpeg: Option<&Path>, full_resolution: bool) -> Result<Fra
     })
 }
 
-fn embedded_jpeg<'a>(source: &'a RawSource, raf: &Path) -> Result<&'a [u8]> {
-    let file_len = std::fs::metadata(raf)?.len();
+fn embedded_jpeg(source: &RawSource, file_len: u64) -> Result<&[u8]> {
     let (offset, len) = crate::decode::raf::jpeg_extent(
         source.subview(0, crate::decode::raf::HEADER_LEN)?,
         file_len,
@@ -103,12 +107,12 @@ fn embedded_jpeg<'a>(source: &'a RawSource, raf: &Path) -> Result<&'a [u8]> {
     Ok(source.subview(offset, len)?)
 }
 
-pub fn exposure_bias(raf: &Path, jpeg: Option<&Path>) -> Result<Option<f32>> {
-    let bias = match jpeg {
-        Some(path) => sooc::exposure_bias(&std::fs::read(path)?),
+pub fn exposure_bias(data: &FrameData) -> Result<Option<f32>> {
+    let bias = match &data.jpeg {
+        Some(bytes) => sooc::exposure_bias(bytes),
         None => {
-            let source = RawSource::new(raf)?;
-            sooc::exposure_bias(embedded_jpeg(&source, raf)?)
+            let source = RawSource::new_from_shared_vec(data.raf.clone());
+            sooc::exposure_bias(embedded_jpeg(&source, data.raf.len() as u64)?)
         }
     };
     Ok(bias)
@@ -183,6 +187,43 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
 impl Merged {
     pub fn render(&self, ev: f32) -> Rendered {
         render(&self.radiance, &self.transfer, ev)
+    }
+
+    pub fn thumbnail(&self, max_dimension: usize) -> Merged {
+        let (w, h) = (self.radiance.width, self.radiance.height);
+        let factor = w.max(h).div_ceil(max_dimension).max(1);
+        let (out_w, out_h) = (w / factor, h / factor);
+        let mut rgb = Vec::with_capacity(out_w * out_h);
+        let mut clipped = Vec::with_capacity(out_w * out_h);
+        for by in 0..out_h {
+            for bx in 0..out_w {
+                let mut sum = [0.0f32; 3];
+                let mut any_clipped = false;
+                for dy in 0..factor {
+                    for dx in 0..factor {
+                        let i = (by * factor + dy) * w + bx * factor + dx;
+                        for (total, &channel) in sum.iter_mut().zip(&self.radiance.rgb[i]) {
+                            *total += channel;
+                        }
+                        any_clipped |= self.radiance.clipped[i];
+                    }
+                }
+                let n = (factor * factor) as f32;
+                rgb.push(sum.map(|s| s / n));
+                clipped.push(any_clipped);
+            }
+        }
+        Merged {
+            radiance: Linear {
+                width: out_w,
+                height: out_h,
+                rgb,
+                clipped,
+            },
+            transfer: self.transfer.clone(),
+            space: self.space,
+            report: self.report.clone(),
+        }
     }
 
     // Extended Reinhard on the brightest channel, white point at the bracket's
