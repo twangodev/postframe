@@ -50,10 +50,10 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
 
     let merged = postframe::merge(&pairs)?;
 
-    let ultra = output
+    let jpeg_out = output
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
-    if ultra {
+    if jpeg_out && !tone {
         let encoded = postframe::hdr::encode(&merged)?;
         std::fs::write(output, &encoded.bytes)?;
         println!(
@@ -66,9 +66,20 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
         } else {
             merged.render(ev)
         };
-        image::RgbImage::from_raw(rendered.width as u32, rendered.height as u32, rendered.rgb8)
-            .context("rendered buffer size mismatch")?
-            .save(output)?;
+        if jpeg_out {
+            let mut bytes = Vec::new();
+            jpeg_encoder::Encoder::new(&mut bytes, 92).encode(
+                &rendered.rgb8,
+                rendered.width as u16,
+                rendered.height as u16,
+                jpeg_encoder::ColorType::Rgb,
+            )?;
+            std::fs::write(output, &bytes)?;
+        } else {
+            image::RgbImage::from_raw(rendered.width as u32, rendered.height as u32, rendered.rgb8)
+                .context("rendered buffer size mismatch")?
+                .save(output)?;
+        }
     }
 
     let report = &merged.report;
