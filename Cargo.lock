@@ -898,6 +898,8 @@ dependencies = [
  "anyhow",
  "clap",
  "rawler",
+ "thiserror",
+ "zune-jpeg",
 ]
 
 [[package]]
