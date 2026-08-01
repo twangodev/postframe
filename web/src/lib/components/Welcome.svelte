@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
 	import { Github, Images, Upload, X } from '@lucide/svelte';
+	import postframeLogo from '$lib/assets/favicon.svg';
 	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -54,7 +55,7 @@
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
-		<h1 class="text-[13px] font-medium tracking-wide">pf.</h1>
+		<img src={postframeLogo} alt="postframe" class="size-7" />
 		<p class="text-muted mt-3 text-[13px]">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">

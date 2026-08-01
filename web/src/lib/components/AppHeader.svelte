@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
 	import { Download, Home, Plus, Upload } from '@lucide/svelte';
+	import postframeLogo from '$lib/assets/favicon.svg';
 	import Tooltip from './ui/Tooltip.svelte';
 	import { ACCEPTED_PHOTOS, type WorkspaceState } from '$lib/workspace.svelte';
 
@@ -36,7 +37,7 @@
 				</button>
 			{/snippet}
 		</Tooltip>
-		<span class="text-muted text-xs font-medium tracking-wide">pf.</span>
+		<img src={postframeLogo} alt="" class="size-5" />
 		<span class="bg-subtle h-4 w-px"></span>
 		<div class="min-w-0">
 			<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
