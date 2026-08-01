@@ -138,3 +138,14 @@ fn interop_space(exif_tiff: &[u8], exif: &IFD) -> Option<WorkingSpace> {
         _ => Some(WorkingSpace::LinearSrgb),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_rgb_preview_dimensions() {
+        assert!(from_rgb8(2, 2, vec![0; 11], WorkingSpace::LinearSrgb, None, None).is_err());
+        assert!(from_rgb8(2, 2, vec![0; 12], WorkingSpace::LinearSrgb, None, None).is_ok());
+    }
+}

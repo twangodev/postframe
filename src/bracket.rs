@@ -422,3 +422,49 @@ fn render(radiance: &Linear, transfer: &Transfer, ev: f32) -> Rendered {
         rgb8,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_an_empty_document() {
+        assert!(matches!(
+            merge(Vec::new()),
+            Err(Error::Unsupported("a photo needs at least one frame"))
+        ));
+    }
+
+    #[test]
+    fn preserves_a_single_frame_without_alignment() {
+        let image = Linear {
+            width: 2,
+            height: 1,
+            rgb: vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+            clipped: vec![false, true],
+        };
+        let frame = Frame {
+            camera: image.clone(),
+            full: None,
+            sooc: Sooc {
+                width: 2,
+                height: 1,
+                rgb8: vec![0; 6],
+                space: WorkingSpace::LinearSrgb,
+                exposure: Some(1.0),
+                orientation: Some(1),
+            },
+            balance: [1.0; 3],
+            xyz_to_cam: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            orientation: Orientation::Normal,
+        };
+
+        let (shifts, radiance) = merge_radiance(&[frame], &[1.0], 0).unwrap();
+
+        assert_eq!(shifts, vec![Shift::new(0, 0)]);
+        assert_eq!(radiance.width, image.width);
+        assert_eq!(radiance.height, image.height);
+        assert_eq!(radiance.rgb, image.rgb);
+        assert_eq!(radiance.clipped, image.clipped);
+    }
+}

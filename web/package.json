@@ -12,6 +12,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "node --test tests/worker-client.test.ts",
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
 		"gen": "wrangler types"
