@@ -55,7 +55,10 @@
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
-		<img src={postframeLogo} alt="postframe" class="size-7" />
+		<div class="flex items-center gap-2">
+			<img src={postframeLogo} alt="" class="size-7" />
+			<span class="text-[13px] font-medium tracking-tight">postframe</span>
+		</div>
 		<p class="text-muted mt-3 text-[13px]">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">

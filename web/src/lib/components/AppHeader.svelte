@@ -37,7 +37,10 @@
 				</button>
 			{/snippet}
 		</Tooltip>
-		<img src={postframeLogo} alt="" class="size-5" />
+		<div class="flex items-center gap-1.5">
+			<img src={postframeLogo} alt="" class="size-5" />
+			<span class="text-[11px] font-medium tracking-tight">postframe</span>
+		</div>
 		<span class="bg-subtle h-4 w-px"></span>
 		<div class="min-w-0">
 			<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
