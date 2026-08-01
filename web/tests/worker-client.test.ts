@@ -45,8 +45,11 @@ test('reports document progress before resolving the developed preview', async (
 		id: 1,
 		type: 'progress',
 		phase: 'rendering',
-		completed: 0,
-		total: 1
+		bytesRead: 24,
+		totalBytes: 24,
+		framesDecoded: 1,
+		totalFrames: 1,
+		activeFrame: 1
 	});
 	workers[0]?.respond({
 		id: 1,

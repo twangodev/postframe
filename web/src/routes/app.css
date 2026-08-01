@@ -175,6 +175,27 @@ select:focus-visible {
 	animation: menu-in 120ms var(--ease-out) both;
 }
 
+.develop-scan {
+	top: -24%;
+	height: 24%;
+	background: linear-gradient(to bottom, transparent, rgb(22 123 255 / 16%), transparent);
+	mix-blend-mode: screen;
+	animation: develop-scan 1.8s ease-in-out infinite;
+}
+
+.develop-pulse {
+	animation: develop-pulse 1.6s ease-in-out infinite;
+}
+
+.develop-progress-sweep {
+	background: linear-gradient(to right, transparent, rgb(255 255 255 / 55%), transparent);
+	animation: develop-sweep 1.25s ease-in-out infinite;
+}
+
+.develop-step-active {
+	animation: develop-step 1.2s ease-in-out infinite;
+}
+
 @keyframes enter-fade {
 	from {
 		opacity: 0;
@@ -311,6 +332,52 @@ select:focus-visible {
 	to {
 		opacity: 1;
 		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes develop-scan {
+	from {
+		transform: translateY(0);
+		opacity: 0;
+	}
+	20%,
+	80% {
+		opacity: 1;
+	}
+	to {
+		transform: translateY(520%);
+		opacity: 0;
+	}
+}
+
+@keyframes develop-pulse {
+	0%,
+	100% {
+		transform: scale(0.92);
+		opacity: 0.65;
+	}
+	50% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+@keyframes develop-sweep {
+	from {
+		transform: translateX(-120%);
+	}
+	to {
+		transform: translateX(420%);
+	}
+}
+
+@keyframes develop-step {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgb(22 123 255 / 0%);
+	}
+	50% {
+		box-shadow: 0 0 0 3px rgb(22 123 255 / 16%);
 	}
 }
 

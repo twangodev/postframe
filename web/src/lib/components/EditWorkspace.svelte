@@ -30,7 +30,12 @@
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
-	import type { MaskKind, WorkspaceState } from '$lib/workspace.svelte';
+	import {
+		formatBytes,
+		type DocumentStatus,
+		type MaskKind,
+		type WorkspaceState
+	} from '$lib/workspace.svelte';
 	import type { DevelopPhase } from '$lib/worker';
 
 	interface Props {
@@ -50,6 +55,14 @@
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
+	type LoadingDocument = Extract<DocumentStatus, { kind: 'loading' }>;
+	type DevelopStage = DevelopPhase;
+	const developStages: { id: DevelopStage; label: string }[] = [
+		{ id: 'reading', label: 'read' },
+		{ id: 'decoding', label: 'decode' },
+		{ id: 'merging', label: 'merge' },
+		{ id: 'rendering', label: 'render' }
+	];
 	const selectionTools = new Set([
 		'object-select',
 		'quick-select',
@@ -242,10 +255,46 @@
 	function developPhaseLabel(phase: DevelopPhase) {
 		return {
 			reading: 'reading originals',
-			decoding: 'developing raw',
-			merging: 'merging exposures',
+			decoding: 'decoding raw',
+			merging: 'aligning + merging',
 			rendering: 'rendering preview'
 		}[phase];
+	}
+
+	function developDetail(status: LoadingDocument) {
+		switch (status.phase) {
+			case 'reading':
+				return status.totalBytes > 0
+					? `${formatBytes(status.bytesRead)} / ${formatBytes(status.totalBytes)}`
+					: 'locating originals';
+			case 'decoding':
+				return `frame ${status.activeFrame} / ${status.totalFrames}`;
+			case 'merging':
+				return status.totalFrames > 1 ? `${status.totalFrames} exposures` : 'building image';
+			case 'rendering':
+				return 'SDR preview';
+		}
+	}
+
+	function developProgress(status: LoadingDocument) {
+		if (status.phase === 'reading' && status.totalBytes > 0) {
+			return (status.bytesRead / status.totalBytes) * 100;
+		}
+		if (status.phase === 'decoding' && status.totalFrames > 1) {
+			return (status.framesDecoded / status.totalFrames) * 100;
+		}
+		return null;
+	}
+
+	function developStageState(stage: DevelopStage, status: LoadingDocument) {
+		if (stage === status.phase) return 'active';
+		if (stage === 'reading' && status.totalBytes > 0 && status.bytesRead >= status.totalBytes) {
+			return 'done';
+		}
+		if (stage === 'decoding' && status.framesDecoded >= status.totalFrames) return 'done';
+		if (stage === 'decoding' && status.framesDecoded > 0) return 'partial';
+		if (stage === 'merging' && status.phase === 'rendering') return 'done';
+		return 'waiting';
 	}
 </script>
 
@@ -469,19 +518,87 @@
 									></div>
 								{/if}
 								{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
+									<div class="absolute inset-0 z-20 overflow-hidden bg-black/20 text-white">
+										{#if workspace.documentStatus.phase === 'decoding'}
+											<div class="develop-scan pointer-events-none absolute right-0 left-0"></div>
+										{/if}
+										<div class="absolute right-4 bottom-4 left-4 flex justify-center">
+											<div
+												class="motion-enter w-full max-w-80 rounded-md border border-white/12 bg-black/75 px-3.5 py-3 shadow-2xl backdrop-blur-md"
+											>
+												<div class="flex items-start gap-2.5">
+													<div
+														class="develop-pulse bg-accent/15 text-accent mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full"
+													>
+														<Sparkles size={12} />
+													</div>
+													<div class="min-w-0 flex-1">
+														<p class="text-[11px]">
+															{developPhaseLabel(workspace.documentStatus.phase)}
+														</p>
+														<p class="mt-0.5 font-mono text-[9px] text-white/45 tabular-nums">
+															{developDetail(workspace.documentStatus)}
+														</p>
+													</div>
+													<button
+														type="button"
+														class="cursor-pointer px-1 py-0.5 text-[9px] text-white/45 transition-colors hover:text-white"
+														onclick={workspace.cancelDocument}
+													>
+														cancel
+													</button>
+												</div>
+
+												<div class="relative mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+													{#if developProgress(workspace.documentStatus) !== null}
+														<div
+															class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
+															style:width={`${developProgress(workspace.documentStatus)}%`}
+														></div>
+													{/if}
+													<div class="develop-progress-sweep absolute inset-y-0 w-1/3"></div>
+												</div>
+
+												<div class="mt-2.5 grid grid-cols-4 gap-2">
+													{#each developStages as stage}
+														{@const state = developStageState(stage.id, workspace.documentStatus)}
+														<div
+															class="flex items-center gap-1.5 text-[8px] tracking-wide {state ===
+																'active' || state === 'done'
+																? 'text-white/75'
+																: state === 'partial'
+																	? 'text-white/50'
+																	: 'text-white/25'}"
+														>
+															<span
+																class="size-1 rounded-full {state === 'active'
+																	? 'develop-step-active bg-accent'
+																	: state === 'done'
+																		? 'bg-positive'
+																		: state === 'partial'
+																			? 'bg-accent/45'
+																			: 'bg-white/20'}"
+															></span>
+															{stage.label}
+														</div>
+													{/each}
+												</div>
+											</div>
+										</div>
+									</div>
+								{:else if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
 									<div
-										class="absolute inset-0 z-20 flex items-center justify-center bg-black/45 text-white backdrop-blur-[1px]"
+										class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
 									>
-										<div
-											class="motion-enter flex flex-col items-center gap-2 rounded-md bg-black/55 px-4 py-3"
-										>
-											<Sparkles size={14} class="animate-pulse" />
-											<p class="text-[11px]">{developPhaseLabel(workspace.documentStatus.phase)}</p>
-											{#if workspace.documentStatus.total > 1}
-												<p class="font-mono text-[9px] text-white/55 tabular-nums">
-													{workspace.documentStatus.completed} / {workspace.documentStatus.total}
-												</p>
-											{/if}
+										<div class="motion-enter flex flex-col items-center gap-2.5">
+											<p class="text-[11px]">development stopped</p>
+											<button
+												type="button"
+												class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+												onclick={workspace.reloadDocument}
+											>
+												retry
+											</button>
 										</div>
 									</div>
 								{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}

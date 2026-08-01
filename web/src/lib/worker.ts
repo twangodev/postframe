@@ -32,6 +32,15 @@ export interface RawInspection {
 
 export type DevelopPhase = 'reading' | 'decoding' | 'merging' | 'rendering';
 
+export interface DevelopProgress {
+	phase: DevelopPhase;
+	bytesRead: number;
+	totalBytes: number;
+	framesDecoded: number;
+	totalFrames: number;
+	activeFrame: number;
+}
+
 export type Request =
 	| { id: number; type: 'capabilities' }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
@@ -47,8 +56,11 @@ export type Response =
 			id: number;
 			type: 'progress';
 			phase: DevelopPhase;
-			completed: number;
-			total: number;
+			bytesRead: number;
+			totalBytes: number;
+			framesDecoded: number;
+			totalFrames: number;
+			activeFrame: number;
 	  }
 	| { id: number; type: 'capabilities'; rawExtensions: string[] }
 	| { id: number; type: 'validated' }
@@ -145,48 +157,51 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 	const next = new Session();
 
 	try {
+		const sizes = await Promise.all(
+			message.frames.map(async (frame) => ({
+				raw: await fileSize(frame.raw),
+				jpeg: frame.jpeg ? await fileSize(frame.jpeg) : 0
+			}))
+		);
+		const totalBytes = sizes.reduce((total, frame) => total + frame.raw + frame.jpeg, 0);
+		let bytesRead = 0;
+		let framesDecoded = 0;
+		const progress = (phase: DevelopPhase, activeFrame: number) =>
+			post({
+				id: message.id,
+				type: 'progress',
+				phase,
+				bytesRead,
+				totalBytes,
+				framesDecoded,
+				totalFrames: message.frames.length,
+				activeFrame
+			});
+
 		for (const [index, frame] of message.frames.entries()) {
-			post({
-				id: message.id,
-				type: 'progress',
-				phase: 'reading',
-				completed: index,
-				total: message.frames.length
+			const activeFrame = index + 1;
+			const frameStart = bytesRead;
+			progress('reading', activeFrame);
+			const raw = await readFile(frame.raw, sizes[index].raw, (completed) => {
+				bytesRead = frameStart + completed;
+				progress('reading', activeFrame);
 			});
-			const raw = await readFile(frame.raw);
-			const jpeg = frame.jpeg ? await readFile(frame.jpeg) : undefined;
-			post({
-				id: message.id,
-				type: 'progress',
-				phase: 'decoding',
-				completed: index,
-				total: message.frames.length
-			});
+			const jpegStart = bytesRead;
+			const jpeg = frame.jpeg
+				? await readFile(frame.jpeg, sizes[index].jpeg, (completed) => {
+						bytesRead = jpegStart + completed;
+						progress('reading', activeFrame);
+					})
+				: undefined;
+			progress('decoding', activeFrame);
 			next.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined);
-			post({
-				id: message.id,
-				type: 'progress',
-				phase: 'decoding',
-				completed: index + 1,
-				total: message.frames.length
-			});
+			framesDecoded = activeFrame;
+			progress('decoding', activeFrame);
 		}
 
-		post({
-			id: message.id,
-			type: 'progress',
-			phase: 'merging',
-			completed: 0,
-			total: 1
-		});
+		progress('merging', message.frames.length);
 		next.merge(message.maxDimension);
-		post({
-			id: message.id,
-			type: 'progress',
-			phase: 'rendering',
-			completed: 0,
-			total: 1
-		});
+		progress('rendering', message.frames.length);
 		const jpeg = next.preview_jpeg(0, true).buffer as ArrayBuffer;
 		const boostStops = next.boost_stops();
 		session = next;
@@ -197,7 +212,17 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 	}
 }
 
-async function readFile(handle: FileSystemFileHandle) {
+const READ_PROGRESS_STEP = 4 * 1024 * 1024;
+
+async function fileSize(handle: FileSystemFileHandle) {
+	return handle.getFile().then((file) => file.size);
+}
+
+async function readFile(
+	handle: FileSystemFileHandle,
+	expectedSize: number,
+	onProgress: (completed: number) => void
+) {
 	const syncHandle = handle as FileSystemFileHandle & {
 		createSyncAccessHandle?: () => Promise<{
 			getSize: () => number;
@@ -206,7 +231,23 @@ async function readFile(handle: FileSystemFileHandle) {
 		}>;
 	};
 	if (typeof syncHandle.createSyncAccessHandle !== 'function') {
-		return handle.getFile().then((file) => file.arrayBuffer());
+		const file = await handle.getFile();
+		const bytes = new Uint8Array(file.size);
+		const reader = file.stream().getReader();
+		let offset = 0;
+		let reported = 0;
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			bytes.set(value, offset);
+			offset += value.byteLength;
+			if (offset === bytes.byteLength || offset - reported >= READ_PROGRESS_STEP) {
+				reported = offset;
+				onProgress(offset);
+			}
+		}
+		if (offset !== bytes.byteLength) throw new Error(`Unable to finish reading ${handle.name}`);
+		return bytes.buffer;
 	}
 
 	const access = await syncHandle.createSyncAccessHandle();
@@ -214,9 +255,11 @@ async function readFile(handle: FileSystemFileHandle) {
 		const bytes = new Uint8Array(access.getSize());
 		let offset = 0;
 		while (offset < bytes.byteLength) {
-			const read = access.read(bytes.subarray(offset), { at: offset });
+			const end = Math.min(offset + READ_PROGRESS_STEP, bytes.byteLength);
+			const read = access.read(bytes.subarray(offset, end), { at: offset });
 			if (read === 0) throw new Error(`Unable to finish reading ${handle.name}`);
 			offset += read;
+			onProgress(Math.min(offset, expectedSize));
 		}
 		return bytes.buffer;
 	} finally {

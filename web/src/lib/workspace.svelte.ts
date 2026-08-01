@@ -17,7 +17,7 @@ import {
 	type PhotoFrame as GroupedPhotoFrame,
 	type PhotoGroup
 } from './photo-group';
-import type { DevelopPhase, RawFrameHandleInput, RawMetadata } from './worker';
+import type { DevelopPhase, DevelopProgress, RawFrameHandleInput, RawMetadata } from './worker';
 import {
 	BrowserStorageService,
 	storageErrorMessage,
@@ -34,10 +34,14 @@ export type DocumentStatus =
 			kind: 'loading';
 			photoId: string;
 			phase: DevelopPhase;
-			completed: number;
-			total: number;
+			bytesRead: number;
+			totalBytes: number;
+			framesDecoded: number;
+			totalFrames: number;
+			activeFrame: number;
 	  }
 	| { kind: 'ready'; photoId: string; boostStops: number | null }
+	| { kind: 'cancelled'; photoId: string }
 	| { kind: 'error'; photoId: string; message: string };
 
 export interface Photo {
@@ -185,9 +189,7 @@ export class WorkspaceState {
 				if (this.documentStatus.kind !== 'loading') return;
 				this.documentStatus = {
 					...this.documentStatus,
-					phase: progress.phase,
-					completed: progress.completed,
-					total: progress.total
+					...developProgress(progress)
 				};
 			}) ?? null;
 		void this.initialize();
@@ -338,6 +340,15 @@ export class WorkspaceState {
 
 	reloadDocument = () => {
 		if (this.activePhotoId) void this.openDocument(this.activePhotoId);
+	};
+
+	cancelDocument = () => {
+		if (this.documentStatus.kind !== 'loading') return;
+		const photoId = this.documentStatus.photoId;
+		this.documentRevision += 1;
+		this.workerClient?.restart('Development cancelled');
+		this.releaseEditPreview();
+		this.documentStatus = { kind: 'cancelled', photoId };
 	};
 
 	setRating(photoId: string, rating: number) {
@@ -507,8 +518,11 @@ export class WorkspaceState {
 			kind: 'loading',
 			photoId,
 			phase: 'reading',
-			completed: 0,
-			total: photo.frames.length
+			bytesRead: 0,
+			totalBytes: 0,
+			framesDecoded: 0,
+			totalFrames: photo.frames.length,
+			activeFrame: 1
 		};
 
 		try {
@@ -987,6 +1001,17 @@ function previewDimension() {
 	if (typeof window === 'undefined') return 2048;
 	const longestSide = Math.max(window.innerWidth, window.innerHeight) * window.devicePixelRatio;
 	return Math.round(Math.min(2560, Math.max(1024, longestSide)));
+}
+
+function developProgress(progress: DevelopProgress) {
+	return {
+		phase: progress.phase,
+		bytesRead: progress.bytesRead,
+		totalBytes: progress.totalBytes,
+		framesDecoded: progress.framesDecoded,
+		totalFrames: progress.totalFrames,
+		activeFrame: progress.activeFrame
+	};
 }
 
 export function formatBytes(bytes: number) {
