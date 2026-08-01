@@ -1,0 +1,316 @@
+@import 'tailwindcss';
+
+@font-face {
+	font-family: 'Overused Grotesk';
+	src: url('/fonts/OverusedGrotesk-VF.woff2') format('woff2');
+	font-weight: 300 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'JetBrains Mono';
+	src: url('/fonts/JetBrainsMono-VF.woff2') format('woff2');
+	font-weight: 100 800;
+	font-style: normal;
+	font-display: swap;
+}
+
+@theme {
+	--font-sans: 'Overused Grotesk', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+	--color-bg: #1a1916;
+	--color-surface: #23221e;
+	--color-elevated: #292824;
+	--color-canvas: #11110f;
+	--color-text: #e8e5df;
+	--color-muted: #7a7568;
+	--color-subtle: #2e2d28;
+	--color-accent: #167bff;
+	--color-positive: #6fa878;
+	--color-warning: #c4a35a;
+	--color-negative: #c26f68;
+}
+
+:root {
+	font-family: var(--font-sans);
+	color: var(--color-text);
+	background: var(--color-bg);
+	font-synthesis: none;
+	color-scheme: dark;
+	--motion-fast: 140ms;
+	--motion-base: 240ms;
+	--motion-slow: 420ms;
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html,
+body {
+	margin: 0;
+	min-width: 320px;
+	min-height: 100%;
+	background: var(--color-bg);
+}
+
+body {
+	min-height: 100svh;
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+	font: inherit;
+}
+
+button {
+	color: inherit;
+}
+
+button:not(:disabled):active,
+label:has(> input[type='file']):active {
+	transform: scale(0.975);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+::selection {
+	background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-subtle) transparent;
+}
+
+.motion-enter {
+	animation: enter-up var(--motion-slow) var(--ease-out) both;
+}
+
+.motion-header {
+	animation: enter-down 360ms var(--ease-out) both;
+}
+
+.motion-workspace {
+	animation: enter-fade var(--motion-base) var(--ease-out) both;
+}
+
+.motion-panel-left {
+	animation: enter-left 360ms var(--ease-out) both;
+}
+
+.motion-panel-right {
+	animation: enter-right 360ms var(--ease-out) both;
+}
+
+.motion-panel-up {
+	animation: enter-up 360ms var(--ease-out) both;
+}
+
+.motion-card {
+	animation: card-in 320ms var(--ease-out) both;
+	animation-delay: var(--motion-delay, 0ms);
+	transition:
+		transform var(--motion-fast) var(--ease-standard),
+		border-color var(--motion-fast) var(--ease-standard),
+		background-color var(--motion-fast) var(--ease-standard),
+		opacity var(--motion-fast) var(--ease-standard);
+}
+
+.motion-card:hover {
+	transform: translateY(-2px);
+}
+
+.motion-photo {
+	animation: photo-in var(--motion-slow) var(--ease-out) both;
+}
+
+.motion-mask {
+	animation: mask-in 260ms var(--ease-out) both;
+}
+
+.motion-tab {
+	animation: tab-in 220ms var(--ease-out) both;
+}
+
+.motion-action {
+	animation: enter-up 360ms var(--ease-out) both;
+	animation-delay: var(--motion-delay, 0ms);
+	transition:
+		transform var(--motion-fast) var(--ease-standard),
+		opacity var(--motion-fast) var(--ease-standard),
+		background-color var(--motion-fast) var(--ease-standard),
+		border-color var(--motion-fast) var(--ease-standard),
+		color var(--motion-fast) var(--ease-standard);
+}
+
+.motion-action:hover {
+	transform: translateY(-1px);
+}
+
+.motion-dialog-overlay[data-state='open'] {
+	animation: overlay-in 180ms var(--ease-standard) both;
+}
+
+.motion-dialog-content[data-state='open'] {
+	animation: dialog-in 260ms var(--ease-out) both;
+}
+
+.motion-tooltip[data-state='delayed-open'],
+.motion-tooltip[data-state='instant-open'] {
+	animation: tooltip-in var(--motion-fast) var(--ease-out) both;
+}
+
+@keyframes enter-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes enter-up {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes enter-down {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes enter-left {
+	from {
+		opacity: 0;
+		transform: translateX(-12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes enter-right {
+	from {
+		opacity: 0;
+		transform: translateX(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes card-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes photo-in {
+	from {
+		opacity: 0;
+		transform: scale(0.985);
+		filter: saturate(0.92);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+		filter: saturate(1);
+	}
+}
+
+@keyframes mask-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 0.55;
+	}
+}
+
+@keyframes tab-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes overlay-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes dialog-in {
+	from {
+		opacity: 0;
+		transform: translate(-50%, calc(-50% + 10px)) scale(0.975);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, -50%) scale(1);
+	}
+}
+
+@keyframes tooltip-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+	}
+
+	.motion-card:hover,
+	.motion-action:hover,
+	button:not(:disabled):active,
+	label:has(> input[type='file']):active {
+		transform: none;
+	}
+}
