@@ -54,8 +54,8 @@
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
-		<h1 class="font-mono text-xs tracking-wide">pf.</h1>
-		<p class="text-muted mt-3 text-xs">post-processing built on your JPEGs.</p>
+		<h1 class="font-mono text-[13px] tracking-wide">pf.</h1>
+		<p class="text-muted mt-3 text-[13px]">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">
 			<input
@@ -68,7 +68,7 @@
 			/>
 			<button
 				type="button"
-				class="motion-action bg-text text-bg flex h-9 cursor-pointer items-center justify-center rounded px-4 text-[11px] font-medium hover:opacity-85 sm:flex-1"
+				class="motion-action bg-text text-bg flex h-9 cursor-pointer items-center justify-center rounded px-4 text-xs font-medium hover:opacity-85 sm:flex-1"
 				style="--motion-delay: 80ms"
 				onclick={() => openPhotoInput.click()}
 				disabled={busy}
@@ -78,7 +78,7 @@
 
 			<button
 				type="button"
-				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-[11px] font-medium sm:flex-1"
+				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
 				style="--motion-delay: 120ms"
 				onclick={() => (newShootOpen = true)}
 				disabled={busy}
