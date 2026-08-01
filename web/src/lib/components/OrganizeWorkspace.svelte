@@ -95,7 +95,34 @@
 	}
 
 	function dimensions(photo: Photo) {
-		return photo.width && photo.height ? `${photo.width} × ${photo.height}` : 'Preview pending';
+		return photo.width && photo.height ? `${photo.width} × ${photo.height}` : '—';
+	}
+
+	function camera(photo: Photo) {
+		return (
+			[photo.metadata?.cameraMake, photo.metadata?.cameraModel].filter(Boolean).join(' ') || '—'
+		);
+	}
+
+	function exposure(photo: Photo) {
+		const metadata = photo.metadata;
+		if (!metadata) return '—';
+		const values = [
+			formatExposureTime(metadata.exposureSeconds),
+			metadata.fNumber ? `f/${formatDecimal(metadata.fNumber)}` : null,
+			metadata.iso ? `ISO ${metadata.iso}` : null
+		].filter(Boolean);
+		return values.join(' · ') || '—';
+	}
+
+	function formatExposureTime(seconds: number | null) {
+		if (!seconds) return null;
+		if (seconds >= 1) return `${formatDecimal(seconds)}s`;
+		return `1/${Math.round(1 / seconds)}`;
+	}
+
+	function formatDecimal(value: number) {
+		return Number(value.toFixed(1)).toString();
 	}
 
 	const colors: ColorLabel[] = ['red', 'yellow', 'green', 'blue', 'purple'];
@@ -251,7 +278,7 @@
 							type="button"
 							disabled={workspace.selectedIds.length < 2}
 							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-							onclick={() => workspace.createStack()}
+							onclick={workspace.createStack}
 						>
 							<Layers3 size={12} /> group stack
 						</button>
@@ -420,7 +447,6 @@
 				</div>
 			{/key}
 			<div class="border-subtle border-b p-3">
-				<!-- TODO(WASM_TODOS.metadata): replace the camera and exposure placeholders with frame metadata. -->
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="truncate text-[11px] font-medium">{active.name}</p>
@@ -475,11 +501,17 @@
 					<dt class="text-muted">dimensions</dt>
 					<dd class="text-text/80 text-right font-mono">{dimensions(active)}</dd>
 					<dt class="text-muted">camera</dt>
-					<dd class="text-text/80 text-right">FUJIFILM X-T5</dd>
+					<dd class="text-text/80 text-right">{camera(active)}</dd>
 					<dt class="text-muted">lens</dt>
-					<dd class="text-text/80 text-right">XF 23mm F1.4</dd>
+					<dd class="text-text/80 text-right">{active.metadata?.lens ?? '—'}</dd>
+					<dt class="text-muted">focal length</dt>
+					<dd class="text-text/80 text-right font-mono">
+						{active.metadata?.focalLengthMm
+							? `${formatDecimal(active.metadata.focalLengthMm)} mm`
+							: '—'}
+					</dd>
 					<dt class="text-muted">exposure</dt>
-					<dd class="text-text/80 text-right font-mono">1/250 · f/2.8 · ISO 160</dd>
+					<dd class="text-text/80 text-right font-mono">{exposure(active)}</dd>
 				</dl>
 			</div>
 

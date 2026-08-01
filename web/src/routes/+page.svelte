@@ -12,7 +12,7 @@
 	const workspace = new WorkspaceState();
 	let exportOpen = $state(false);
 
-	onDestroy(() => workspace.destroy());
+	onDestroy(workspace.destroy);
 </script>
 
 <svelte:head>
@@ -37,24 +37,20 @@
 		localStorageAvailable={workspace.localStorageAvailable}
 		storageStatus={workspace.browserStorageStatus}
 		storageError={workspace.browserStorageError}
-		onOpenPhoto={(file) => workspace.openSingle(file)}
-		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
-		onOpenCollection={(collectionId) => workspace.openCollection(collectionId)}
-		onClearLocalData={() => workspace.clearLocalData()}
-		onRefreshStorage={() => workspace.refreshBrowserStorage()}
-		onRequestPersistence={() => workspace.requestPersistentStorage()}
+		onOpenPhoto={workspace.openSingle}
+		onCreateCollection={workspace.createCollection}
+		onOpenCollection={workspace.openCollection}
+		onClearLocalData={workspace.clearLocalData}
+		onRefreshStorage={workspace.refreshBrowserStorage}
+		onRequestPersistence={workspace.requestPersistentStorage}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">
-		<AppHeader
-			{workspace}
-			onImport={(files) => workspace.importFiles(files)}
-			onExport={() => (exportOpen = true)}
-		/>
+		<AppHeader {workspace} onImport={workspace.importFiles} onExport={() => (exportOpen = true)} />
 		{#key workspace.mode}
 			<div class="motion-workspace flex min-h-0 flex-1 overflow-hidden">
 				{#if workspace.mode === 'organize'}
-					<OrganizeWorkspace {workspace} onImport={(files) => workspace.importFiles(files)} />
+					<OrganizeWorkspace {workspace} onImport={workspace.importFiles} />
 				{:else}
 					<EditWorkspace {workspace} />
 				{/if}
@@ -75,7 +71,7 @@
 		<button
 			type="button"
 			class="border-subtle text-muted hover:text-text mt-6 cursor-pointer rounded border px-4 py-2 text-[10px] tracking-wide"
-			onclick={() => workspace.reset()}
+			onclick={workspace.reset}
 		>
 			back to start
 		</button>

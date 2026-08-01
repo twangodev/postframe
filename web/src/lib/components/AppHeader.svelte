@@ -77,7 +77,7 @@
 						type="button"
 						aria-label="Close this workspace"
 						class="hover:text-text flex cursor-pointer items-center gap-1.5 rounded transition-colors"
-						onclick={() => workspace.reset()}
+						onclick={workspace.reset}
 					>
 						<img src={postframeLogo} alt="" class="size-5" />
 						<span class="text-[11px] font-medium tracking-tight">postframe</span>
@@ -136,7 +136,7 @@
 						type="button"
 						aria-label="Create another collection"
 						class="text-muted hover:bg-surface hover:text-text hidden size-7 cursor-pointer items-center justify-center rounded transition-colors sm:flex"
-						onclick={() => workspace.reset()}
+						onclick={workspace.reset}
 					>
 						<Plus size={14} strokeWidth={1.5} />
 					</button>

@@ -1,18 +1,23 @@
-import {
-	acceptedPhotoTypes,
-	describePhotoSource,
-	normalizedRawExtensions,
-	type PhotoKind,
-	type PhotoSource
-} from './photo-source';
+import { acceptedPhotoTypes, normalizedRawExtensions } from './photo-source';
 import {
 	CollectionStore,
 	type CollectionManifest,
 	type CollectionSummary,
 	type OriginalWrite,
+	type StoredAsset,
+	type StoredFrame,
+	type StoredMetadata,
+	type ThumbnailWrite,
 	type StoredPhoto
 } from './collection-store';
 import { PostframeWorkerClient } from './worker-client';
+import {
+	groupPhotoFiles,
+	type PhotoAsset as GroupedPhotoAsset,
+	type PhotoFrame as GroupedPhotoFrame,
+	type PhotoGroup
+} from './photo-group';
+import type { RawMetadata } from './worker';
 import {
 	BrowserStorageService,
 	storageErrorMessage,
@@ -26,12 +31,14 @@ export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 
 export interface Photo {
 	id: string;
-	storageName: string;
 	name: string;
 	extension: string;
 	src: string | null;
-	kind: PhotoKind;
-	source: PhotoSource;
+	kind: StoredPhoto['kind'];
+	frames: StoredFrame[];
+	bracketDetection: StoredPhoto['bracketDetection'];
+	thumbnailStorageName: string | null;
+	metadata: StoredMetadata | null;
 	size: number;
 	width: number | null;
 	height: number | null;
@@ -65,7 +72,15 @@ export interface Mask {
 
 interface PhotoImport {
 	photo: Photo;
-	original: OriginalWrite;
+	originals: OriginalWrite[];
+	thumbnails: ThumbnailWrite[];
+}
+
+interface FrameImport {
+	frame: StoredFrame;
+	originals: OriginalWrite[];
+	rawFile: File | null;
+	displayFile: File | null;
 }
 
 const defaultAdjustments = {
@@ -88,10 +103,6 @@ const defaultAdjustments = {
 
 function id(prefix: string) {
 	return `${prefix}-${crypto.randomUUID()}`;
-}
-
-function extension(name: string) {
-	return name.split('.').pop()?.toUpperCase() ?? 'FILE';
 }
 
 function dateLabel(timestamp: number) {
@@ -152,19 +163,19 @@ export class WorkspaceState {
 		void this.initialize();
 	}
 
-	async openSingle(file: File) {
-		// TODO(WASM_TODOS.photoIngest): route the file through worker load and the Session bindings.
+	openSingle = async (file: File) => {
 		await this.ensureCapabilities();
 		this.ingestError = null;
 		this.clearFiles();
-		const imported = await this.photoFromFile(file);
+		const imported = (await this.photosFromFiles([file]))[0];
 		if (!imported) return;
 		this.beginCollection(file.name.replace(/\.[^.]+$/, ''), [imported.photo]);
+		// TODO(WASM_TODOS.photoIngest): load logical frames into a Session before entering edit mode.
 		this.mode = 'edit';
-		await this.queuePersistence([imported.original]);
-	}
+		await this.queuePersistence(imported.originals, imported.thumbnails);
+	};
 
-	async createCollection(name: string, files: File[]) {
+	createCollection = async (name: string, files: File[]) => {
 		await this.ensureCapabilities();
 		this.ingestError = null;
 		this.clearFiles();
@@ -174,11 +185,13 @@ export class WorkspaceState {
 			imported.map(({ photo }) => photo)
 		);
 		this.mode = 'organize';
-		await this.queuePersistence(imported.map(({ original }) => original));
-	}
+		await this.queuePersistence(
+			imported.flatMap(({ originals }) => originals),
+			imported.flatMap(({ thumbnails }) => thumbnails)
+		);
+	};
 
-	async importFiles(files: File[]) {
-		// TODO(WASM_TODOS.photoIngest): ingest and thumbnail these files through the Wasm worker.
+	importFiles = async (files: File[]) => {
 		await this.ensureCapabilities();
 		this.ingestError = null;
 		const imported = await this.photosFromFiles(files);
@@ -186,14 +199,17 @@ export class WorkspaceState {
 		if (!this.activePhotoId && imported[0]?.photo) {
 			this.selectPhoto(imported[0].photo.id);
 		}
-		await this.queuePersistence(imported.map(({ original }) => original));
-	}
+		await this.queuePersistence(
+			imported.flatMap(({ originals }) => originals),
+			imported.flatMap(({ thumbnails }) => thumbnails)
+		);
+	};
 
 	async save() {
 		await this.queuePersistence();
 	}
 
-	async openCollection(collectionId: string) {
+	openCollection = async (collectionId: string) => {
 		const store = this.collectionStore;
 		if (!store) return;
 
@@ -225,9 +241,9 @@ export class WorkspaceState {
 			this.clearFiles();
 			this.catalogError = error instanceof Error ? error.message : 'Unable to open collection';
 		}
-	}
+	};
 
-	async clearLocalData() {
+	clearLocalData = async () => {
 		const store = this.collectionStore;
 		if (!store || this.mode !== 'welcome') return;
 
@@ -243,9 +259,9 @@ export class WorkspaceState {
 			this.catalogError = error instanceof Error ? error.message : 'Unable to clear local data';
 			throw error;
 		}
-	}
+	};
 
-	async refreshBrowserStorage() {
+	refreshBrowserStorage = async () => {
 		this.browserStorageError = null;
 		try {
 			this.browserStorageStatus = await this.browserStorage.status();
@@ -253,9 +269,9 @@ export class WorkspaceState {
 			this.browserStorageError = storageErrorMessage(error);
 			throw error;
 		}
-	}
+	};
 
-	async requestPersistentStorage() {
+	requestPersistentStorage = async () => {
 		this.browserStorageError = null;
 		try {
 			const result = await this.browserStorage.requestPersistence();
@@ -264,7 +280,7 @@ export class WorkspaceState {
 			this.browserStorageError = storageErrorMessage(error);
 			throw error;
 		}
-	}
+	};
 
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
 		if (this.photos.length === 0) return;
@@ -326,7 +342,7 @@ export class WorkspaceState {
 		void this.queuePersistence();
 	}
 
-	createStack() {
+	createStack = () => {
 		const photoIds = this.selectedIds.filter((photoId) =>
 			this.photos.some((photo) => photo.id === photoId)
 		);
@@ -352,7 +368,7 @@ export class WorkspaceState {
 			if (photoIds.includes(photo.id)) photo.stackId = stack.id;
 		}
 		void this.queuePersistence();
-	}
+	};
 
 	ungroupStack(stackId: string) {
 		for (const photo of this.photos) {
@@ -397,7 +413,7 @@ export class WorkspaceState {
 		this.selectedMaskId = this.masks.at(-1)?.id ?? null;
 	}
 
-	reset() {
+	reset = () => {
 		this.clearFiles();
 		this.persistenceRevision += 1;
 		this.collectionId = null;
@@ -413,12 +429,12 @@ export class WorkspaceState {
 		this.storageError = null;
 		this.resetEditState();
 		void this.refreshCollections();
-	}
+	};
 
-	destroy() {
+	destroy = () => {
 		this.clearFiles();
 		this.workerClient?.destroy();
-	}
+	};
 
 	private resetEditState() {
 		this.masks = [];
@@ -446,44 +462,85 @@ export class WorkspaceState {
 	}
 
 	private async photosFromFiles(files: File[]) {
-		const imported = await Promise.all(files.map((file) => this.photoFromFile(file)));
-		return imported.filter((photo): photo is PhotoImport => photo !== null);
-	}
+		const grouping = groupPhotoFiles(files, this.rawExtensions);
+		const imported: PhotoImport[] = [];
+		if (grouping.rejectedFiles[0]) {
+			this.ingestError = `${grouping.rejectedFiles[0].name}: unsupported photo format`;
+		}
 
-	private async photoFromFile(file: File): Promise<PhotoImport | null> {
-		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAW placeholder with Wasm output.
-		const source = describePhotoSource(file, this.rawExtensions);
-		if (!source) return null;
-		if (source.kind === 'raw') {
+		for (const group of grouping.groups) {
 			try {
-				if (!this.workerClient) throw new Error('RAW decoder is unavailable');
-				await this.workerClient.validateRaw(await file.arrayBuffer());
+				imported.push(await this.photoFromGroup(group, grouping.filesByAssetKey));
 			} catch (error) {
-				// TODO(WASM_TODOS.photoIngest): surface every rejected file in an import results panel.
-				const reason = error instanceof Error ? error.message : 'unsupported RAW file';
-				this.ingestError = `${file.name}: ${reason}`;
-				return null;
+				const name = firstGroupedAsset(group)?.name ?? 'photo';
+				const reason = error instanceof Error ? error.message : 'unsupported photo';
+				this.ingestError = `${name}: ${reason}`;
 			}
 		}
 
-		const src = source.kind === 'image' ? URL.createObjectURL(file) : null;
+		return imported;
+	}
+
+	private async photoFromGroup(
+		group: PhotoGroup,
+		filesByAssetKey: ReadonlyMap<string, File>
+	): Promise<PhotoImport> {
+		const importedFrames = groupedFrames(group).map(({ photo, filenameExposureHint }) =>
+			this.importFrame(photo, filenameExposureHint, filesByAssetKey)
+		);
+		const selectedFrame = importedFrames[primaryFrameIndex(group)];
+		if (!selectedFrame) throw new Error('photo group has no frames');
+
+		const rawFrames = importedFrames.filter(
+			(frame): frame is FrameImport & { rawFile: File } => frame.rawFile !== null
+		);
+		const metadataFrame = selectedFrame.rawFile ? selectedFrame : rawFrames[0];
+		let inspection: Awaited<ReturnType<PostframeWorkerClient['inspectRaw']>> | null = null;
+
+		for (const frame of rawFrames) {
+			if (!this.workerClient) throw new Error('RAW decoder is unavailable');
+			const bytes = await frame.rawFile.arrayBuffer();
+			if (frame === metadataFrame) inspection = await this.workerClient.inspectRaw(bytes);
+			else await this.workerClient.validateRaw(bytes);
+		}
+
+		const photoId = id('photo');
+		const selectedAsset = selectedFrame.frame.display ?? selectedFrame.frame.raw;
+		if (!selectedAsset) throw new Error('photo frame has no source');
+		let src: string | null = null;
+		let thumbnailStorageName: string | null = null;
+		const thumbnails: ThumbnailWrite[] = [];
+
+		if (selectedFrame.displayFile) {
+			src = URL.createObjectURL(selectedFrame.displayFile);
+		} else if (inspection) {
+			const blob = new Blob([inspection.thumbnailJpeg], { type: 'image/jpeg' });
+			src = URL.createObjectURL(blob);
+			thumbnailStorageName = `${photoId}.jpg`;
+			thumbnails.push({ storageName: thumbnailStorageName, blob });
+		}
 		if (src) this.objectUrls.add(src);
 
-		const dimensions = src ? await this.readDimensions(src) : null;
-		const photoId = id('photo');
-		const storageName = `${photoId}.${source.format}`;
+		const dimensions = inspection?.metadata ?? (src ? await this.readDimensions(src) : null);
+		// TODO(WASM_TODOS.metadata): inspect EXIF for display-only assets with a dedicated parser.
+		const metadata = inspection ? storedMetadata(inspection.metadata) : null;
+		const frameAssets = importedFrames.flatMap(({ frame }) =>
+			[frame.raw, frame.display].filter((asset): asset is StoredAsset => asset !== null)
+		);
 		const photo = {
 			id: photoId,
-			storageName,
-			name: file.name,
-			extension: extension(file.name),
+			name: selectedAsset.name,
+			extension: groupLabel(group.kind, selectedFrame.frame, importedFrames.length),
 			src,
-			kind: source.kind,
-			source,
-			size: file.size,
+			kind: group.kind,
+			frames: importedFrames.map(({ frame }) => frame),
+			bracketDetection: group.kind === 'bracket' ? group.detection : null,
+			thumbnailStorageName,
+			metadata,
+			size: frameAssets.reduce((total, asset) => total + asset.source.size, 0),
 			width: dimensions?.width ?? null,
 			height: dimensions?.height ?? null,
-			captured: dateLabel(file.lastModified),
+			captured: captureLabel(metadata?.capturedAt, selectedAsset.source.lastModified),
 			rating: 0,
 			flagged: false,
 			rejected: false,
@@ -492,36 +549,93 @@ export class WorkspaceState {
 			stackId: null
 		} satisfies Photo;
 
-		return { photo, original: { storageName, file } };
+		return {
+			photo,
+			originals: importedFrames.flatMap(({ originals }) => originals),
+			thumbnails
+		};
 	}
 
 	private async restorePhoto(collectionId: string, photo: StoredPhoto): Promise<Photo> {
+		const store = this.collectionStore;
+		if (!store) throw new Error('Local collection storage is unavailable');
 		let src: string | null = null;
-		if (photo.source.kind === 'image') {
-			const file = await this.collectionStore?.readOriginal(collectionId, photo.storageName);
-			if (!file) throw new Error(`Original ${photo.name} is unavailable`);
+		let metadata = photo.metadata ? { ...photo.metadata } : null;
+		let width = photo.width;
+		let height = photo.height;
+		const frame = primaryStoredFrame(photo);
+		const display = frame.display;
+
+		if (display) {
+			const file = await store.readOriginal(collectionId, display.storageName);
+			if (!file) throw new Error(`Original ${display.name} is unavailable`);
 			src = URL.createObjectURL(file);
-			this.objectUrls.add(src);
+		} else if (photo.thumbnailStorageName) {
+			const file = await store.readThumbnail(collectionId, photo.thumbnailStorageName);
+			src = URL.createObjectURL(file);
+		} else if (frame.raw && this.workerClient) {
+			// TODO(WASM_TODOS.collectionStorage): persist thumbnails regenerated from v1 manifests.
+			const file = await store.readOriginal(collectionId, frame.raw.storageName);
+			if (!file) throw new Error(`Original ${frame.raw.name} is unavailable`);
+			const inspection = await this.workerClient.inspectRaw(await file.arrayBuffer());
+			const blob = new Blob([inspection.thumbnailJpeg], { type: 'image/jpeg' });
+			src = URL.createObjectURL(blob);
+			metadata ??= storedMetadata(inspection.metadata);
+			width ??= inspection.metadata.width;
+			height ??= inspection.metadata.height;
 		}
+		if (src) this.objectUrls.add(src);
+
+		const selectedAsset = frame.display ?? frame.raw;
+		if (!selectedAsset) throw new Error(`Photo ${photo.name} has no source`);
 
 		return {
 			id: photo.id,
-			storageName: photo.storageName,
 			name: photo.name,
-			extension: photo.source.format.toUpperCase(),
+			extension: groupLabel(photo.kind, frame, photo.frames.length),
 			src,
-			kind: photo.source.kind,
-			source: { ...photo.source },
-			size: photo.source.size,
-			width: photo.width,
-			height: photo.height,
-			captured: dateLabel(photo.source.lastModified),
+			kind: photo.kind,
+			frames: cloneFrames(photo.frames),
+			bracketDetection: photo.bracketDetection,
+			thumbnailStorageName: photo.thumbnailStorageName,
+			metadata,
+			size: photo.frames
+				.flatMap((candidate) => [candidate.raw, candidate.display])
+				.filter((asset): asset is StoredAsset => asset !== null)
+				.reduce((total, asset) => total + asset.source.size, 0),
+			width,
+			height,
+			captured: captureLabel(metadata?.capturedAt, selectedAsset.source.lastModified),
 			rating: photo.rating,
 			flagged: photo.flagged,
 			rejected: photo.rejected,
 			colorLabel: photo.colorLabel,
 			albumIds: [...photo.albumIds],
 			stackId: photo.stackId
+		};
+	}
+
+	private importFrame(
+		frame: GroupedPhotoFrame,
+		filenameExposureHint: number | null,
+		filesByAssetKey: ReadonlyMap<string, File>
+	): FrameImport {
+		const raw = frame.kind === 'raw' || frame.kind === 'raw-pair' ? frame.raw : null;
+		const display = frame.kind === 'display' || frame.kind === 'raw-pair' ? frame.display : null;
+		const rawImport = raw ? importedAsset(raw, filesByAssetKey) : null;
+		const displayImport = display ? importedAsset(display, filesByAssetKey) : null;
+
+		return {
+			frame: {
+				raw: rawImport?.asset ?? null,
+				display: displayImport?.asset ?? null,
+				filenameExposureHint
+			},
+			originals: [rawImport?.original, displayImport?.original].filter(
+				(original): original is OriginalWrite => original !== undefined
+			),
+			rawFile: rawImport?.file ?? null,
+			displayFile: displayImport?.file ?? null
 		};
 	}
 
@@ -584,7 +698,7 @@ export class WorkspaceState {
 		if (!this.collectionId) return null;
 
 		return {
-			version: 1,
+			version: 2,
 			id: this.collectionId,
 			name: this.collectionName,
 			createdAt: this.collectionCreatedAt,
@@ -598,9 +712,12 @@ export class WorkspaceState {
 	private storedPhoto(photo: Photo): StoredPhoto {
 		return {
 			id: photo.id,
-			storageName: photo.storageName,
 			name: photo.name,
-			source: { ...photo.source },
+			kind: photo.kind,
+			frames: cloneFrames(photo.frames),
+			bracketDetection: photo.bracketDetection,
+			thumbnailStorageName: photo.thumbnailStorageName,
+			metadata: photo.metadata ? { ...photo.metadata } : null,
 			width: photo.width,
 			height: photo.height,
 			rating: photo.rating,
@@ -612,7 +729,10 @@ export class WorkspaceState {
 		};
 	}
 
-	private queuePersistence(originals: readonly OriginalWrite[] = []) {
+	private queuePersistence(
+		originals: readonly OriginalWrite[] = [],
+		thumbnails: readonly ThumbnailWrite[] = []
+	) {
 		const manifest = this.collectionManifest();
 		const store = this.collectionStore;
 		if (!store || !manifest) {
@@ -623,7 +743,7 @@ export class WorkspaceState {
 		const revision = ++this.persistenceRevision;
 		this.storageStatus = 'saving';
 		this.storageError = null;
-		const save = this.persistence.then(() => store.saveCollection(manifest, originals));
+		const save = this.persistence.then(() => store.saveCollection(manifest, originals, thumbnails));
 		this.persistence = save.then(
 			() => {
 				if (revision !== this.persistenceRevision) return;
@@ -646,6 +766,98 @@ export class WorkspaceState {
 			image.src = src;
 		});
 	}
+}
+
+function groupedFrames(group: PhotoGroup) {
+	return group.kind === 'bracket'
+		? group.frames.map(({ photo, filenameExposureHint }) => ({ photo, filenameExposureHint }))
+		: [{ photo: group, filenameExposureHint: null }];
+}
+
+function primaryFrameIndex(group: PhotoGroup) {
+	if (group.kind !== 'bracket') return 0;
+	const neutral = group.frames.findIndex(({ filenameExposureHint }) => filenameExposureHint === 0);
+	return neutral >= 0 ? neutral : Math.floor(group.frames.length / 2);
+}
+
+function firstGroupedAsset(group: PhotoGroup) {
+	const frame = groupedFrames(group)[0]?.photo;
+	if (!frame) return null;
+	return frame.kind === 'display' ? frame.display : frame.raw;
+}
+
+function importedAsset(
+	asset: GroupedPhotoAsset,
+	filesByAssetKey: ReadonlyMap<string, File>
+): { asset: StoredAsset; original: OriginalWrite; file: File } {
+	const file = filesByAssetKey.get(asset.key);
+	if (!file) throw new Error(`${asset.name} is unavailable`);
+	const assetId = id('asset');
+	const stored = {
+		id: assetId,
+		storageName: `${assetId}.${asset.source.format}`,
+		name: asset.name,
+		source: { ...asset.source }
+	} satisfies StoredAsset;
+	return { asset: stored, original: { storageName: stored.storageName, file }, file };
+}
+
+function storedMetadata(metadata: RawMetadata): StoredMetadata {
+	return {
+		orientation: metadata.orientation,
+		cameraMake: metadata.cameraMake,
+		cameraModel: metadata.cameraModel,
+		lens: metadata.lens,
+		capturedAt: metadata.capturedAt,
+		exposureSeconds: metadata.exposureSeconds,
+		fNumber: metadata.fNumber,
+		iso: metadata.iso,
+		focalLengthMm: metadata.focalLengthMm
+	};
+}
+
+function captureLabel(capturedAt: string | null | undefined, fallback: number) {
+	const match = capturedAt?.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+	if (!match) return capturedAt ?? dateLabel(fallback);
+	const [, year, month, day, hour, minute, second] = match;
+	return dateLabel(
+		new Date(
+			Number(year),
+			Number(month) - 1,
+			Number(day),
+			Number(hour),
+			Number(minute),
+			Number(second)
+		).getTime()
+	);
+}
+
+function groupLabel(kind: StoredPhoto['kind'], frame: StoredFrame, frameCount: number) {
+	if (kind === 'bracket') return `BRACKET × ${frameCount}`;
+	if (kind === 'raw-pair') {
+		return `${frame.raw?.source.format.toUpperCase()} + ${frame.display?.source.format.toUpperCase()}`;
+	}
+	return (frame.display ?? frame.raw)?.source.format.toUpperCase() ?? 'PHOTO';
+}
+
+function primaryStoredFrame(photo: Pick<StoredPhoto, 'kind' | 'frames'>) {
+	if (photo.kind !== 'bracket') return photo.frames[0];
+	return (
+		photo.frames.find(({ filenameExposureHint }) => filenameExposureHint === 0) ??
+		photo.frames[Math.floor(photo.frames.length / 2)]
+	);
+}
+
+function cloneFrames(frames: StoredFrame[]) {
+	return frames.map((frame) => ({
+		raw: frame.raw ? cloneAsset(frame.raw) : null,
+		display: frame.display ? cloneAsset(frame.display) : null,
+		filenameExposureHint: frame.filenameExposureHint
+	}));
+}
+
+function cloneAsset(asset: StoredAsset) {
+	return { ...asset, source: { ...asset.source } };
 }
 
 export function formatBytes(bytes: number) {
