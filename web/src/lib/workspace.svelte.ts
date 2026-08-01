@@ -8,6 +8,7 @@ import {
 import {
 	CollectionStore,
 	type CollectionManifest,
+	type CollectionSummary,
 	type OriginalWrite,
 	type StoredPhoto
 } from './collection-store';
@@ -123,6 +124,9 @@ export class WorkspaceState {
 	capabilitiesReady = $state(false);
 	capabilitiesError = $state<string | null>(null);
 	ingestError = $state<string | null>(null);
+	recentCollections = $state<CollectionSummary[]>([]);
+	catalogReady = $state(false);
+	catalogError = $state<string | null>(null);
 	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
@@ -135,6 +139,7 @@ export class WorkspaceState {
 
 	constructor() {
 		void this.ensureCapabilities();
+		void this.refreshCollections();
 	}
 
 	async openSingle(file: File) {
@@ -176,6 +181,40 @@ export class WorkspaceState {
 
 	async save() {
 		await this.queuePersistence();
+	}
+
+	async openCollection(collectionId: string) {
+		const store = this.collectionStore;
+		if (!store) return;
+
+		await this.ensureCapabilities();
+		this.clearFiles();
+		this.catalogError = null;
+		this.ingestError = null;
+		try {
+			const collection = await store.loadCollection(collectionId);
+			const photos = await Promise.all(
+				collection.photos.map((photo) => this.restorePhoto(collection.id, photo))
+			);
+			this.collectionId = collection.id;
+			this.collectionCreatedAt = collection.createdAt;
+			this.collectionName = collection.name;
+			this.photos = photos;
+			this.albums = collection.albums.map((album) => ({ ...album }));
+			this.stacks = collection.stacks.map((stack) => ({
+				...stack,
+				photoIds: [...stack.photoIds]
+			}));
+			this.selectedIds = photos[0] ? [photos[0].id] : [];
+			this.activePhotoId = photos[0]?.id ?? null;
+			this.storageStatus = 'saved';
+			this.storageError = null;
+			this.mode = 'organize';
+			this.resetEditState();
+		} catch (error) {
+			this.clearFiles();
+			this.catalogError = error instanceof Error ? error.message : 'Unable to open collection';
+		}
 	}
 
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
@@ -324,6 +363,7 @@ export class WorkspaceState {
 		this.storageStatus = this.collectionStore ? 'saved' : 'memory';
 		this.storageError = null;
 		this.resetEditState();
+		void this.refreshCollections();
 	}
 
 	destroy() {
@@ -404,6 +444,55 @@ export class WorkspaceState {
 		} satisfies Photo;
 
 		return { photo, original: { storageName, file } };
+	}
+
+	private async restorePhoto(collectionId: string, photo: StoredPhoto): Promise<Photo> {
+		let src: string | null = null;
+		if (photo.source.kind === 'image') {
+			const file = await this.collectionStore?.readOriginal(collectionId, photo.storageName);
+			if (!file) throw new Error(`Original ${photo.name} is unavailable`);
+			src = URL.createObjectURL(file);
+			this.objectUrls.add(src);
+		}
+
+		return {
+			id: photo.id,
+			storageName: photo.storageName,
+			name: photo.name,
+			extension: photo.source.format.toUpperCase(),
+			src,
+			kind: photo.source.kind,
+			source: { ...photo.source },
+			size: photo.source.size,
+			width: photo.width,
+			height: photo.height,
+			captured: dateLabel(photo.source.lastModified),
+			rating: photo.rating,
+			flagged: photo.flagged,
+			rejected: photo.rejected,
+			colorLabel: photo.colorLabel,
+			albumIds: [...photo.albumIds],
+			stackId: photo.stackId
+		};
+	}
+
+	private async refreshCollections() {
+		const store = this.collectionStore;
+		if (!store) {
+			this.catalogReady = true;
+			return;
+		}
+
+		this.catalogReady = false;
+		this.catalogError = null;
+		await this.persistence;
+		try {
+			this.recentCollections = await store.listCollections();
+		} catch (error) {
+			this.catalogError = error instanceof Error ? error.message : 'Unable to read collections';
+		} finally {
+			this.catalogReady = true;
+		}
 	}
 
 	private async ensureCapabilities() {

@@ -23,8 +23,12 @@
 		acceptedPhotos={workspace.acceptedPhotos}
 		sourceReady={workspace.capabilitiesReady}
 		ingestError={workspace.ingestError}
+		recentCollections={workspace.recentCollections}
+		catalogReady={workspace.catalogReady}
+		catalogError={workspace.catalogError}
 		onOpenPhoto={(file) => workspace.openSingle(file)}
 		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
+		onOpenCollection={(collectionId) => workspace.openCollection(collectionId)}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">

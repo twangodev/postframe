@@ -4,17 +4,31 @@
 	import { Images, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import type { CollectionSummary } from '$lib/collection-store';
 
 	interface Props {
 		acceptedPhotos: string;
 		sourceReady: boolean;
 		ingestError: string | null;
+		recentCollections: CollectionSummary[];
+		catalogReady: boolean;
+		catalogError: string | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
+		onOpenCollection: (collectionId: string) => Promise<void>;
 	}
 
-	let { acceptedPhotos, sourceReady, ingestError, onOpenPhoto, onCreateCollection }: Props =
-		$props();
+	let {
+		acceptedPhotos,
+		sourceReady,
+		ingestError,
+		recentCollections,
+		catalogReady,
+		catalogError,
+		onOpenPhoto,
+		onCreateCollection,
+		onOpenCollection
+	}: Props = $props();
 	let newCollectionOpen = $state(false);
 	let collectionName = $state('');
 	let files = $state<File[]>([]);
@@ -27,6 +41,17 @@
 		busy = true;
 		await onOpenPhoto(file);
 		busy = false;
+	}
+
+	async function openCollection(collectionId: string) {
+		if (busy) return;
+		busy = true;
+		await onOpenCollection(collectionId);
+		busy = false;
+	}
+
+	function collectionDate(timestamp: number) {
+		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(timestamp);
 	}
 
 	function chooseFiles(list: FileList | null) {
@@ -126,6 +151,32 @@
 		{#if ingestError}
 			<p class="text-negative mt-3 truncate text-[10px]" title={ingestError}>
 				unsupported RAW file
+			</p>
+		{/if}
+
+		{#if catalogReady && recentCollections.length > 0}
+			<div class="motion-enter border-subtle mt-9 border-t pt-4">
+				<p class="text-muted mb-1.5 text-[10px] tracking-[0.04em]">recent</p>
+				<div class="flex flex-col gap-0.5">
+					{#each recentCollections.slice(0, 5) as collection, index (collection.id)}
+						<button
+							type="button"
+							class="motion-card hover:bg-surface flex min-w-0 cursor-pointer items-center justify-between rounded px-2 py-2 text-left disabled:cursor-wait disabled:opacity-45"
+							style={`--motion-delay: ${160 + index * 30}ms`}
+							disabled={busy}
+							onclick={() => openCollection(collection.id)}
+						>
+							<span class="truncate text-[11px] font-medium">{collection.name}</span>
+							<span class="text-muted ml-4 shrink-0 font-mono text-[9px]">
+								{collection.photoCount} · {collectionDate(collection.updatedAt)}
+							</span>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{:else if catalogError}
+			<p class="text-negative mt-5 truncate text-[10px]" title={catalogError}>
+				couldn't read local collections
 			</p>
 		{/if}
 	</section>
