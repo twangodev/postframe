@@ -2,7 +2,7 @@
 	import { Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
-	import { Download, Home, Plus, Upload } from '@lucide/svelte';
+	import { Download, Plus, Upload } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import EditorMenuBar from './EditorMenuBar.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
@@ -72,17 +72,14 @@
 						{...props}
 						type="button"
 						aria-label="Close this workspace"
-						class="text-muted hover:bg-surface hover:text-text flex size-7 cursor-pointer items-center justify-center rounded transition-colors"
+						class="hover:text-text flex cursor-pointer items-center gap-1.5 rounded transition-colors"
 						onclick={() => workspace.reset()}
 					>
-						<Home size={14} strokeWidth={1.5} />
+						<img src={postframeLogo} alt="" class="size-5" />
+						<span class="text-[11px] font-medium tracking-tight">postframe</span>
 					</button>
 				{/snippet}
 			</Tooltip>
-			<div class="flex items-center gap-1.5">
-				<img src={postframeLogo} alt="" class="size-5" />
-				<span class="text-[11px] font-medium tracking-tight">postframe</span>
-			</div>
 			<span class="bg-subtle h-4 w-px"></span>
 			<div class="min-w-0">
 				<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
