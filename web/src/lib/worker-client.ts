@@ -26,6 +26,14 @@ export class PostframeWorkerClient {
 		this.worker.addEventListener('error', this.handleWorkerError);
 	}
 
+	async capabilities() {
+		return this.send((id) => ({ id, type: 'capabilities' }), 'capabilities');
+	}
+
+	async validateRaw(raw: ArrayBuffer) {
+		await this.send((id) => ({ id, type: 'validate', raw }), 'validated', [raw]);
+	}
+
 	async load(frames: RawFrameInput[]) {
 		const transfer = frames.flatMap((frame) =>
 			frame.jpeg ? [frame.raw, frame.jpeg] : [frame.raw]

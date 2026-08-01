@@ -10,6 +10,22 @@ fn err(error: crate::Error) -> JsError {
 }
 
 #[wasm_bindgen]
+pub fn supported_raw_extensions() -> Vec<String> {
+    rawler::decoders::supported_extensions()
+        .iter()
+        .map(|extension| extension.to_ascii_lowercase())
+        .collect()
+}
+
+#[wasm_bindgen]
+pub fn validate_raw(raw: Vec<u8>) -> Result<(), JsError> {
+    let source = rawler::rawsource::RawSource::new_from_shared_vec(Arc::new(raw));
+    rawler::decode_dummy(&source)
+        .map(|_| ())
+        .map_err(|error| JsError::new(&error.to_string()))
+}
+
+#[wasm_bindgen]
 pub struct Session {
     frames: Vec<Frame>,
     merged: Option<Merged>,

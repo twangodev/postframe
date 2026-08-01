@@ -1,6 +1,7 @@
 import {
-	ACCEPTED_PHOTOS,
+	acceptedPhotoTypes,
 	describePhotoSource,
+	normalizedRawExtensions,
 	type PhotoKind,
 	type PhotoSource
 } from './photo-source';
@@ -10,8 +11,7 @@ import {
 	type OriginalWrite,
 	type StoredPhoto
 } from './collection-store';
-
-export { ACCEPTED_PHOTOS } from './photo-source';
+import { PostframeWorkerClient } from './worker-client';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -100,6 +100,10 @@ function dateLabel(timestamp: number) {
 
 export class WorkspaceState {
 	private readonly collectionStore = CollectionStore.supported() ? new CollectionStore() : null;
+	private readonly workerClient =
+		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
+	private readonly rawExtensions = new Set<string>();
+	private capabilityLoading: Promise<void> | null = null;
 	private collectionId: string | null = null;
 	private collectionCreatedAt = 0;
 	private persistence = Promise.resolve();
@@ -115,6 +119,10 @@ export class WorkspaceState {
 	activePhotoId = $state<string | null>(null);
 	masks = $state<Mask[]>([]);
 	selectedMaskId = $state<string | null>(null);
+	acceptedPhotos = $state(acceptedPhotoTypes([]));
+	capabilitiesReady = $state(false);
+	capabilitiesError = $state<string | null>(null);
+	ingestError = $state<string | null>(null);
 	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
@@ -125,8 +133,14 @@ export class WorkspaceState {
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
 
+	constructor() {
+		void this.ensureCapabilities();
+	}
+
 	async openSingle(file: File) {
 		// TODO(WASM_TODOS.photoIngest): route the file through worker load and the Session bindings.
+		await this.ensureCapabilities();
+		this.ingestError = null;
 		this.clearFiles();
 		const imported = await this.photoFromFile(file);
 		if (!imported) return;
@@ -136,6 +150,8 @@ export class WorkspaceState {
 	}
 
 	async createCollection(name: string, files: File[]) {
+		await this.ensureCapabilities();
+		this.ingestError = null;
 		this.clearFiles();
 		const imported = await this.photosFromFiles(files);
 		this.beginCollection(
@@ -148,6 +164,8 @@ export class WorkspaceState {
 
 	async importFiles(files: File[]) {
 		// TODO(WASM_TODOS.photoIngest): ingest and thumbnail these files through the Wasm worker.
+		await this.ensureCapabilities();
+		this.ingestError = null;
 		const imported = await this.photosFromFiles(files);
 		this.photos.push(...imported.map(({ photo }) => photo));
 		if (!this.activePhotoId && imported[0]?.photo) {
@@ -310,6 +328,7 @@ export class WorkspaceState {
 
 	destroy() {
 		this.clearFiles();
+		this.workerClient?.destroy();
 	}
 
 	private resetEditState() {
@@ -344,8 +363,19 @@ export class WorkspaceState {
 
 	private async photoFromFile(file: File): Promise<PhotoImport | null> {
 		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAW placeholder with Wasm output.
-		const source = describePhotoSource(file);
+		const source = describePhotoSource(file, this.rawExtensions);
 		if (!source) return null;
+		if (source.kind === 'raw') {
+			try {
+				if (!this.workerClient) throw new Error('RAW decoder is unavailable');
+				await this.workerClient.validateRaw(await file.arrayBuffer());
+			} catch (error) {
+				// TODO(WASM_TODOS.photoIngest): surface every rejected file in an import results panel.
+				const reason = error instanceof Error ? error.message : 'unsupported RAW file';
+				this.ingestError = `${file.name}: ${reason}`;
+				return null;
+			}
+		}
 
 		const src = source.kind === 'image' ? URL.createObjectURL(file) : null;
 		if (src) this.objectUrls.add(src);
@@ -374,6 +404,27 @@ export class WorkspaceState {
 		} satisfies Photo;
 
 		return { photo, original: { storageName, file } };
+	}
+
+	private async ensureCapabilities() {
+		if (this.capabilitiesReady) return;
+		this.capabilityLoading ??= this.loadCapabilities();
+		await this.capabilityLoading;
+	}
+
+	private async loadCapabilities() {
+		try {
+			const response = await this.workerClient?.capabilities();
+			for (const extension of normalizedRawExtensions(response?.rawExtensions ?? [])) {
+				this.rawExtensions.add(extension);
+			}
+			this.acceptedPhotos = acceptedPhotoTypes(this.rawExtensions);
+		} catch (error) {
+			this.capabilitiesError =
+				error instanceof Error ? error.message : 'Unable to load decoder capabilities';
+		} finally {
+			this.capabilitiesReady = true;
+		}
 	}
 
 	private collectionManifest(): CollectionManifest | null {

@@ -1,4 +1,4 @@
-import init, { Session } from './pf/postframe.js';
+import init, { Session, supported_raw_extensions, validate_raw } from './pf/postframe.js';
 import wasmUrl from './pf/postframe_bg.wasm?url';
 
 export interface RawFrameInput {
@@ -7,6 +7,8 @@ export interface RawFrameInput {
 }
 
 export type Request =
+	| { id: number; type: 'capabilities' }
+	| { id: number; type: 'validate'; raw: ArrayBuffer }
 	| { id: number; type: 'load'; frames: RawFrameInput[] }
 	| { id: number; type: 'preview'; ev: number; tone: boolean }
 	| { id: number; type: 'ultra' }
@@ -14,6 +16,8 @@ export type Request =
 
 export type Response =
 	| { id: number; type: 'progress'; text: string }
+	| { id: number; type: 'capabilities'; rawExtensions: string[] }
+	| { id: number; type: 'validated' }
 	| { id: number; type: 'merged'; boostStops: number }
 	| { id: number; type: 'preview'; jpeg: ArrayBuffer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
@@ -31,6 +35,13 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 	try {
 		await ready;
 		switch (message.type) {
+			case 'capabilities':
+				post({ id: message.id, type: 'capabilities', rawExtensions: supported_raw_extensions() });
+				break;
+			case 'validate':
+				validate_raw(new Uint8Array(message.raw));
+				post({ id: message.id, type: 'validated' });
+				break;
 			case 'load': {
 				session?.free();
 				session = new Session();

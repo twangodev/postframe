@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PHOTO_EXTENSIONS } from './photo-source';
 
 const COLLECTION_VERSION = 1;
 const APP_DIRECTORY = 'postframe';
@@ -11,7 +10,7 @@ const ORIGINALS_DIRECTORY = 'originals';
 const identifierSchema = z.string().regex(/^[a-z0-9-]+$/);
 const sourceSchema = z.object({
 	kind: z.enum(['raw', 'image']),
-	format: z.enum(PHOTO_EXTENSIONS),
+	format: z.string().regex(/^[a-z0-9]+$/),
 	mediaType: z.string(),
 	size: z.number().int().nonnegative(),
 	lastModified: z.number().int().nonnegative()

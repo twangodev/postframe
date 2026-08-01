@@ -4,14 +4,17 @@
 	import { Images, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
-	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
 
 	interface Props {
+		acceptedPhotos: string;
+		sourceReady: boolean;
+		ingestError: string | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 	}
 
-	let { onOpenPhoto, onCreateCollection }: Props = $props();
+	let { acceptedPhotos, sourceReady, ingestError, onOpenPhoto, onCreateCollection }: Props =
+		$props();
 	let newCollectionOpen = $state(false);
 	let collectionName = $state('');
 	let files = $state<File[]>([]);
@@ -95,17 +98,17 @@
 			<input
 				bind:this={openPhotoInput}
 				type="file"
-				accept={ACCEPTED_PHOTOS}
+				accept={acceptedPhotos}
 				class="sr-only"
 				onchange={openPhoto}
-				disabled={busy}
+				disabled={busy || !sourceReady}
 			/>
 			<button
 				type="button"
 				class="motion-action bg-text text-bg flex h-9 cursor-pointer items-center justify-center rounded px-4 text-xs font-medium hover:opacity-85 sm:flex-1"
 				style="--motion-delay: 80ms"
 				onclick={() => openPhotoInput.click()}
-				disabled={busy}
+				disabled={busy || !sourceReady}
 			>
 				open photo
 			</button>
@@ -120,6 +123,11 @@
 				new collection
 			</button>
 		</div>
+		{#if ingestError}
+			<p class="text-negative mt-3 truncate text-[10px]" title={ingestError}>
+				unsupported RAW file
+			</p>
+		{/if}
 	</section>
 </main>
 
@@ -160,7 +168,8 @@
 					<input
 						type="file"
 						multiple
-						accept={ACCEPTED_PHOTOS}
+						accept={acceptedPhotos}
+						disabled={!sourceReady}
 						class="sr-only"
 						onchange={(event) => chooseFiles(event.currentTarget.files)}
 					/>

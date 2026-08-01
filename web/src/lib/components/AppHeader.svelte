@@ -7,7 +7,7 @@
 	import EditorMenuBar from './EditorMenuBar.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import type { EditorMenuAction } from '$lib/editor-menu';
-	import { ACCEPTED_PHOTOS, type WorkspaceState } from '$lib/workspace.svelte';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -88,18 +88,20 @@
 			<div class="min-w-0">
 				<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
 				<p
-					class:text-negative={workspace.storageStatus === 'error'}
+					class:text-negative={workspace.storageStatus === 'error' || !!workspace.ingestError}
 					class="text-muted text-[10px] tracking-wide"
-					title={workspace.storageError ?? undefined}
+					title={workspace.ingestError ?? workspace.storageError ?? undefined}
 				>
 					{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} ·
-					{workspace.storageStatus === 'saving'
-						? 'saving'
-						: workspace.storageStatus === 'saved'
-							? 'saved locally'
-							: workspace.storageStatus === 'error'
-								? 'save failed'
-								: 'memory only'}
+					{workspace.ingestError
+						? 'import rejected'
+						: workspace.storageStatus === 'saving'
+							? 'saving'
+							: workspace.storageStatus === 'saved'
+								? 'saved locally'
+								: workspace.storageStatus === 'error'
+									? 'save failed'
+									: 'memory only'}
 				</p>
 			</div>
 		</div>
@@ -150,7 +152,7 @@
 							bind:this={importInput}
 							type="file"
 							multiple
-							accept={ACCEPTED_PHOTOS}
+							accept={workspace.acceptedPhotos}
 							class="sr-only"
 							disabled={importing}
 							onchange={(event) => importFiles(event.currentTarget.files)}

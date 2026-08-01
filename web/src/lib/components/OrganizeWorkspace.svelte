@@ -21,7 +21,6 @@
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import {
-		ACCEPTED_PHOTOS,
 		formatBytes,
 		type ColorLabel,
 		type Photo,
@@ -299,7 +298,7 @@
 						<input
 							type="file"
 							multiple
-							accept={ACCEPTED_PHOTOS}
+							accept={workspace.acceptedPhotos}
 							class="sr-only"
 							disabled={importing}
 							onchange={(event) => importFiles(event.currentTarget.files)}

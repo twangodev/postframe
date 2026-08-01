@@ -10,6 +10,8 @@ interface WasmBinding {
 }
 
 export const WASM_BINDINGS = {
+	supported_raw_extensions: { rust: 'supported_raw_extensions', worker: 'capabilities' },
+	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	constructor: { rust: 'Session::new', worker: 'load' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'load' },
 	add_frame: { rust: 'Session::add_frame', worker: 'load' },
@@ -19,7 +21,10 @@ export const WASM_BINDINGS = {
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
-} as const satisfies Record<SessionMethod | 'constructor', WasmBinding>;
+} as const satisfies Record<
+	SessionMethod | 'constructor' | 'supported_raw_extensions' | 'validate_raw',
+	WasmBinding
+>;
 
 type WasmBindingName = keyof typeof WASM_BINDINGS;
 
@@ -37,7 +42,16 @@ export const WASM_TODOS = {
 	},
 	photoIngest: {
 		scope: 'Decode imported files, pair RAW and JPEG frames, merge brackets, and build thumbnails.',
-		bindings: ['constructor', 'free', 'add_frame', 'frame_count', 'merge', 'boost_stops'],
+		bindings: [
+			'supported_raw_extensions',
+			'validate_raw',
+			'constructor',
+			'free',
+			'add_frame',
+			'frame_count',
+			'merge',
+			'boost_stops'
+		],
 		planned: ['Session::add_photo', 'Session::thumbnail']
 	},
 	editorCommands: {

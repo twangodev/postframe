@@ -20,6 +20,9 @@
 
 {#if workspace.mode === 'welcome'}
 	<Welcome
+		acceptedPhotos={workspace.acceptedPhotos}
+		sourceReady={workspace.capabilitiesReady}
+		ingestError={workspace.ingestError}
 		onOpenPhoto={(file) => workspace.openSingle(file)}
 		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
 	/>
