@@ -36,7 +36,7 @@ export const WASM_TODOS = {
 		planned: ['browser OPFS catalog']
 	},
 	photoIngest: {
-		scope: 'Decode imported files, pair RAF and JPEG frames, merge brackets, and build thumbnails.',
+		scope: 'Decode imported files, pair RAW and JPEG frames, merge brackets, and build thumbnails.',
 		bindings: ['constructor', 'free', 'add_frame', 'frame_count', 'merge', 'boost_stops'],
 		planned: ['Session::add_photo', 'Session::thumbnail']
 	},

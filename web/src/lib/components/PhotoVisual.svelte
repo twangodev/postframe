@@ -18,7 +18,7 @@
 		class="size-full select-none {contain ? 'object-contain' : 'object-cover'}"
 	/>
 {:else}
-	<!-- TODO(WASM_TODOS.previewRendering): display the decoded RAF thumbnail returned by Wasm. -->
+	<!-- TODO(WASM_TODOS.previewRendering): display the decoded RAW thumbnail returned by Wasm. -->
 	<div
 		class="text-muted flex size-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_30%_25%,#403c31_0%,#22211d_42%,#151512_100%)]"
 	>

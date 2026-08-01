@@ -1,3 +1,12 @@
+import {
+	ACCEPTED_PHOTOS,
+	describePhotoSource,
+	type PhotoKind,
+	type PhotoSource
+} from './photo-source';
+
+export { ACCEPTED_PHOTOS } from './photo-source';
+
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
@@ -7,7 +16,8 @@ export interface Photo {
 	name: string;
 	extension: string;
 	src: string | null;
-	kind: 'image' | 'raw';
+	kind: PhotoKind;
+	source: PhotoSource;
 	size: number;
 	width: number | null;
 	height: number | null;
@@ -38,8 +48,6 @@ export interface Mask {
 	kind: MaskKind;
 	visible: boolean;
 }
-
-export const ACCEPTED_PHOTOS = '.jpg,.jpeg,.png,.webp,.avif,.raf,.RAF';
 
 const defaultAdjustments = {
 	temperature: 5600,
@@ -102,6 +110,7 @@ export class WorkspaceState {
 		// TODO(WASM_TODOS.photoIngest): route the file through worker load and the Session bindings.
 		this.clearFiles();
 		const photo = await this.photoFromFile(file);
+		if (!photo) return;
 		this.photos = [photo];
 		this.collectionName = file.name.replace(/\.[^.]+$/, '');
 		this.selectedIds = [photo.id];
@@ -113,7 +122,7 @@ export class WorkspaceState {
 	async createCollection(name: string, files: File[]) {
 		// TODO(WASM_TODOS.collectionStorage): create the collection and originals store in OPFS.
 		this.clearFiles();
-		this.photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
+		this.photos = await this.photosFromFiles(files);
 		this.collectionName = name.trim() || 'untitled collection';
 		this.selectedIds = this.photos[0] ? [this.photos[0].id] : [];
 		this.activePhotoId = this.photos[0]?.id ?? null;
@@ -123,7 +132,7 @@ export class WorkspaceState {
 
 	async importFiles(files: File[]) {
 		// TODO(WASM_TODOS.photoIngest): ingest and thumbnail these files through the Wasm worker.
-		const imported = await Promise.all(files.map((file) => this.photoFromFile(file)));
+		const imported = await this.photosFromFiles(files);
 		this.photos.push(...imported);
 		if (!this.activePhotoId && imported[0]) {
 			this.selectPhoto(imported[0].id);
@@ -277,10 +286,17 @@ export class WorkspaceState {
 		this.objectUrls.clear();
 	}
 
-	private async photoFromFile(file: File): Promise<Photo> {
-		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAF placeholder with Wasm output.
-		const raw = file.name.toLowerCase().endsWith('.raf');
-		const src = !raw && file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+	private async photosFromFiles(files: File[]) {
+		const photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
+		return photos.filter((photo): photo is Photo => photo !== null);
+	}
+
+	private async photoFromFile(file: File): Promise<Photo | null> {
+		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAW placeholder with Wasm output.
+		const source = describePhotoSource(file);
+		if (!source) return null;
+
+		const src = source.kind === 'image' ? URL.createObjectURL(file) : null;
 		if (src) this.objectUrls.add(src);
 
 		const dimensions = src ? await this.readDimensions(src) : null;
@@ -289,7 +305,8 @@ export class WorkspaceState {
 			name: file.name,
 			extension: extension(file.name),
 			src,
-			kind: raw ? 'raw' : 'image',
+			kind: source.kind,
+			source,
 			size: file.size,
 			width: dimensions?.width ?? null,
 			height: dimensions?.height ?? null,
