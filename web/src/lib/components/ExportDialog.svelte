@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
 	import { Check, Download, X } from '@lucide/svelte';
+	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -31,9 +32,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<Dialog.Content
-			class="motion-dialog-content border-subtle bg-bg fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-2xl"
-		>
+		<CenteredDialogContent>
 			<form onsubmit={finish}>
 				<div class="border-subtle flex items-start justify-between border-b p-5">
 					<div>
@@ -147,6 +146,6 @@
 					</div>
 				</div>
 			</form>
-		</Dialog.Content>
+		</CenteredDialogContent>
 	</Dialog.Portal>
 </Dialog.Root>

@@ -18,6 +18,7 @@
 		X
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import {
 		ACCEPTED_PHOTOS,
@@ -522,9 +523,7 @@
 <Dialog.Root bind:open={albumDialogOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
-		<Dialog.Content
-			class="motion-dialog-content border-subtle bg-bg fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border p-5 shadow-2xl"
-		>
+		<CenteredDialogContent size="sm" class="p-5">
 			<form onsubmit={createAlbum}>
 				<div class="flex items-start justify-between">
 					<div>
@@ -555,6 +554,6 @@
 					</button>
 				</div>
 			</form>
-		</Dialog.Content>
+		</CenteredDialogContent>
 	</Dialog.Portal>
 </Dialog.Root>

@@ -284,11 +284,11 @@ select:focus-visible {
 @keyframes dialog-in {
 	from {
 		opacity: 0;
-		transform: translate(-50%, calc(-50% + 10px)) scale(0.975);
+		transform: translateY(10px) scale(0.975);
 	}
 	to {
 		opacity: 1;
-		transform: translate(-50%, -50%) scale(1);
+		transform: translateY(0) scale(1);
 	}
 }
 

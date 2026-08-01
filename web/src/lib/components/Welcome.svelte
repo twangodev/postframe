@@ -2,6 +2,7 @@
 	import { Dialog } from 'bits-ui';
 	import { Github, Images, SquareDashed, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
+	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -114,9 +115,7 @@
 <Dialog.Root bind:open={newCollectionOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<Dialog.Content
-			class="motion-dialog-content border-subtle bg-bg fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border p-5 shadow-2xl"
-		>
+		<CenteredDialogContent class="p-5">
 			<form onsubmit={createCollection}>
 				<div class="mb-5 flex items-start justify-between">
 					<div>
@@ -187,7 +186,7 @@
 					</button>
 				</div>
 			</form>
-		</Dialog.Content>
+		</CenteredDialogContent>
 	</Dialog.Portal>
 </Dialog.Root>
 
