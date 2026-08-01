@@ -79,7 +79,7 @@ function dateLabel(timestamp: number) {
 
 export class WorkspaceState {
 	mode = $state<WorkspaceMode>('welcome');
-	shootName = $state('');
+	collectionName = $state('');
 	photos = $state<Photo[]>([]);
 	albums = $state<Album[]>([]);
 	stacks = $state<PhotoStack[]>([]);
@@ -99,17 +99,17 @@ export class WorkspaceState {
 		this.clearFiles();
 		const photo = await this.photoFromFile(file);
 		this.photos = [photo];
-		this.shootName = file.name.replace(/\.[^.]+$/, '');
+		this.collectionName = file.name.replace(/\.[^.]+$/, '');
 		this.selectedIds = [photo.id];
 		this.activePhotoId = photo.id;
 		this.mode = 'edit';
 		this.resetEditState();
 	}
 
-	async createShoot(name: string, files: File[]) {
+	async createCollection(name: string, files: File[]) {
 		this.clearFiles();
 		this.photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
-		this.shootName = name.trim() || 'untitled shoot';
+		this.collectionName = name.trim() || 'untitled collection';
 		this.selectedIds = this.photos[0] ? [this.photos[0].id] : [];
 		this.activePhotoId = this.photos[0]?.id ?? null;
 		this.mode = 'organize';
@@ -243,7 +243,7 @@ export class WorkspaceState {
 	reset() {
 		this.clearFiles();
 		this.mode = 'welcome';
-		this.shootName = '';
+		this.collectionName = '';
 		this.photos = [];
 		this.albums = [];
 		this.stacks = [];

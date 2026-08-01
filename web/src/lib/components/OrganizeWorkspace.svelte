@@ -145,7 +145,7 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted text-[10px] tracking-[0.04em]">shoots</span>
+			<span class="text-muted text-[10px] tracking-[0.04em]">collections</span>
 		</div>
 		<div class="px-2">
 			<button
@@ -154,7 +154,7 @@
 				onclick={() => (source = 'all')}
 			>
 				<Folder size={13} strokeWidth={1.5} />
-				<span class="min-w-0 flex-1 truncate">{workspace.shootName}</span>
+				<span class="min-w-0 flex-1 truncate">{workspace.collectionName}</span>
 				<span class="text-muted font-mono text-[10px]">{workspace.photos.length}</span>
 			</button>
 		</div>
@@ -207,7 +207,7 @@
 				/>
 				<input
 					bind:value={search}
-					placeholder="search this shoot"
+					placeholder="search this collection"
 					class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
 				/>
 			</label>

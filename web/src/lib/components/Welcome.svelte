@@ -5,12 +5,12 @@
 
 	interface Props {
 		onOpenPhoto: (file: File) => Promise<void>;
-		onCreateShoot: (name: string, files: File[]) => Promise<void>;
+		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 	}
 
-	let { onOpenPhoto, onCreateShoot }: Props = $props();
-	let newShootOpen = $state(false);
-	let shootName = $state('');
+	let { onOpenPhoto, onCreateCollection }: Props = $props();
+	let newCollectionOpen = $state(false);
+	let collectionName = $state('');
 	let files = $state<File[]>([]);
 	let busy = $state(false);
 	let openPhotoInput: HTMLInputElement;
@@ -32,13 +32,13 @@
 		chooseFiles(event.dataTransfer?.files ?? null);
 	}
 
-	async function createShoot(event: SubmitEvent) {
+	async function createCollection(event: SubmitEvent) {
 		event.preventDefault();
 		if (files.length === 0) return;
 		busy = true;
-		await onCreateShoot(shootName, files);
+		await onCreateCollection(collectionName, files);
 		busy = false;
-		newShootOpen = false;
+		newCollectionOpen = false;
 	}
 </script>
 
@@ -80,25 +80,25 @@
 				type="button"
 				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
 				style="--motion-delay: 120ms"
-				onclick={() => (newShootOpen = true)}
+				onclick={() => (newCollectionOpen = true)}
 				disabled={busy}
 			>
-				new shoot
+				new collection
 			</button>
 		</div>
 	</section>
 </main>
 
-<Dialog.Root bind:open={newShootOpen}>
+<Dialog.Root bind:open={newCollectionOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
 		<Dialog.Content
 			class="motion-dialog-content border-subtle bg-bg fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border p-5 shadow-2xl"
 		>
-			<form onsubmit={createShoot}>
+			<form onsubmit={createCollection}>
 				<div class="mb-5 flex items-start justify-between">
 					<div>
-						<Dialog.Title class="text-sm font-medium tracking-tight">new shoot</Dialog.Title>
+						<Dialog.Title class="text-sm font-medium tracking-tight">new collection</Dialog.Title>
 						<Dialog.Description class="text-muted mt-1 text-xs">
 							name the workspace and choose photographs.
 						</Dialog.Description>
@@ -112,10 +112,10 @@
 				</div>
 
 				<label class="mb-4 block">
-					<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">shoot name</span>
+					<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">collection name</span>
 					<input
-						bind:value={shootName}
-						placeholder="untitled shoot"
+						bind:value={collectionName}
+						placeholder="untitled collection"
 						class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent w-full rounded border px-3 py-2.5 text-xs focus:outline-none"
 					/>
 				</label>
@@ -161,7 +161,7 @@
 						disabled={files.length === 0 || busy}
 						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
-						create shoot
+						create collection
 					</button>
 				</div>
 			</form>

@@ -39,7 +39,7 @@
 		<span class="text-muted text-xs font-medium tracking-wide">pf.</span>
 		<span class="bg-subtle h-4 w-px"></span>
 		<div class="min-w-0">
-			<p class="text-text truncate text-xs font-medium">{workspace.shootName}</p>
+			<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
 			<p class="text-muted text-[10px] tracking-wide">
 				{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} · local
 			</p>
@@ -68,12 +68,12 @@
 	</Tabs.Root>
 
 	<div class="flex flex-1 items-center justify-end gap-1">
-		<Tooltip text="Create another shoot">
+		<Tooltip text="Create another collection">
 			{#snippet children(props)}
 				<button
 					{...props}
 					type="button"
-					aria-label="Create another shoot"
+					aria-label="Create another collection"
 					class="text-muted hover:bg-surface hover:text-text hidden size-7 cursor-pointer items-center justify-center rounded transition-colors sm:flex"
 					onclick={() => workspace.reset()}
 				>

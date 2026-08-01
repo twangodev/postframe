@@ -21,7 +21,7 @@
 {#if workspace.mode === 'welcome'}
 	<Welcome
 		onOpenPhoto={(file) => workspace.openSingle(file)}
-		onCreateShoot={(name, files) => workspace.createShoot(name, files)}
+		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">
