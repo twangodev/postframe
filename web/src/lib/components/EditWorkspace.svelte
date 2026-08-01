@@ -31,6 +31,7 @@
 	import Panel from './ui/Panel.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import type { MaskKind, WorkspaceState } from '$lib/workspace.svelte';
+	import type { DevelopPhase } from '$lib/worker';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -45,7 +46,7 @@
 	let maskOverlay = $state(true);
 	let maskAdjustments = $state({ exposure: 0, highlights: 0, shadows: 0, saturation: 0 });
 
-	const active = $derived(workspace.selectedPhoto);
+	const active = $derived(workspace.editingPhoto);
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -237,6 +238,15 @@
 		inspectorTab = 'mask';
 		maskOverlay = true;
 	}
+
+	function developPhaseLabel(phase: DevelopPhase) {
+		return {
+			reading: 'reading originals',
+			decoding: 'developing raw',
+			merging: 'merging exposures',
+			rendering: 'rendering preview'
+		}[phase];
+	}
 </script>
 
 <div class="bg-canvas flex min-h-0 flex-1 flex-col">
@@ -403,12 +413,11 @@
 			</div>
 
 			<div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">
-				<!-- TODO(WASM_TODOS.previewRendering): render pixels and overlays from the Wasm document. -->
 				<div
 					class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
 				></div>
 				{#if active}
-					{#key active.id}
+					{#key `${active.id}:${active.src}`}
 						<div class="motion-photo max-h-full max-w-full">
 							<div
 								class="relative max-h-full max-w-full overflow-hidden bg-black shadow-2xl transition-transform duration-150"
@@ -458,6 +467,41 @@
 														? 'bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(22,123,255,0.85)_72%)]'
 														: 'bg-[radial-gradient(circle_at_58%_46%,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.55)_12%,transparent_28%)]'}"
 									></div>
+								{/if}
+								{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
+									<div
+										class="absolute inset-0 z-20 flex items-center justify-center bg-black/45 text-white backdrop-blur-[1px]"
+									>
+										<div
+											class="motion-enter flex flex-col items-center gap-2 rounded-md bg-black/55 px-4 py-3"
+										>
+											<Sparkles size={14} class="animate-pulse" />
+											<p class="text-[11px]">{developPhaseLabel(workspace.documentStatus.phase)}</p>
+											{#if workspace.documentStatus.total > 1}
+												<p class="font-mono text-[9px] text-white/55 tabular-nums">
+													{workspace.documentStatus.completed} / {workspace.documentStatus.total}
+												</p>
+											{/if}
+										</div>
+									</div>
+								{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
+									<div
+										class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
+									>
+										<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
+											<p class="text-[11px]">couldn't open raw</p>
+											<p class="text-[9px] leading-relaxed text-white/55">
+												{workspace.documentStatus.message}
+											</p>
+											<button
+												type="button"
+												class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+												onclick={workspace.reloadDocument}
+											>
+												retry
+											</button>
+										</div>
+									</div>
 								{/if}
 							</div>
 						</div>

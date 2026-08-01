@@ -17,7 +17,7 @@ import {
 	type PhotoFrame as GroupedPhotoFrame,
 	type PhotoGroup
 } from './photo-group';
-import type { RawMetadata } from './worker';
+import type { DevelopPhase, RawFrameHandleInput, RawMetadata } from './worker';
 import {
 	BrowserStorageService,
 	storageErrorMessage,
@@ -28,6 +28,17 @@ export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
+export type DocumentStatus =
+	| { kind: 'idle' }
+	| {
+			kind: 'loading';
+			photoId: string;
+			phase: DevelopPhase;
+			completed: number;
+			total: number;
+	  }
+	| { kind: 'ready'; photoId: string; boostStops: number | null }
+	| { kind: 'error'; photoId: string; message: string };
 
 export interface Photo {
 	id: string;
@@ -128,6 +139,8 @@ export class WorkspaceState {
 	private persistence = Promise.resolve();
 	private persistenceRevision = 0;
 	private objectUrls = new Set<string>();
+	private documentRevision = 0;
+	private removeProgressListener: (() => void) | null = null;
 
 	mode = $state<WorkspaceMode>('welcome');
 	collectionName = $state('');
@@ -151,6 +164,8 @@ export class WorkspaceState {
 	storageError = $state<string | null>(null);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageError = $state<string | null>(null);
+	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
+	editPreviewSrc = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
 	adjustments = $state({ ...defaultAdjustments });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
@@ -158,8 +173,23 @@ export class WorkspaceState {
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
+	editingPhoto = $derived(
+		this.selectedPhoto
+			? { ...this.selectedPhoto, src: this.editPreviewSrc ?? this.selectedPhoto.src }
+			: null
+	);
 
 	constructor() {
+		this.removeProgressListener =
+			this.workerClient?.onProgress((progress) => {
+				if (this.documentStatus.kind !== 'loading') return;
+				this.documentStatus = {
+					...this.documentStatus,
+					phase: progress.phase,
+					completed: progress.completed,
+					total: progress.total
+				};
+			}) ?? null;
 		void this.initialize();
 	}
 
@@ -170,9 +200,9 @@ export class WorkspaceState {
 		const imported = (await this.photosFromFiles([file]))[0];
 		if (!imported) return;
 		this.beginCollection(file.name.replace(/\.[^.]+$/, ''), [imported.photo]);
-		// TODO(WASM_TODOS.photoIngest): load logical frames into a Session before entering edit mode.
-		this.mode = 'edit';
 		await this.queuePersistence(imported.originals, imported.thumbnails);
+		this.mode = 'edit';
+		await this.openDocument(imported.photo.id);
 	};
 
 	createCollection = async (name: string, files: File[]) => {
@@ -285,6 +315,8 @@ export class WorkspaceState {
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
 		if (this.photos.length === 0) return;
 		this.mode = mode;
+		if (mode === 'edit' && this.activePhotoId) void this.openDocument(this.activePhotoId);
+		else this.closeDocument();
 	}
 
 	selectPhoto(photoId: string, additive = false) {
@@ -296,12 +328,17 @@ export class WorkspaceState {
 			this.selectedIds = [photoId];
 		}
 		this.activePhotoId = photoId;
+		if (this.mode === 'edit' && !additive) void this.openDocument(photoId);
 	}
 
 	editPhoto(photoId: string) {
-		this.selectPhoto(photoId);
 		this.mode = 'edit';
+		this.selectPhoto(photoId);
 	}
+
+	reloadDocument = () => {
+		if (this.activePhotoId) void this.openDocument(this.activePhotoId);
+	};
 
 	setRating(photoId: string, rating: number) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
@@ -414,6 +451,7 @@ export class WorkspaceState {
 	}
 
 	reset = () => {
+		this.closeDocument();
 		this.clearFiles();
 		this.persistenceRevision += 1;
 		this.collectionId = null;
@@ -432,6 +470,9 @@ export class WorkspaceState {
 	};
 
 	destroy = () => {
+		this.documentRevision += 1;
+		this.removeProgressListener?.();
+		this.removeProgressListener = null;
 		this.clearFiles();
 		this.workerClient?.destroy();
 	};
@@ -443,9 +484,91 @@ export class WorkspaceState {
 		this.history = ['imported'];
 	}
 
+	private async openDocument(photoId: string) {
+		const photo = this.photos.find((candidate) => candidate.id === photoId);
+		if (!photo || this.mode !== 'edit') return;
+
+		const revision = ++this.documentRevision;
+		if (this.documentStatus.kind !== 'idle') {
+			this.workerClient?.restart('Document changed');
+		}
+		this.releaseEditPreview();
+
+		if (photo.kind === 'display') {
+			this.documentStatus = { kind: 'ready', photoId, boostStops: null };
+			return;
+		}
+		if (!this.workerClient) {
+			this.documentStatus = { kind: 'error', photoId, message: 'RAW decoder is unavailable' };
+			return;
+		}
+
+		this.documentStatus = {
+			kind: 'loading',
+			photoId,
+			phase: 'reading',
+			completed: 0,
+			total: photo.frames.length
+		};
+
+		try {
+			await this.persistence;
+			if (revision !== this.documentRevision) return;
+			const frames = await this.documentFrames(photo);
+			if (revision !== this.documentRevision) return;
+			const result = await this.workerClient.openDocument(frames, previewDimension());
+			if (revision !== this.documentRevision) return;
+
+			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
+			this.objectUrls.add(src);
+			this.editPreviewSrc = src;
+			this.documentStatus = { kind: 'ready', photoId, boostStops: result.boostStops };
+		} catch (error) {
+			if (revision !== this.documentRevision) return;
+			this.documentStatus = {
+				kind: 'error',
+				photoId,
+				message: error instanceof Error ? error.message : 'Unable to open RAW document'
+			};
+		}
+	}
+
+	private async documentFrames(photo: Photo): Promise<RawFrameHandleInput[]> {
+		const store = this.collectionStore;
+		const collectionId = this.collectionId;
+		if (!store || !collectionId) throw new Error('RAW editing requires local OPFS storage');
+
+		return Promise.all(
+			photo.frames.map(async (frame) => {
+				if (!frame.raw) throw new Error('Every bracket frame needs a RAW source');
+				const raw = await store.originalHandle(collectionId, frame.raw.storageName);
+				const jpeg = frame.display
+					? await store.originalHandle(collectionId, frame.display.storageName)
+					: undefined;
+				return { raw, jpeg };
+			})
+		);
+	}
+
+	private closeDocument() {
+		this.documentRevision += 1;
+		const hadDocument = this.documentStatus.kind !== 'idle';
+		this.releaseEditPreview();
+		this.documentStatus = { kind: 'idle' };
+		if (hadDocument) this.workerClient?.restart('Document closed');
+	}
+
+	private releaseEditPreview() {
+		if (!this.editPreviewSrc) return;
+		URL.revokeObjectURL(this.editPreviewSrc);
+		this.objectUrls.delete(this.editPreviewSrc);
+		this.editPreviewSrc = null;
+	}
+
 	private clearFiles() {
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
+		this.editPreviewSrc = null;
 	}
 
 	private beginCollection(name: string, photos: Photo[]) {
@@ -858,6 +981,12 @@ function cloneFrames(frames: StoredFrame[]) {
 
 function cloneAsset(asset: StoredAsset) {
 	return { ...asset, source: { ...asset.source } };
+}
+
+function previewDimension() {
+	if (typeof window === 'undefined') return 2048;
+	const longestSide = Math.max(window.innerWidth, window.innerHeight) * window.devicePixelRatio;
+	return Math.round(Math.min(2560, Math.max(1024, longestSide)));
 }
 
 export function formatBytes(bytes: number) {
