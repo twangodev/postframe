@@ -1,32 +1,30 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
 	import {
-		Bandage,
 		Blend,
 		Brush,
 		CircleDashed,
 		CloudSun,
 		Columns2,
-		Crop,
 		Eye,
 		EyeOff,
 		History,
 		ImageDown,
+		Lock,
 		Maximize2,
 		Minus,
-		MousePointer2,
+		MoreHorizontal,
 		Mountain,
 		Plus,
-		Redo2,
 		RotateCcw,
 		Scan,
 		SlidersHorizontal,
 		Sparkles,
 		Trash2,
-		Undo2,
 		UserRound
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
@@ -37,7 +35,8 @@
 	}
 
 	let { workspace }: Props = $props();
-	let activeTool = $state('pointer');
+	let activeTool = $state('move');
+	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
 	let zoom = $state(72);
 	let before = $state(false);
@@ -48,15 +47,55 @@
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
+	const selectionTools = new Set([
+		'object-select',
+		'quick-select',
+		'magic-wand',
+		'marquee',
+		'ellipse-marquee',
+		'lasso',
+		'polygon-lasso',
+		'magnetic-lasso'
+	]);
+	const cropTools = new Set(['crop', 'perspective-crop', 'slice', 'frame']);
+	const retouchTools = new Set([
+		'remove',
+		'spot-heal',
+		'healing-brush',
+		'patch',
+		'clone-stamp',
+		'red-eye',
+		'blur',
+		'sharpen',
+		'smudge',
+		'dodge',
+		'burn',
+		'sponge'
+	]);
+	const paintTools = new Set([
+		'brush',
+		'pencil',
+		'mixer-brush',
+		'eraser',
+		'gradient',
+		'paint-bucket',
+		'eyedropper',
+		'color-sampler'
+	]);
+	const vectorTools = new Set(['pen', 'curvature-pen', 'path-select', 'shape']);
+	const measureTools = new Set(['ruler', 'note', 'count']);
+	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 
-	function chooseTool(tool: string) {
+	function chooseTool(tool: string, label = tool) {
 		activeTool = tool;
-		if (tool === 'mask') inspectorTab = 'mask';
+		activeToolLabel = label;
+		if (tool.startsWith('mask')) inspectorTab = 'mask';
 	}
 
 	function addMask(kind: MaskKind) {
 		workspace.createMask(kind);
 		activeTool = 'mask';
+		activeToolLabel = 'mask brush';
 		inspectorTab = 'mask';
 		maskOverlay = true;
 	}
@@ -64,100 +103,7 @@
 
 <div class="bg-canvas flex min-h-0 flex-1 flex-col">
 	<div class="flex min-h-0 flex-1">
-		<aside
-			class="motion-panel-left border-subtle bg-bg flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2"
-		>
-			<Tooltip text="Select and pan">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Select and pan"
-						class="flex size-8 cursor-pointer items-center justify-center rounded transition-colors {activeTool ===
-						'pointer'
-							? 'bg-surface text-text'
-							: 'text-muted hover:bg-surface/60 hover:text-text'}"
-						onclick={() => chooseTool('pointer')}
-					>
-						<MousePointer2 size={15} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-			<Tooltip text="Crop and rotate">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Crop and rotate"
-						class="flex size-8 cursor-pointer items-center justify-center rounded transition-colors {activeTool ===
-						'crop'
-							? 'bg-surface text-text'
-							: 'text-muted hover:bg-surface/60 hover:text-text'}"
-						onclick={() => chooseTool('crop')}
-					>
-						<Crop size={15} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-			<Tooltip text="Heal and clone">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Heal and clone"
-						class="flex size-8 cursor-pointer items-center justify-center rounded transition-colors {activeTool ===
-						'heal'
-							? 'bg-surface text-text'
-							: 'text-muted hover:bg-surface/60 hover:text-text'}"
-						onclick={() => chooseTool('heal')}
-					>
-						<Bandage size={15} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-			<Tooltip text="Create and edit masks">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Create and edit masks"
-						class="flex size-8 cursor-pointer items-center justify-center rounded transition-colors {activeTool ===
-						'mask'
-							? 'bg-surface text-text'
-							: 'text-muted hover:bg-surface/60 hover:text-text'}"
-						onclick={() => chooseTool('mask')}
-					>
-						<CircleDashed size={15} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-
-			<div class="bg-subtle my-1 h-px w-5"></div>
-			<Tooltip text="Undo">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Undo"
-						class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded"
-					>
-						<Undo2 size={14} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-			<Tooltip text="Redo">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Redo"
-						class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded"
-					>
-						<Redo2 size={14} strokeWidth={1.4} />
-					</button>
-				{/snippet}
-			</Tooltip>
-		</aside>
+		<ToolRail {activeTool} onSelect={chooseTool} />
 
 		<section class="motion-panel-up flex min-w-0 flex-1 flex-col">
 			<div class="border-subtle bg-bg flex h-9 shrink-0 items-center justify-between border-b px-3">
@@ -210,34 +156,115 @@
 				</button>
 			</div>
 
+			<div
+				class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[10px]"
+			>
+				<span class="text-text shrink-0 font-medium">{activeToolLabel}</span>
+				<span class="bg-subtle h-4 w-px shrink-0"></span>
+
+				{#if selectionTools.has(activeTool)}
+					<div class="border-subtle bg-surface flex h-6 shrink-0 rounded border p-0.5">
+						{#each ['new', 'add', 'subtract', 'intersect'] as mode, index}
+							<button
+								type="button"
+								title={`${mode} selection`}
+								class="hover:bg-elevated hover:text-text flex min-w-6 cursor-pointer items-center justify-center rounded-sm px-1.5 {index ===
+								0
+									? 'bg-elevated text-text'
+									: ''}"
+							>
+								{mode === 'new' ? '□' : mode === 'add' ? '+' : mode === 'subtract' ? '−' : '∩'}
+							</button>
+						{/each}
+					</div>
+					{#if activeTool === 'magic-wand'}
+						<span class="shrink-0">tolerance <span class="text-text font-mono">32</span></span>
+					{/if}
+					<span class="shrink-0">feather <span class="text-text font-mono">0 px</span></span>
+					<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+						<input type="checkbox" checked class="accent-accent size-3" /> anti-alias
+					</label>
+					{#if activeTool === 'magic-wand'}
+						<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+							<input type="checkbox" checked class="accent-accent size-3" /> contiguous
+						</label>
+					{/if}
+				{:else if cropTools.has(activeTool)}
+					<button
+						type="button"
+						class="border-subtle bg-surface text-text h-6 shrink-0 cursor-pointer rounded border px-2"
+					>
+						original ratio
+					</button>
+					<span class="shrink-0 font-mono">— × —</span>
+					<button
+						type="button"
+						class="hover:bg-surface hover:text-text flex size-6 shrink-0 cursor-pointer items-center justify-center rounded"
+						aria-label="Straighten"
+					>
+						<RotateCcw size={12} />
+					</button>
+					<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+						<input type="checkbox" class="accent-accent size-3" /> delete cropped pixels
+					</label>
+				{:else if retouchTools.has(activeTool) || paintTools.has(activeTool)}
+					<button
+						type="button"
+						class="border-subtle bg-surface text-text flex h-6 shrink-0 cursor-pointer items-center gap-2 rounded border px-2"
+					>
+						<span class="size-3 rounded-full border border-current"></span>
+						<span class="font-mono">42 px</span>
+					</button>
+					<span class="shrink-0">hardness <span class="text-text font-mono">65%</span></span>
+					<span class="shrink-0">opacity <span class="text-text font-mono">100%</span></span>
+					{#if ['brush', 'pencil', 'mixer-brush'].includes(activeTool)}
+						<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
+					{:else}
+						<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+							<input type="checkbox" checked class="accent-accent size-3" /> sample all layers
+						</label>
+					{/if}
+				{:else if activeTool === 'type'}
+					<button class="border-subtle bg-surface text-text h-6 shrink-0 rounded border px-2">
+						Overused Grotesk
+					</button>
+					<span class="shrink-0 font-mono">32 px</span>
+					<span class="shrink-0">regular</span>
+					<div class="border-subtle bg-surface size-4 shrink-0 rounded-sm border"></div>
+				{:else if vectorTools.has(activeTool)}
+					<button class="border-subtle bg-surface text-text h-6 shrink-0 rounded border px-2">
+						path
+					</button>
+					<span class="shrink-0">fill</span>
+					<div class="border-subtle bg-text size-4 shrink-0 rounded-sm border"></div>
+					<span class="shrink-0">stroke <span class="text-text font-mono">1 px</span></span>
+				{:else if measureTools.has(activeTool)}
+					<span class="shrink-0">sample <span class="text-text font-mono">5 × 5</span></span>
+					<span class="shrink-0">scale <span class="text-text font-mono">1 px : 1 px</span></span>
+				{:else if generativeTools.has(activeTool)}
+					<input
+						placeholder="describe an edit"
+						class="border-subtle bg-surface placeholder:text-muted/60 focus:border-accent h-6 min-w-48 rounded border px-2 focus:outline-none"
+					/>
+					<button class="bg-text text-bg h-6 shrink-0 cursor-pointer rounded px-2">generate</button>
+				{:else if activeTool.startsWith('mask')}
+					<span class="shrink-0">size <span class="text-text font-mono">42 px</span></span>
+					<span class="shrink-0">feather <span class="text-text font-mono">45%</span></span>
+					<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
+				{:else}
+					<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+						<input type="checkbox" checked class="accent-accent size-3" /> auto-select
+					</label>
+					<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
+						<input type="checkbox" class="accent-accent size-3" /> show transform controls
+					</label>
+				{/if}
+			</div>
+
 			<div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">
 				<div
 					class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
 				></div>
-				{#if activeTool === 'crop'}
-					<div
-						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded border px-2 py-1.5 shadow-lg"
-					>
-						<span class="text-muted text-[10px]">aspect</span>
-						<button
-							type="button"
-							class="border-subtle bg-surface cursor-pointer rounded border px-2 py-1 text-[10px]"
-							>original</button
-						>
-						<span class="bg-subtle h-4 w-px"></span>
-						<RotateCcw size={12} class="text-muted" />
-						<span class="text-muted font-mono text-[10px]">0.0°</span>
-					</div>
-				{:else if activeTool === 'heal'}
-					<div
-						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded border px-3 py-2 shadow-lg"
-					>
-						<span class="text-muted text-[10px]">heal</span>
-						<span class="text-text text-[10px]">size 42</span>
-						<span class="text-text text-[10px]">feather 65</span>
-						<span class="text-text text-[10px]">opacity 100</span>
-					</div>
-				{/if}
 				{#if active}
 					{#key active.id}
 						<div class="motion-photo max-h-full max-w-full">
@@ -255,14 +282,26 @@
 										before
 									</span>
 								{/if}
-								{#if activeTool === 'crop'}
+								{#if cropTools.has(activeTool)}
 									<div
 										class="pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"
 									></div>
-								{:else if activeTool === 'heal'}
+								{:else if retouchTools.has(activeTool) || ['brush', 'pencil', 'mixer-brush', 'eraser'].includes(activeTool)}
 									<div
 										class="pointer-events-none absolute top-[46%] left-[58%] size-10 rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
 									></div>
+								{:else if selectionTools.has(activeTool)}
+									<div
+										class="pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
+									></div>
+								{:else if activeTool === 'type'}
+									<div
+										class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
+									>
+										<span class="absolute top-1 left-1 text-2xl font-medium text-white/90"
+											>postframe</span
+										>
+									</div>
 								{/if}
 								{#if selectedMask?.visible && maskOverlay}
 									<div
@@ -298,7 +337,7 @@
 			class="motion-panel-right border-subtle bg-bg w-72 shrink-0 overflow-y-auto border-l max-[1080px]:w-64"
 		>
 			<Tabs.Root bind:value={inspectorTab}>
-				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-2 border-b px-2 pt-1">
+				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-3 border-b px-2 pt-1">
 					<Tabs.Trigger
 						value="adjust"
 						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
@@ -312,6 +351,12 @@
 						mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
 								>{workspace.masks.length}</span
 							>{/if}
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="layers"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
+					>
+						layers
 					</Tabs.Trigger>
 				</Tabs.List>
 
@@ -615,6 +660,91 @@
 							/>
 						</Panel>
 					{/if}
+				</Tabs.Content>
+
+				<Tabs.Content value="layers" class="motion-tab">
+					<div class="border-subtle flex items-center gap-2 border-b p-2">
+						<select
+							aria-label="Layer blend mode"
+							class="border-subtle bg-surface text-text h-7 min-w-0 flex-1 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
+						>
+							<option>normal</option>
+							<option>multiply</option>
+							<option>screen</option>
+							<option>overlay</option>
+							<option>soft light</option>
+						</select>
+						<span class="text-muted text-[10px]">opacity</span>
+						<span class="font-mono text-[10px]">100%</span>
+					</div>
+
+					<div class="space-y-1 p-2">
+						<div class="border-accent bg-surface flex h-11 items-center gap-2 rounded border px-2">
+							<Eye size={12} class="text-muted shrink-0" />
+							<div
+								class="bg-elevated text-muted flex size-7 shrink-0 items-center justify-center rounded-sm"
+							>
+								<SlidersHorizontal size={12} />
+							</div>
+							<span class="min-w-0 flex-1 truncate text-[10px]">color & tone</span>
+							<div class="size-6 rounded-sm bg-white"></div>
+						</div>
+
+						{#each workspace.masks as mask (mask.id)}
+							<div class="border-subtle flex h-10 items-center gap-2 rounded border px-2">
+								{#if mask.visible}<Eye size={12} class="text-muted shrink-0" />{:else}<EyeOff
+										size={12}
+										class="text-muted shrink-0"
+									/>{/if}
+								<div
+									class="bg-elevated text-muted flex size-7 shrink-0 items-center justify-center rounded-sm"
+								>
+									<CircleDashed size={12} />
+								</div>
+								<span class="min-w-0 flex-1 truncate text-[10px]">{mask.name}</span>
+								<button type="button" aria-label="Layer options" class="text-muted hover:text-text">
+									<MoreHorizontal size={12} />
+								</button>
+							</div>
+						{/each}
+
+						<div class="border-subtle flex h-11 items-center gap-2 rounded border px-2">
+							<Eye size={12} class="text-muted shrink-0" />
+							<div class="bg-canvas size-7 shrink-0 overflow-hidden rounded-sm">
+								{#if active}<PhotoVisual photo={active} />{/if}
+							</div>
+							<span class="min-w-0 flex-1 truncate font-mono text-[10px]">
+								{active?.name ?? 'photograph'}
+							</span>
+							<Lock size={11} class="text-muted" />
+						</div>
+					</div>
+
+					<div
+						class="border-subtle bg-bg sticky bottom-0 mt-4 flex h-9 items-center justify-end gap-1 border-t px-2"
+					>
+						<button
+							type="button"
+							aria-label="Add layer mask"
+							class="text-muted hover:bg-surface hover:text-text flex size-6 items-center justify-center rounded"
+						>
+							<CircleDashed size={12} />
+						</button>
+						<button
+							type="button"
+							aria-label="New layer"
+							class="text-muted hover:bg-surface hover:text-text flex size-6 items-center justify-center rounded"
+						>
+							<Plus size={12} />
+						</button>
+						<button
+							type="button"
+							aria-label="Delete layer"
+							class="text-muted hover:bg-surface hover:text-negative flex size-6 items-center justify-center rounded"
+						>
+							<Trash2 size={12} />
+						</button>
+					</div>
 				</Tabs.Content>
 			</Tabs.Root>
 		</aside>
