@@ -55,16 +55,19 @@
 		'magic-wand',
 		'marquee',
 		'ellipse-marquee',
+		'single-row-marquee',
+		'single-column-marquee',
 		'lasso',
 		'polygon-lasso',
 		'magnetic-lasso'
 	]);
-	const cropTools = new Set(['crop', 'perspective-crop', 'slice', 'frame']);
+	const cropTools = new Set(['crop', 'perspective-crop', 'slice', 'slice-select', 'frame']);
 	const retouchTools = new Set([
 		'remove',
 		'spot-heal',
 		'healing-brush',
 		'patch',
+		'content-aware-move',
 		'clone-stamp',
 		'red-eye',
 		'blur',
@@ -72,19 +75,41 @@
 		'smudge',
 		'dodge',
 		'burn',
-		'sponge'
+		'sponge',
+		'background-eraser',
+		'magic-eraser'
 	]);
 	const paintTools = new Set([
 		'brush',
 		'pencil',
 		'mixer-brush',
+		'color-replacement',
+		'history-brush',
+		'art-history-brush',
 		'eraser',
 		'gradient',
 		'paint-bucket',
 		'eyedropper',
-		'color-sampler'
+		'color-sampler',
+		'pattern-stamp'
 	]);
-	const vectorTools = new Set(['pen', 'curvature-pen', 'path-select', 'shape']);
+	const vectorTools = new Set([
+		'pen',
+		'freeform-pen',
+		'curvature-pen',
+		'add-anchor',
+		'delete-anchor',
+		'convert-point',
+		'path-select',
+		'shape',
+		'ellipse-shape',
+		'triangle-shape',
+		'polygon-shape',
+		'star-shape',
+		'line-shape',
+		'custom-shape'
+	]);
+	const typeTools = new Set(['type', 'vertical-type', 'type-mask']);
 	const measureTools = new Set(['ruler', 'note', 'count']);
 	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 
@@ -123,7 +148,9 @@
 			]),
 			m: cycleShortcut([
 				['marquee', 'rectangular marquee'],
-				['ellipse-marquee', 'elliptical marquee']
+				['ellipse-marquee', 'elliptical marquee'],
+				['single-row-marquee', 'single row marquee'],
+				['single-column-marquee', 'single column marquee']
 			]),
 			l: cycleShortcut([
 				['lasso', 'lasso'],
@@ -134,15 +161,20 @@
 				['crop', 'crop'],
 				['perspective-crop', 'perspective crop'],
 				['slice', 'slice'],
+				['slice-select', 'slice selection'],
 				['frame', 'frame']
 			]),
 			j: cycleShortcut([
 				['remove', 'remove'],
 				['spot-heal', 'spot healing brush'],
 				['healing-brush', 'healing brush'],
-				['patch', 'patch']
+				['patch', 'patch'],
+				['content-aware-move', 'content-aware move']
 			]),
-			s: selectShortcut('clone-stamp', 'clone stamp'),
+			s: cycleShortcut([
+				['clone-stamp', 'clone stamp'],
+				['pattern-stamp', 'pattern stamp']
+			]),
 			o: cycleShortcut([
 				['dodge', 'dodge'],
 				['burn', 'burn'],
@@ -151,9 +183,18 @@
 			b: cycleShortcut([
 				['brush', 'brush'],
 				['pencil', 'pencil'],
-				['mixer-brush', 'mixer brush']
+				['mixer-brush', 'mixer brush'],
+				['color-replacement', 'color replacement']
 			]),
-			e: selectShortcut('eraser', 'eraser'),
+			e: cycleShortcut([
+				['eraser', 'eraser'],
+				['background-eraser', 'background eraser'],
+				['magic-eraser', 'magic eraser']
+			]),
+			y: cycleShortcut([
+				['history-brush', 'history brush'],
+				['art-history-brush', 'art history brush']
+			]),
 			g: cycleShortcut([
 				['gradient', 'gradient'],
 				['paint-bucket', 'paint bucket']
@@ -165,11 +206,24 @@
 			]),
 			p: cycleShortcut([
 				['pen', 'pen'],
+				['freeform-pen', 'freeform pen'],
 				['curvature-pen', 'curvature pen']
 			]),
 			a: selectShortcut('path-select', 'path selection'),
-			t: selectShortcut('type', 'type'),
-			u: selectShortcut('shape', 'shape'),
+			t: cycleShortcut([
+				['type', 'horizontal type'],
+				['vertical-type', 'vertical type'],
+				['type-mask', 'type mask']
+			]),
+			u: cycleShortcut([
+				['shape', 'rectangle'],
+				['ellipse-shape', 'ellipse'],
+				['triangle-shape', 'triangle'],
+				['polygon-shape', 'polygon'],
+				['star-shape', 'star'],
+				['line-shape', 'line'],
+				['custom-shape', 'custom shape']
+			]),
 			q: selectShortcut('mask', 'mask brush')
 		})
 	);
@@ -306,7 +360,7 @@
 							<input type="checkbox" checked class="accent-accent size-3" /> sample all layers
 						</label>
 					{/if}
-				{:else if activeTool === 'type'}
+				{:else if typeTools.has(activeTool)}
 					<button class="border-subtle bg-surface text-text h-6 shrink-0 rounded border px-2">
 						Overused Grotesk
 					</button>
@@ -376,7 +430,7 @@
 									<div
 										class="pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
 									></div>
-								{:else if activeTool === 'type'}
+								{:else if typeTools.has(activeTool)}
 									<div
 										class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
 									>

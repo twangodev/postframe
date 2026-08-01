@@ -90,6 +90,18 @@
 				{ id: 'magic-wand', label: 'magic wand', shortcut: 'W', icon: WandSparkles },
 				{ id: 'marquee', label: 'rectangular marquee', shortcut: 'M', icon: SquareDashed },
 				{ id: 'ellipse-marquee', label: 'elliptical marquee', shortcut: 'M', icon: CircleDashed },
+				{
+					id: 'single-row-marquee',
+					label: 'single row marquee',
+					shortcut: 'M',
+					icon: SquareDashed
+				},
+				{
+					id: 'single-column-marquee',
+					label: 'single column marquee',
+					shortcut: 'M',
+					icon: SquareDashed
+				},
 				{ id: 'lasso', label: 'lasso', shortcut: 'L', icon: Lasso },
 				{ id: 'polygon-lasso', label: 'polygonal lasso', shortcut: 'L', icon: Spline },
 				{ id: 'magnetic-lasso', label: 'magnetic lasso', shortcut: 'L', icon: Magnet }
@@ -102,6 +114,7 @@
 				{ id: 'crop', label: 'crop', shortcut: 'C', icon: Crop },
 				{ id: 'perspective-crop', label: 'perspective crop', shortcut: 'C', icon: ScanLine },
 				{ id: 'slice', label: 'slice', shortcut: 'C', icon: Slice },
+				{ id: 'slice-select', label: 'slice selection', shortcut: 'C', icon: MousePointer },
 				{ id: 'frame', label: 'frame', shortcut: 'K', icon: Frame }
 			]
 		},
@@ -113,6 +126,7 @@
 				{ id: 'spot-heal', label: 'spot healing brush', shortcut: 'J', icon: Bandage },
 				{ id: 'healing-brush', label: 'healing brush', shortcut: 'J', icon: Pipette },
 				{ id: 'patch', label: 'patch', shortcut: 'J', icon: Scan },
+				{ id: 'content-aware-move', label: 'content-aware move', shortcut: 'J', icon: Move },
 				{ id: 'clone-stamp', label: 'clone stamp', shortcut: 'S', icon: Stamp },
 				{ id: 'red-eye', label: 'red eye', shortcut: 'J', icon: Eye },
 				{ id: 'blur', label: 'blur', icon: Droplets },
@@ -120,7 +134,9 @@
 				{ id: 'smudge', label: 'smudge', icon: Fingerprint },
 				{ id: 'dodge', label: 'dodge', shortcut: 'O', icon: SunMedium },
 				{ id: 'burn', label: 'burn', shortcut: 'O', icon: Moon },
-				{ id: 'sponge', label: 'sponge', shortcut: 'O', icon: CircleDot }
+				{ id: 'sponge', label: 'sponge', shortcut: 'O', icon: CircleDot },
+				{ id: 'background-eraser', label: 'background eraser', shortcut: 'E', icon: Eraser },
+				{ id: 'magic-eraser', label: 'magic eraser', shortcut: 'E', icon: WandSparkles }
 			]
 		},
 		{
@@ -130,11 +146,15 @@
 				{ id: 'brush', label: 'brush', shortcut: 'B', icon: Brush },
 				{ id: 'pencil', label: 'pencil', shortcut: 'B', icon: Pencil },
 				{ id: 'mixer-brush', label: 'mixer brush', shortcut: 'B', icon: Paintbrush },
+				{ id: 'color-replacement', label: 'color replacement', shortcut: 'B', icon: Pipette },
+				{ id: 'history-brush', label: 'history brush', shortcut: 'Y', icon: RotateCcw },
+				{ id: 'art-history-brush', label: 'art history brush', shortcut: 'Y', icon: Sparkles },
 				{ id: 'eraser', label: 'eraser', shortcut: 'E', icon: Eraser },
 				{ id: 'gradient', label: 'gradient', shortcut: 'G', icon: Blend },
 				{ id: 'paint-bucket', label: 'paint bucket', shortcut: 'G', icon: PaintBucket },
 				{ id: 'eyedropper', label: 'eyedropper', shortcut: 'I', icon: Pipette },
-				{ id: 'color-sampler', label: 'color sampler', shortcut: 'I', icon: Crosshair }
+				{ id: 'color-sampler', label: 'color sampler', shortcut: 'I', icon: Crosshair },
+				{ id: 'pattern-stamp', label: 'pattern stamp', shortcut: 'S', icon: Stamp }
 			]
 		},
 		{
@@ -142,10 +162,22 @@
 			label: 'type & vector',
 			tools: [
 				{ id: 'pen', label: 'pen', shortcut: 'P', icon: PenTool },
+				{ id: 'freeform-pen', label: 'freeform pen', shortcut: 'P', icon: Pencil },
 				{ id: 'curvature-pen', label: 'curvature pen', shortcut: 'P', icon: Spline },
+				{ id: 'add-anchor', label: 'add anchor point', icon: PenTool },
+				{ id: 'delete-anchor', label: 'delete anchor point', icon: PenTool },
+				{ id: 'convert-point', label: 'convert point', icon: Spline },
 				{ id: 'path-select', label: 'path selection', shortcut: 'A', icon: MousePointer },
-				{ id: 'type', label: 'type', shortcut: 'T', icon: Type },
-				{ id: 'shape', label: 'shape', shortcut: 'U', icon: Shapes }
+				{ id: 'type', label: 'horizontal type', shortcut: 'T', icon: Type },
+				{ id: 'vertical-type', label: 'vertical type', shortcut: 'T', icon: Type },
+				{ id: 'type-mask', label: 'type mask', shortcut: 'T', icon: Type },
+				{ id: 'shape', label: 'rectangle', shortcut: 'U', icon: Shapes },
+				{ id: 'ellipse-shape', label: 'ellipse', shortcut: 'U', icon: Shapes },
+				{ id: 'triangle-shape', label: 'triangle', shortcut: 'U', icon: Triangle },
+				{ id: 'polygon-shape', label: 'polygon', shortcut: 'U', icon: Shapes },
+				{ id: 'star-shape', label: 'star', shortcut: 'U', icon: Sparkles },
+				{ id: 'line-shape', label: 'line', shortcut: 'U', icon: Shapes },
+				{ id: 'custom-shape', label: 'custom shape', shortcut: 'U', icon: Shapes }
 			]
 		},
 		{
@@ -217,7 +249,7 @@
 				<div
 					role="menu"
 					aria-label={group.label}
-					class="motion-tooltip border-subtle bg-bg absolute top-0 left-[calc(100%+0.4rem)] z-50 w-52 rounded border p-1.5 shadow-2xl"
+					class="motion-tooltip border-subtle bg-bg absolute top-0 left-[calc(100%+0.4rem)] z-50 max-h-[min(34rem,calc(100vh-6rem))] w-52 overflow-y-auto rounded border p-1.5 shadow-2xl"
 				>
 					<p class="text-muted px-2 pt-1 pb-1.5 text-[10px] tracking-[0.04em]">{group.label}</p>
 					{#each group.tools as tool (tool.id)}
