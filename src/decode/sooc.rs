@@ -20,6 +20,27 @@ pub struct Sooc {
     pub orientation: Option<u16>,
 }
 
+pub fn from_rgb8(
+    width: usize,
+    height: usize,
+    rgb8: Vec<u8>,
+    space: WorkingSpace,
+    exposure: Option<f32>,
+    orientation: Option<u16>,
+) -> Result<Sooc> {
+    if rgb8.len() != width * height * 3 {
+        return Err(Error::Unsupported("preview buffer size mismatch"));
+    }
+    Ok(Sooc {
+        width,
+        height,
+        rgb8,
+        space,
+        exposure,
+        orientation,
+    })
+}
+
 pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
     let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB);
     let mut decoder = JpegDecoder::new_with_options(ZCursor::new(jpeg), options);
@@ -38,14 +59,14 @@ pub fn decode(jpeg: &[u8]) -> Result<Sooc> {
         .unwrap_or(WorkingSpace::LinearSrgb);
     let exposure = decoder.exif().and_then(|tiff| exposure_time(tiff));
     let orientation = decoder.exif().and_then(|tiff| orientation(tiff));
-    Ok(Sooc {
-        width: info.width as usize,
-        height: info.height as usize,
+    from_rgb8(
+        info.width as usize,
+        info.height as usize,
         rgb8,
         space,
         exposure,
         orientation,
-    })
+    )
 }
 
 const EXIF_ADOBE_RGB: u16 = 2;

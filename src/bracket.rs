@@ -62,13 +62,18 @@ pub fn load_full(data: &FrameData) -> Result<Frame> {
 
 fn load_at(data: &FrameData, full_resolution: bool) -> Result<Frame> {
     let source = RawSource::new_from_shared_vec(data.raw.clone());
-    let bytes = match &data.jpeg {
-        Some(bytes) => bytes.as_slice(),
-        None => embedded_jpeg(&source, data.raw.len() as u64)?,
+    let decoder = rawler::get_decoder(&source)?;
+    let params = RawDecodeParams::default();
+    let metadata = decoder.raw_metadata(&source, &params)?;
+    let raw = decoder.raw_image(&source, &params, false)?;
+    let mut sooc = match &data.jpeg {
+        Some(bytes) => sooc::decode(bytes)?,
+        None => decoder_preview(decoder.as_ref(), &source, &params, &metadata)?,
     };
-    let sooc = sooc::decode(bytes)?;
-
-    let raw = rawler::decode(&source, &RawDecodeParams::default())?;
+    sooc.exposure = sooc
+        .exposure
+        .or_else(|| metadata.exif.exposure_time.and_then(rational));
+    sooc.orientation = sooc.orientation.or(Some(raw.orientation.to_u16()));
     let camera = linear::from_raw(&raw)?;
     let full = full_resolution
         .then(|| linear::demosaic_full(&raw))
@@ -99,13 +104,39 @@ fn load_at(data: &FrameData, full_resolution: bool) -> Result<Frame> {
     })
 }
 
-fn embedded_jpeg(source: &RawSource, file_len: u64) -> Result<&[u8]> {
-    // TODO(WASM_TODOS.photoIngest): resolve embedded previews for non-RAF RAW sources.
-    let (offset, len) = crate::decode::raf::jpeg_extent(
-        source.subview(0, crate::decode::raf::HEADER_LEN)?,
-        file_len,
-    )?;
-    Ok(source.subview(offset, len)?)
+fn decoder_preview(
+    decoder: &dyn rawler::decoders::Decoder,
+    source: &RawSource,
+    params: &RawDecodeParams,
+    metadata: &rawler::decoders::RawMetadata,
+) -> Result<Sooc> {
+    let image = if let Some(image) = decoder.preview_image(source, params)? {
+        image
+    } else if let Some(image) = decoder.thumbnail_image(source, params)? {
+        image
+    } else {
+        decoder
+            .full_image(source, params)?
+            .ok_or(Error::Unsupported("raw carries no rendered preview"))?
+    }
+    .to_rgb8();
+    let (width, height) = image.dimensions();
+    sooc::from_rgb8(
+        width as usize,
+        height as usize,
+        image.into_raw(),
+        match metadata.exif.color_space {
+            Some(2) => WorkingSpace::LinearAdobeRgb,
+            _ => WorkingSpace::LinearSrgb,
+        },
+        metadata.exif.exposure_time.and_then(rational),
+        metadata.exif.orientation,
+    )
+}
+
+fn rational(value: rawler::formats::tiff::Rational) -> Option<f32> {
+    let value = value.n as f32 / value.d as f32;
+    (value.is_finite() && value > 0.0).then_some(value)
 }
 
 pub fn exposure_bias(data: &FrameData) -> Result<Option<f32>> {
@@ -113,7 +144,15 @@ pub fn exposure_bias(data: &FrameData) -> Result<Option<f32>> {
         Some(bytes) => sooc::exposure_bias(bytes),
         None => {
             let source = RawSource::new_from_shared_vec(data.raw.clone());
-            sooc::exposure_bias(embedded_jpeg(&source, data.raw.len() as u64)?)
+            let decoder = rawler::get_decoder(&source)?;
+            decoder
+                .raw_metadata(&source, &RawDecodeParams::default())?
+                .exif
+                .exposure_bias
+                .and_then(|value| {
+                    let value = value.n as f32 / value.d as f32;
+                    value.is_finite().then_some(value)
+                })
         }
     };
     Ok(bias)
@@ -125,8 +164,8 @@ pub fn to_working(frame: &Frame, space: WorkingSpace) -> Result<[[f32; 3]; 3]> {
 }
 
 pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
-    if frames.len() < 2 {
-        return Err(Error::Unsupported("a bracket needs at least two frames"));
+    if frames.is_empty() {
+        return Err(Error::Unsupported("a photo needs at least one frame"));
     }
     if frames.iter().any(|f| f.sooc.exposure.is_none()) {
         return Err(Error::Unsupported("every frame needs an exposure time"));
@@ -287,6 +326,10 @@ fn merge_radiance(
         .any(|f| (f.image().width, f.image().height) != (width, height))
     {
         return Err(Error::Unsupported("bracket frames differ in size"));
+    }
+
+    if frames.len() == 1 {
+        return Ok((vec![Shift::new(0, 0)], frames[0].image().clone()));
     }
 
     let grays: Vec<Gray> = frames
