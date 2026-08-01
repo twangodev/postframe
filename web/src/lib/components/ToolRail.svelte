@@ -276,6 +276,7 @@
 	{/each}
 
 	<div class="bg-subtle my-1 h-px w-5"></div>
+	<!-- TODO(WASM_TODOS.layersAndHistory): wire undo and redo to Wasm document history. -->
 	<button
 		type="button"
 		aria-label="Undo"

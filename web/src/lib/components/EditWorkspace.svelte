@@ -284,6 +284,7 @@
 					</p>
 				{/if}
 
+				<!-- TODO(WASM_TODOS.previewRendering): switch between original and rendered Wasm output. -->
 				<button
 					type="button"
 					class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
@@ -773,6 +774,7 @@
 					</div>
 
 					{#if selectedMask}
+						<!-- TODO(WASM_TODOS.adjustments): apply these values to the selected mask node. -->
 						<Panel title="Mask adjustments" meta={selectedMask.name}>
 							<AdjustmentSlider
 								label="Exposure"
