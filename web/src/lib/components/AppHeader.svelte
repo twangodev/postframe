@@ -64,7 +64,8 @@
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="edit"
-				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors"
+				disabled={workspace.photos.length === 0}
+				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
 			>
 				edit
 			</Tabs.Trigger>

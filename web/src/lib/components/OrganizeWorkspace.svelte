@@ -9,6 +9,7 @@
 		FolderPlus,
 		Grid2X2,
 		Image,
+		ImagePlus,
 		Layers3,
 		List,
 		Search,
@@ -19,6 +20,7 @@
 	import PhotoVisual from './PhotoVisual.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import {
+		ACCEPTED_PHOTOS,
 		formatBytes,
 		type ColorLabel,
 		type Photo,
@@ -27,15 +29,17 @@
 
 	interface Props {
 		workspace: WorkspaceState;
+		onImport: (files: File[]) => Promise<void>;
 	}
 
-	let { workspace }: Props = $props();
+	let { workspace, onImport }: Props = $props();
 	let search = $state('');
 	let view = $state('grid');
 	let source = $state('all');
 	let sort = $state('capture');
 	let albumDialogOpen = $state(false);
 	let albumName = $state('');
+	let importing = $state(false);
 
 	const active = $derived(workspace.selectedPhoto);
 	const selectedStack = $derived(
@@ -82,6 +86,13 @@
 		albumDialogOpen = false;
 	}
 
+	async function importFiles(list: FileList | null) {
+		if (!list?.length) return;
+		importing = true;
+		await onImport([...list]);
+		importing = false;
+	}
+
 	function dimensions(photo: Photo) {
 		return photo.width && photo.height ? `${photo.width} × ${photo.height}` : 'Preview pending';
 	}
@@ -98,7 +109,9 @@
 </script>
 
 <div
-	class="bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]"
+	class={workspace.photos.length === 0
+		? 'bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)]'
+		: 'bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
 >
 	<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
 		<div class="text-muted px-3 pb-2 text-[10px] tracking-[0.04em]">library</div>
@@ -198,76 +211,101 @@
 	</aside>
 
 	<section class="motion-panel-up bg-canvas flex min-h-0 min-w-0 flex-col">
-		<div class="border-subtle bg-bg flex h-11 shrink-0 items-center gap-2 border-b px-3">
-			<label class="relative max-w-72 min-w-32 flex-1">
-				<Search
-					size={13}
-					strokeWidth={1.5}
-					class="text-muted pointer-events-none absolute top-1/2 left-2 -translate-y-1/2"
-				/>
-				<input
-					bind:value={search}
-					placeholder="search this collection"
-					class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
-				/>
-			</label>
+		{#if workspace.photos.length > 0}
+			<div class="border-subtle bg-bg flex h-11 shrink-0 items-center gap-2 border-b px-3">
+				<label class="relative max-w-72 min-w-32 flex-1">
+					<Search
+						size={13}
+						strokeWidth={1.5}
+						class="text-muted pointer-events-none absolute top-1/2 left-2 -translate-y-1/2"
+					/>
+					<input
+						bind:value={search}
+						placeholder="search this collection"
+						class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
+					/>
+				</label>
 
-			<select
-				bind:value={sort}
-				aria-label="Sort photos"
-				class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
-			>
-				<option value="capture">capture time</option>
-				<option value="name">filename</option>
-				<option value="rating">rating</option>
-			</select>
-
-			<div class="ml-auto flex items-center gap-1">
-				{#if selectedStack}
-					<button
-						type="button"
-						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
-						onclick={() => workspace.ungroupStack(selectedStack.id)}
-					>
-						<Ungroup size={12} /> ungroup
-					</button>
-				{:else}
-					<button
-						type="button"
-						disabled={workspace.selectedIds.length < 2}
-						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-						onclick={() => workspace.createStack()}
-					>
-						<Layers3 size={12} /> group stack
-					</button>
-				{/if}
-
-				<ToggleGroup.Root
-					type="single"
-					value={view}
-					onValueChange={(value) => value && (view = value)}
-					class="border-subtle bg-surface flex h-7 rounded border p-0.5"
+				<select
+					bind:value={sort}
+					aria-label="Sort photos"
+					class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
 				>
-					<ToggleGroup.Item
-						value="grid"
-						aria-label="Grid view"
-						class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
+					<option value="capture">capture time</option>
+					<option value="name">filename</option>
+					<option value="rating">rating</option>
+				</select>
+
+				<div class="ml-auto flex items-center gap-1">
+					{#if selectedStack}
+						<button
+							type="button"
+							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
+							onclick={() => workspace.ungroupStack(selectedStack.id)}
+						>
+							<Ungroup size={12} /> ungroup
+						</button>
+					{:else}
+						<button
+							type="button"
+							disabled={workspace.selectedIds.length < 2}
+							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+							onclick={() => workspace.createStack()}
+						>
+							<Layers3 size={12} /> group stack
+						</button>
+					{/if}
+
+					<ToggleGroup.Root
+						type="single"
+						value={view}
+						onValueChange={(value) => value && (view = value)}
+						class="border-subtle bg-surface flex h-7 rounded border p-0.5"
 					>
-						<Grid2X2 size={12} />
-					</ToggleGroup.Item>
-					<ToggleGroup.Item
-						value="list"
-						aria-label="List view"
-						class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
-					>
-						<List size={12} />
-					</ToggleGroup.Item>
-				</ToggleGroup.Root>
+						<ToggleGroup.Item
+							value="grid"
+							aria-label="Grid view"
+							class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
+						>
+							<Grid2X2 size={12} />
+						</ToggleGroup.Item>
+						<ToggleGroup.Item
+							value="list"
+							aria-label="List view"
+							class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
+						>
+							<List size={12} />
+						</ToggleGroup.Item>
+					</ToggleGroup.Root>
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<div class="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-			{#if visiblePhotos.length > 0}
+			{#if workspace.photos.length === 0}
+				<div class="motion-enter flex h-full flex-col items-center justify-center text-center">
+					<div
+						class="border-subtle bg-surface text-muted mb-4 flex size-10 items-center justify-center rounded border"
+					>
+						<ImagePlus size={17} strokeWidth={1.25} />
+					</div>
+					<p class="text-text text-xs font-medium">empty collection</p>
+					<p class="text-muted mt-1 text-[10px]">add photographs when you're ready.</p>
+					<label
+						class="bg-text text-bg mt-4 flex h-8 cursor-pointer items-center rounded px-3 text-[10px] font-medium hover:opacity-85"
+					>
+						<input
+							type="file"
+							multiple
+							accept={ACCEPTED_PHOTOS}
+							class="sr-only"
+							disabled={importing}
+							onchange={(event) => importFiles(event.currentTarget.files)}
+						/>
+						import photos
+					</label>
+				</div>
+			{:else if visiblePhotos.length > 0}
 				<div
 					class={view === 'grid'
 						? 'grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3'
@@ -358,15 +396,22 @@
 			{/if}
 		</div>
 
-		<footer
-			class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
-		>
-			<span>{visiblePhotos.length} visible</span>
-			<span>{workspace.selectedIds.length} selected</span>
-		</footer>
+		{#if workspace.photos.length > 0}
+			<footer
+				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
+			>
+				<span>{visiblePhotos.length} visible</span>
+				<span>{workspace.selectedIds.length} selected</span>
+			</footer>
+		{/if}
 	</section>
 
-	<aside class="motion-panel-right border-subtle bg-bg min-h-0 overflow-y-auto border-l">
+	<aside
+		class="motion-panel-right border-subtle bg-bg min-h-0 overflow-y-auto border-l {workspace.photos
+			.length === 0
+			? 'hidden'
+			: ''}"
+	>
 		{#if active}
 			{#key active.id}
 				<div class="motion-photo border-subtle bg-canvas aspect-[4/3] overflow-hidden border-b">

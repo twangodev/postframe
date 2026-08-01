@@ -33,7 +33,7 @@
 		{#key workspace.mode}
 			<div class="motion-workspace flex min-h-0 flex-1 overflow-hidden">
 				{#if workspace.mode === 'organize'}
-					<OrganizeWorkspace {workspace} />
+					<OrganizeWorkspace {workspace} onImport={(files) => workspace.importFiles(files)} />
 				{:else}
 					<EditWorkspace {workspace} />
 				{/if}
