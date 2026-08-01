@@ -1,4 +1,4 @@
-import type { RawFrameInput, Request, Response } from './worker';
+import type { RawFrameHandleInput, Request, Response } from './worker';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
@@ -14,16 +14,23 @@ interface PendingRequest {
 
 export type ProgressListener = (progress: ProgressResponse) => void;
 
+type WorkerFactory = () => Worker;
+
 export class PostframeWorkerClient {
-	private readonly worker: Worker;
+	private worker: Worker;
+	private readonly workerFactory: WorkerFactory;
 	private readonly pending = new Map<number, PendingRequest>();
 	private readonly progressListeners = new Set<ProgressListener>();
 	private nextRequestId = 1;
+	private destroyed = false;
 
-	constructor(worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })) {
-		this.worker = worker;
-		this.worker.addEventListener('message', this.handleMessage);
-		this.worker.addEventListener('error', this.handleWorkerError);
+	constructor(
+		workerFactory: WorkerFactory = () =>
+			new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+	) {
+		this.workerFactory = workerFactory;
+		this.worker = this.workerFactory();
+		this.attachWorker();
 	}
 
 	async capabilities() {
@@ -43,12 +50,12 @@ export class PostframeWorkerClient {
 		return response.inspection;
 	}
 
-	async load(frames: RawFrameInput[]) {
-		const transfer = frames.flatMap((frame) =>
-			frame.jpeg ? [frame.raw, frame.jpeg] : [frame.raw]
+	async openDocument(frames: RawFrameHandleInput[], maxDimension: number) {
+		const response = await this.send(
+			(id) => ({ id, type: 'open', frames, maxDimension }),
+			'opened'
 		);
-		const response = await this.send((id) => ({ id, type: 'load', frames }), 'merged', transfer);
-		return response.boostStops;
+		return { jpeg: response.jpeg, boostStops: response.boostStops };
 	}
 
 	async preview(ev: number, tone: boolean) {
@@ -66,14 +73,28 @@ export class PostframeWorkerClient {
 		return response.jpeg;
 	}
 
+	async closeDocument() {
+		await this.send((id) => ({ id, type: 'close' }), 'closed');
+	}
+
 	onProgress(listener: ProgressListener) {
 		this.progressListeners.add(listener);
 		return () => this.progressListeners.delete(listener);
 	}
 
+	restart(reason = 'Postframe worker restarted') {
+		if (this.destroyed) return;
+		this.detachWorker();
+		this.worker.terminate();
+		this.rejectPending(new Error(reason));
+		this.worker = this.workerFactory();
+		this.attachWorker();
+	}
+
 	destroy() {
-		this.worker.removeEventListener('message', this.handleMessage);
-		this.worker.removeEventListener('error', this.handleWorkerError);
+		if (this.destroyed) return;
+		this.destroyed = true;
+		this.detachWorker();
 		this.worker.terminate();
 		this.rejectPending(new Error('Postframe worker closed'));
 		this.progressListeners.clear();
@@ -84,6 +105,7 @@ export class PostframeWorkerClient {
 		expected: Type,
 		transfer: Transferable[] = []
 	): Promise<CompletionOf<Type>> {
+		if (this.destroyed) return Promise.reject(new Error('Postframe worker closed'));
 		const id = this.nextRequestId++;
 		return new Promise((resolve, reject) => {
 			this.pending.set(id, {
@@ -125,6 +147,16 @@ export class PostframeWorkerClient {
 	private handleWorkerError = (event: ErrorEvent) => {
 		this.rejectPending(new Error(event.message || 'Postframe worker failed'));
 	};
+
+	private attachWorker() {
+		this.worker.addEventListener('message', this.handleMessage);
+		this.worker.addEventListener('error', this.handleWorkerError);
+	}
+
+	private detachWorker() {
+		this.worker.removeEventListener('message', this.handleMessage);
+		this.worker.removeEventListener('error', this.handleWorkerError);
+	}
 
 	private rejectPending(error: Error) {
 		for (const pending of this.pending.values()) pending.reject(error);

@@ -200,11 +200,17 @@ export class CollectionStore {
 	}
 
 	async readOriginal(collectionId: string, storageName: string): Promise<File> {
-		return this.readCollectionFile(collectionId, ORIGINALS_DIRECTORY, storageName);
+		return this.originalHandle(collectionId, storageName).then((handle) => handle.getFile());
+	}
+
+	async originalHandle(collectionId: string, storageName: string) {
+		return this.collectionFileHandle(collectionId, ORIGINALS_DIRECTORY, storageName);
 	}
 
 	async readThumbnail(collectionId: string, storageName: string): Promise<File> {
-		return this.readCollectionFile(collectionId, THUMBNAILS_DIRECTORY, storageName);
+		return this.collectionFileHandle(collectionId, THUMBNAILS_DIRECTORY, storageName).then(
+			(handle) => handle.getFile()
+		);
 	}
 
 	async clearAll() {
@@ -266,11 +272,11 @@ export class CollectionStore {
 		await this.updateCatalog(parsed);
 	}
 
-	private async readCollectionFile(collectionId: string, folder: string, storageName: string) {
+	private async collectionFileHandle(collectionId: string, folder: string, storageName: string) {
 		storageNameSchema.parse(storageName);
 		const directory = await this.collectionDirectory(collectionId, false);
 		const files = await directory.getDirectoryHandle(folder);
-		return files.getFileHandle(storageName).then((handle) => handle.getFile());
+		return files.getFileHandle(storageName);
 	}
 
 	private async updateCatalog(collection: CollectionManifest) {
