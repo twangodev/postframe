@@ -78,6 +78,7 @@ function dateLabel(timestamp: number) {
 }
 
 export class WorkspaceState {
+	// TODO(WASM_TODOS.collectionStorage): replace session-only state with an OPFS-backed catalog.
 	mode = $state<WorkspaceMode>('welcome');
 	collectionName = $state('');
 	photos = $state<Photo[]>([]);
@@ -87,7 +88,9 @@ export class WorkspaceState {
 	activePhotoId = $state<string | null>(null);
 	masks = $state<Mask[]>([]);
 	selectedMaskId = $state<string | null>(null);
+	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
 	adjustments = $state({ ...defaultAdjustments });
+	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
 	history = $state<string[]>(['imported']);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
@@ -96,6 +99,7 @@ export class WorkspaceState {
 	private objectUrls = new Set<string>();
 
 	async openSingle(file: File) {
+		// TODO(WASM_TODOS.photoIngest): route the file through worker load and the Session bindings.
 		this.clearFiles();
 		const photo = await this.photoFromFile(file);
 		this.photos = [photo];
@@ -107,6 +111,7 @@ export class WorkspaceState {
 	}
 
 	async createCollection(name: string, files: File[]) {
+		// TODO(WASM_TODOS.collectionStorage): create the collection and originals store in OPFS.
 		this.clearFiles();
 		this.photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
 		this.collectionName = name.trim() || 'untitled collection';
@@ -117,6 +122,7 @@ export class WorkspaceState {
 	}
 
 	async importFiles(files: File[]) {
+		// TODO(WASM_TODOS.photoIngest): ingest and thumbnail these files through the Wasm worker.
 		const imported = await Promise.all(files.map((file) => this.photoFromFile(file)));
 		this.photos.push(...imported);
 		if (!this.activePhotoId && imported[0]) {
@@ -216,6 +222,7 @@ export class WorkspaceState {
 	}
 
 	createMask(kind: MaskKind) {
+		// TODO(WASM_TODOS.masks): create the actual mask raster in the Wasm document.
 		const labels: Record<MaskKind, string> = {
 			brush: 'brush',
 			linear: 'linear gradient',
@@ -231,11 +238,13 @@ export class WorkspaceState {
 	}
 
 	toggleMask(maskId: string) {
+		// TODO(WASM_TODOS.masks): mirror visibility into the render graph.
 		const mask = this.masks.find((candidate) => candidate.id === maskId);
 		if (mask) mask.visible = !mask.visible;
 	}
 
 	deleteMask(maskId: string) {
+		// TODO(WASM_TODOS.masks): delete the mask raster and its adjustment node.
 		this.masks = this.masks.filter((mask) => mask.id !== maskId);
 		this.selectedMaskId = this.masks.at(-1)?.id ?? null;
 	}
@@ -269,6 +278,7 @@ export class WorkspaceState {
 	}
 
 	private async photoFromFile(file: File): Promise<Photo> {
+		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAF placeholder with Wasm output.
 		const raw = file.name.toLowerCase().endsWith('.raf');
 		const src = !raw && file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
 		if (src) this.objectUrls.add(src);

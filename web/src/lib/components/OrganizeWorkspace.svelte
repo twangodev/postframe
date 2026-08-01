@@ -42,6 +42,7 @@
 	let importing = $state(false);
 
 	const active = $derived(workspace.selectedPhoto);
+	// TODO(WASM_TODOS.collectionStorage): persist organizer changes and restore this view from OPFS.
 	const selectedStack = $derived(
 		workspace.stacks.find((stack) =>
 			workspace.selectedIds.some((id) => stack.photoIds.includes(id))
@@ -51,6 +52,7 @@
 		const query = search.trim().toLowerCase();
 		let photos = workspace.photos.filter((photo) => {
 			if (query && !photo.name.toLowerCase().includes(query)) return false;
+			// TODO(WASM_TODOS.collectionStorage): filter recent photos using persisted import activity.
 			if (source === 'favorites' && !photo.flagged) return false;
 			if (source.startsWith('album:') && !photo.albumIds.includes(source.slice(6))) return false;
 			return true;
@@ -419,6 +421,7 @@
 				</div>
 			{/key}
 			<div class="border-subtle border-b p-3">
+				<!-- TODO(WASM_TODOS.metadata): replace the camera and exposure placeholders with frame metadata. -->
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="truncate text-[11px] font-medium">{active.name}</p>

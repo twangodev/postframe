@@ -19,6 +19,7 @@
 
 	function finish(event: SubmitEvent) {
 		event.preventDefault();
+		// TODO(WASM_TODOS.export): call worker export, download the bytes, and report real progress.
 		completed = true;
 		setTimeout(() => {
 			open = false;

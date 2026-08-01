@@ -114,6 +114,7 @@
 	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 
 	function chooseTool(tool: string, label = tool) {
+		// TODO(WASM_TODOS.editorTools): start the selected tool in the Wasm document.
 		activeTool = tool;
 		activeToolLabel = label;
 		if (tool.startsWith('mask')) inspectorTab = 'mask';
@@ -229,6 +230,7 @@
 	);
 
 	function addMask(kind: MaskKind) {
+		// TODO(WASM_TODOS.masks): replace the visual-only mask with a rendered mask.
 		workspace.createMask(kind);
 		activeTool = 'mask';
 		activeToolLabel = 'mask brush';
@@ -295,6 +297,7 @@
 			<div
 				class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[10px]"
 			>
+				<!-- TODO(WASM_TODOS.editorTools): bind these option controls to the active Wasm tool. -->
 				<span class="text-text shrink-0 font-medium">{activeToolLabel}</span>
 				<span class="bg-subtle h-4 w-px shrink-0"></span>
 
@@ -378,6 +381,7 @@
 					<span class="shrink-0">sample <span class="text-text font-mono">5 × 5</span></span>
 					<span class="shrink-0">scale <span class="text-text font-mono">1 px : 1 px</span></span>
 				{:else if generativeTools.has(activeTool)}
+					<!-- TODO(WASM_TODOS.generative): run the provider and composite through the planned binding. -->
 					<input
 						placeholder="describe an edit"
 						class="border-subtle bg-surface placeholder:text-muted/60 focus:border-accent h-6 min-w-48 rounded border px-2 focus:outline-none"
@@ -398,6 +402,7 @@
 			</div>
 
 			<div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">
+				<!-- TODO(WASM_TODOS.previewRendering): render pixels and overlays from the Wasm document. -->
 				<div
 					class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
 				></div>
@@ -497,7 +502,9 @@
 				</Tabs.List>
 
 				<Tabs.Content value="adjust" class="motion-tab">
+					<!-- TODO(WASM_TODOS.adjustments): render slider changes instead of storing UI-only values. -->
 					<div class="border-subtle border-b p-3">
+						<!-- TODO(WASM_TODOS.metadata): replace the placeholder histogram with Session data. -->
 						<div
 							class="bg-surface flex h-20 items-end gap-px overflow-hidden rounded-sm px-2 pt-3 pb-2"
 							aria-label="Histogram preview"
@@ -799,6 +806,7 @@
 				</Tabs.Content>
 
 				<Tabs.Content value="layers" class="motion-tab">
+					<!-- TODO(WASM_TODOS.layersAndHistory): back this panel with document layers and history. -->
 					<div class="border-subtle flex items-center gap-2 border-b p-2">
 						<select
 							aria-label="Layer blend mode"
