@@ -101,7 +101,7 @@
 	class="bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]"
 >
 	<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
-		<div class="text-muted px-3 pb-2 font-mono text-[10px] tracking-[0.04em]">library</div>
+		<div class="text-muted px-3 pb-2 text-[10px] tracking-[0.04em]">library</div>
 		<nav class="space-y-0.5 px-2" aria-label="Library">
 			<button
 				type="button"
@@ -145,7 +145,7 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted font-mono text-[10px] tracking-[0.04em]">shoots</span>
+			<span class="text-muted text-[10px] tracking-[0.04em]">shoots</span>
 		</div>
 		<div class="px-2">
 			<button
@@ -161,7 +161,7 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted font-mono text-[10px] tracking-[0.04em]">albums</span>
+			<span class="text-muted text-[10px] tracking-[0.04em]">albums</span>
 			<Tooltip text="Create album">
 				{#snippet children(props)}
 					<button
@@ -208,14 +208,14 @@
 				<input
 					bind:value={search}
 					placeholder="search this shoot"
-					class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 font-mono text-[10px] focus:outline-none"
+					class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
 				/>
 			</label>
 
 			<select
 				bind:value={sort}
 				aria-label="Sort photos"
-				class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 font-mono text-[10px] focus:outline-none"
+				class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
 			>
 				<option value="capture">capture time</option>
 				<option value="name">filename</option>
@@ -226,7 +226,7 @@
 				{#if selectedStack}
 					<button
 						type="button"
-						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 font-mono text-[10px] transition-colors"
+						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
 						onclick={() => workspace.ungroupStack(selectedStack.id)}
 					>
 						<Ungroup size={12} /> ungroup
@@ -235,7 +235,7 @@
 					<button
 						type="button"
 						disabled={workspace.selectedIds.length < 2}
-						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
 						onclick={() => workspace.createStack()}
 					>
 						<Layers3 size={12} /> group stack
@@ -353,15 +353,13 @@
 				<div class="flex h-full flex-col items-center justify-center text-center">
 					<Box size={28} strokeWidth={1} class="text-muted mb-3" />
 					<p class="text-text text-xs">no photos in this view</p>
-					<p class="text-muted mt-1 font-mono text-[10px]">
-						try another album or clear the search.
-					</p>
+					<p class="text-muted mt-1 text-[10px]">try another album or clear the search.</p>
 				</div>
 			{/if}
 		</div>
 
 		<footer
-			class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 font-mono text-[10px] tracking-wide"
+			class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
 		>
 			<span>{visiblePhotos.length} visible</span>
 			<span>{workspace.selectedIds.length} selected</span>
@@ -423,7 +421,7 @@
 			</div>
 
 			<div class="border-subtle border-b p-3">
-				<p class="text-muted mb-3 font-mono text-[10px] tracking-[0.04em]">metadata</p>
+				<p class="text-muted mb-3 text-[10px] tracking-[0.04em]">metadata</p>
 				<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[10px]">
 					<dt class="text-muted">captured</dt>
 					<dd class="text-text/80 text-right">{active.captured}</dd>
@@ -439,7 +437,7 @@
 			</div>
 
 			<div class="p-3">
-				<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.04em]">albums</p>
+				<p class="text-muted mb-2 text-[10px] tracking-[0.04em]">albums</p>
 				<div class="space-y-1">
 					{#each workspace.albums as album (album.id)}
 						<label
@@ -466,9 +464,7 @@
 				</div>
 			</div>
 		{:else}
-			<div
-				class="text-muted flex h-full items-center justify-center px-6 text-center font-mono text-[10px]"
-			>
+			<div class="text-muted flex h-full items-center justify-center px-6 text-center text-[10px]">
 				select a photo to inspect it.
 			</div>
 		{/if}
@@ -505,7 +501,7 @@
 					<button
 						type="submit"
 						disabled={!albumName.trim()}
-						class="bg-text text-bg cursor-pointer rounded px-3 py-2 font-mono text-[10px] disabled:opacity-35"
+						class="bg-text text-bg cursor-pointer rounded px-3 py-2 text-[10px] disabled:opacity-35"
 					>
 						create album
 					</button>

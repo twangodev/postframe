@@ -36,11 +36,11 @@
 				</button>
 			{/snippet}
 		</Tooltip>
-		<span class="text-muted font-mono text-xs tracking-wide">pf.</span>
+		<span class="text-muted text-xs font-medium tracking-wide">pf.</span>
 		<span class="bg-subtle h-4 w-px"></span>
 		<div class="min-w-0">
 			<p class="text-text truncate text-xs font-medium">{workspace.shootName}</p>
-			<p class="text-muted font-mono text-[10px] tracking-wide">
+			<p class="text-muted text-[10px] tracking-wide">
 				{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} · local
 			</p>
 		</div>
@@ -54,13 +54,13 @@
 		<Tabs.List class="border-subtle bg-surface flex h-8 items-center rounded border p-0.5">
 			<Tabs.Trigger
 				value="organize"
-				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.03em] transition-colors"
+				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors"
 			>
 				organize
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="edit"
-				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.03em] transition-colors"
+				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors"
 			>
 				edit
 			</Tabs.Trigger>
@@ -101,7 +101,7 @@
 		</Tooltip>
 		<button
 			type="button"
-			class="border-subtle text-text hover:border-muted hover:bg-surface ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 font-mono text-[10px] tracking-wide transition-colors"
+			class="border-subtle text-text hover:border-muted hover:bg-surface ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 text-[10px] tracking-wide transition-colors"
 			onclick={onExport}
 		>
 			<Download size={12} strokeWidth={1.5} />

@@ -54,7 +54,7 @@
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
-		<h1 class="font-mono text-[13px] tracking-wide">pf.</h1>
+		<h1 class="text-[13px] font-medium tracking-wide">pf.</h1>
 		<p class="text-muted mt-3 text-[13px]">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">
@@ -112,9 +112,7 @@
 				</div>
 
 				<label class="mb-4 block">
-					<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-[0.04em]"
-						>shoot name</span
-					>
+					<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">shoot name</span>
 					<input
 						bind:value={shootName}
 						placeholder="untitled shoot"
@@ -148,20 +146,20 @@
 					{:else}
 						<Upload size={22} strokeWidth={1.25} class="text-muted mb-3" />
 						<p class="text-text text-xs">choose photos or drop them here</p>
-						<p class="text-muted mt-1 font-mono text-[10px]">local files only</p>
+						<p class="text-muted mt-1 text-[10px]">local files only</p>
 					{/if}
 				</label>
 
 				<div class="mt-5 flex justify-end gap-2">
 					<Dialog.Close
-						class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-4 py-2 font-mono text-[10px] tracking-wide transition-colors"
+						class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-4 py-2 text-[10px] tracking-wide transition-colors"
 					>
 						cancel
 					</Dialog.Close>
 					<button
 						type="submit"
 						disabled={files.length === 0 || busy}
-						class="bg-text text-bg cursor-pointer rounded px-4 py-2 font-mono text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
 						create shoot
 					</button>

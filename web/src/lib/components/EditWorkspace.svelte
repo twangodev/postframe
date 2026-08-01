@@ -202,7 +202,7 @@
 
 				<button
 					type="button"
-					class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 font-mono text-[10px] transition-colors"
+					class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
 					onclick={() => (before = !before)}
 				>
 					<Columns2 size={11} />
@@ -218,7 +218,7 @@
 					<div
 						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded border px-2 py-1.5 shadow-lg"
 					>
-						<span class="text-muted font-mono text-[10px]">aspect</span>
+						<span class="text-muted text-[10px]">aspect</span>
 						<button
 							type="button"
 							class="border-subtle bg-surface cursor-pointer rounded border px-2 py-1 text-[10px]"
@@ -232,7 +232,7 @@
 					<div
 						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded border px-3 py-2 shadow-lg"
 					>
-						<span class="text-muted font-mono text-[10px]">heal</span>
+						<span class="text-muted text-[10px]">heal</span>
 						<span class="text-text text-[10px]">size 42</span>
 						<span class="text-text text-[10px]">feather 65</span>
 						<span class="text-text text-[10px]">opacity 100</span>
@@ -250,7 +250,7 @@
 								</div>
 								{#if before}
 									<span
-										class="absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 font-mono text-[10px] tracking-wide text-white backdrop-blur"
+										class="absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
 									>
 										before
 									</span>
@@ -282,15 +282,15 @@
 						</div>
 					{/key}
 				{:else}
-					<p class="text-muted font-mono text-[10px]">select a photo in organize.</p>
+					<p class="text-muted text-[10px]">select a photo in organize.</p>
 				{/if}
 			</div>
 
 			<footer
-				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 font-mono text-[10px] tracking-wide"
+				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
 			>
 				<span>display · SDR preview</span>
-				<span>{active?.width ?? '—'} × {active?.height ?? '—'} px</span>
+				<span class="font-mono">{active?.width ?? '—'} × {active?.height ?? '—'} px</span>
 			</footer>
 		</section>
 
@@ -301,13 +301,13 @@
 				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-2 border-b px-2 pt-1">
 					<Tabs.Trigger
 						value="adjust"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.03em]"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
 					>
 						adjust
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="mask"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.03em]"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
 					>
 						mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
 								>{workspace.masks.length}</span
@@ -325,8 +325,10 @@
 								<span class="bg-text/65 flex-1 rounded-t-[1px]" style:height={`${height}%`}></span>
 							{/each}
 						</div>
-						<div class="text-muted mt-2 flex justify-between font-mono text-[10px]">
-							<span>0</span><span>histogram</span><span>255</span>
+						<div class="text-muted mt-2 flex justify-between text-[10px]">
+							<span class="font-mono">0</span><span>histogram</span><span class="font-mono"
+								>255</span
+							>
 						</div>
 					</div>
 
@@ -496,7 +498,7 @@
 
 				<Tabs.Content value="mask" class="motion-tab">
 					<div class="border-subtle border-b p-3">
-						<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.03em]">new mask</p>
+						<p class="text-muted mb-2 text-[10px] tracking-[0.03em]">new mask</p>
 						<div class="grid grid-cols-3 gap-1.5">
 							<button type="button" class="mask-choice" onclick={() => addMask('brush')}
 								><Brush size={15} /><span>brush</span></button
@@ -521,7 +523,7 @@
 
 					<div class="border-subtle border-b p-3">
 						<div class="mb-2 flex items-center justify-between">
-							<p class="text-muted font-mono text-[10px] tracking-[0.03em]">layers</p>
+							<p class="text-muted text-[10px] tracking-[0.03em]">layers</p>
 							<button
 								type="button"
 								class="text-muted hover:text-text cursor-pointer"
