@@ -105,6 +105,7 @@ export class WorkspaceState {
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
 	private readonly rawExtensions = new Set<string>();
 	private capabilityLoading: Promise<void> | null = null;
+	private catalogRevision = 0;
 	private collectionId: string | null = null;
 	private collectionCreatedAt = 0;
 	private persistence = Promise.resolve();
@@ -127,6 +128,7 @@ export class WorkspaceState {
 	recentCollections = $state<CollectionSummary[]>([]);
 	catalogReady = $state(false);
 	catalogError = $state<string | null>(null);
+	localStorageAvailable = this.collectionStore !== null;
 	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
@@ -214,6 +216,22 @@ export class WorkspaceState {
 		} catch (error) {
 			this.clearFiles();
 			this.catalogError = error instanceof Error ? error.message : 'Unable to open collection';
+		}
+	}
+
+	async clearLocalData() {
+		const store = this.collectionStore;
+		if (!store || this.mode !== 'welcome') return;
+
+		this.catalogRevision += 1;
+		this.catalogError = null;
+		await this.persistence;
+		try {
+			await store.clearAll();
+			this.recentCollections = [];
+			this.catalogReady = true;
+		} catch (error) {
+			this.catalogError = error instanceof Error ? error.message : 'Unable to clear local data';
 		}
 	}
 
@@ -483,15 +501,19 @@ export class WorkspaceState {
 			return;
 		}
 
+		const revision = ++this.catalogRevision;
 		this.catalogReady = false;
 		this.catalogError = null;
 		await this.persistence;
 		try {
-			this.recentCollections = await store.listCollections();
+			const collections = await store.listCollections();
+			if (revision === this.catalogRevision) this.recentCollections = collections;
 		} catch (error) {
-			this.catalogError = error instanceof Error ? error.message : 'Unable to read collections';
+			if (revision === this.catalogRevision) {
+				this.catalogError = error instanceof Error ? error.message : 'Unable to read collections';
+			}
 		} finally {
-			this.catalogReady = true;
+			if (revision === this.catalogRevision) this.catalogReady = true;
 		}
 	}
 

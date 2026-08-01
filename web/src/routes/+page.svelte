@@ -26,9 +26,11 @@
 		recentCollections={workspace.recentCollections}
 		catalogReady={workspace.catalogReady}
 		catalogError={workspace.catalogError}
+		localStorageAvailable={workspace.localStorageAvailable}
 		onOpenPhoto={(file) => workspace.openSingle(file)}
 		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
 		onOpenCollection={(collectionId) => workspace.openCollection(collectionId)}
+		onClearLocalData={() => workspace.clearLocalData()}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">

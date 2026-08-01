@@ -107,6 +107,15 @@ export class CollectionStore {
 		return originals.getFileHandle(storageName).then((handle) => handle.getFile());
 	}
 
+	async clearAll() {
+		const root = await navigator.storage.getDirectory();
+		try {
+			await root.removeEntry(APP_DIRECTORY, { recursive: true });
+		} catch (error) {
+			if (!isNotFoundError(error)) throw error;
+		}
+	}
+
 	async saveCollection(collection: CollectionManifest, originals: readonly OriginalWrite[] = []) {
 		const parsed = collectionManifestSchema.parse(collection);
 		const directory = await this.collectionDirectory(parsed.id, true);
@@ -169,9 +178,13 @@ async function readJson<T>(
 		const file = await handle.getFile();
 		return schema.parse(JSON.parse(await file.text()));
 	} catch (error) {
-		if (error instanceof DOMException && error.name === 'NotFoundError') return null;
+		if (isNotFoundError(error)) return null;
 		throw error;
 	}
+}
+
+function isNotFoundError(error: unknown) {
+	return error instanceof DOMException && error.name === 'NotFoundError';
 }
 
 async function writeJson(directory: FileSystemDirectoryHandle, name: string, value: unknown) {
