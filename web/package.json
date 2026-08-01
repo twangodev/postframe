@@ -35,6 +35,7 @@
 		"wrangler": "^4.97.0"
 	},
 	"dependencies": {
+		"@icons-pack/svelte-simple-icons": "^7.2.0",
 		"tinykeys": "^4.0.0"
 	}
 }

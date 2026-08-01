@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { Github, Images, Upload, X } from '@lucide/svelte';
+	import { SiGithub } from '@icons-pack/svelte-simple-icons';
+	import { Images, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
@@ -45,8 +46,13 @@
 	async function closeCollectionSetup() {
 		if (!newCollectionOpen || busy) return;
 		newCollectionOpen = false;
+		await openEmptyCollection(collectionName);
+	}
+
+	async function openEmptyCollection(name = '') {
+		if (busy) return;
 		busy = true;
-		await onCreateCollection(collectionName, []);
+		await onCreateCollection(name, []);
 		busy = false;
 	}
 
@@ -57,14 +63,25 @@
 </script>
 
 <main class="bg-bg text-text flex min-h-svh items-center justify-center px-6">
+	<button
+		type="button"
+		aria-label="Continue with an empty collection"
+		title="Continue with an empty collection"
+		class="motion-header text-muted hover:bg-surface hover:text-text absolute top-5 right-5 flex size-9 items-center justify-center rounded transition-colors"
+		onclick={() => openEmptyCollection()}
+		disabled={busy}
+	>
+		<X size={17} strokeWidth={1.5} />
+	</button>
+
 	<a
 		href="https://github.com/twangodev/postframe"
 		target="_blank"
 		rel="noreferrer"
 		aria-label="Postframe on GitHub"
-		class="motion-header text-muted hover:bg-surface hover:text-text absolute top-5 right-5 flex size-9 items-center justify-center rounded transition-colors"
+		class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute right-5 bottom-5 flex size-9 items-center justify-center rounded transition-colors"
 	>
-		<Github size={17} strokeWidth={1.5} />
+		<SiGithub size={15} aria-hidden="true" />
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
