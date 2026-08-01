@@ -41,6 +41,12 @@
 		busy = false;
 		newCollectionOpen = false;
 	}
+
+	async function openEmptyCollection() {
+		busy = true;
+		await onCreateCollection('', []);
+		busy = false;
+	}
 </script>
 
 <main class="bg-bg text-text flex min-h-svh items-center justify-center px-6">
@@ -90,6 +96,16 @@
 				new collection
 			</button>
 		</div>
+
+		<button
+			type="button"
+			class="motion-action border-subtle text-muted hover:bg-surface hover:text-text mt-3 h-7 cursor-pointer rounded border px-2.5 text-[10px] transition-colors"
+			style="--motion-delay: 160ms"
+			onclick={openEmptyCollection}
+			disabled={busy}
+		>
+			empty collection
+		</button>
 	</section>
 </main>
 
