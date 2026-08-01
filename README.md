@@ -6,8 +6,8 @@
 Post-processing built on your JPEGs.
 
 ```sh
-postframe probe shot.RAF shot.JPG    # measure the camera's rendering
-postframe merge *.RAF -o out.jpg     # one bracket, one Ultra HDR JPEG
+postframe probe shot.DNG shot.JPG    # measure the camera's rendering
+postframe merge *.DNG -o out.jpg     # one bracket, one Ultra HDR JPEG
 postframe batch shoot/ -o merged/    # every bracket on the card
 ```
 

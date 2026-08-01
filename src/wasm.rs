@@ -27,9 +27,9 @@ impl Session {
         }
     }
 
-    pub fn add_frame(&mut self, raf: Vec<u8>, jpeg: Option<Vec<u8>>) -> Result<(), JsError> {
+    pub fn add_frame(&mut self, raw: Vec<u8>, jpeg: Option<Vec<u8>>) -> Result<(), JsError> {
         let data = FrameData {
-            raf: Arc::new(raf),
+            raw: Arc::new(raw),
             jpeg,
         };
         self.frames.push(bracket::load(&data).map_err(err)?);

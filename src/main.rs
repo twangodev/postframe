@@ -29,18 +29,18 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
     /// Bracket to open in the gui
-    #[arg(value_name = "RAF")]
-    rafs: Vec<PathBuf>,
+    #[arg(value_name = "RAW")]
+    raws: Vec<PathBuf>,
 }
 
 #[derive(clap::Subcommand)]
 enum Command {
     Probe {
-        raf: PathBuf,
+        raw: PathBuf,
         jpeg: Option<PathBuf>,
     },
     Merge {
-        rafs: Vec<PathBuf>,
+        raws: Vec<PathBuf>,
         #[arg(short, long)]
         output: PathBuf,
         #[arg(long, default_value_t = 0.0)]
@@ -60,36 +60,36 @@ enum Command {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Probe { raf, jpeg }) => probe(&raf, jpeg.as_deref()),
+        Some(Command::Probe { raw, jpeg }) => probe(&raw, jpeg.as_deref()),
         Some(Command::Merge {
-            rafs,
+            raws,
             output,
             ev,
             tone,
-        }) => merge(&rafs, &output, ev, tone),
+        }) => merge(&raws, &output, ev, tone),
         Some(Command::Batch { dir, output, tone }) => batch(&dir, &output, tone),
         None => anyhow::bail!("the web ui is not wired up yet; use a subcommand (see --help)"),
     }
 }
 
 fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
-    let mut rafs: Vec<PathBuf> = std::fs::read_dir(dir)?
+    let mut raws: Vec<PathBuf> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("raf")))
+        .filter(|path| is_supported_raw(path))
         .collect();
-    rafs.sort();
-    if rafs.is_empty() {
-        anyhow::bail!("no RAF files in {}", dir.display());
+    raws.sort();
+    if raws.is_empty() {
+        anyhow::bail!("no supported RAW files in {}", dir.display());
     }
     std::fs::create_dir_all(output)?;
 
     let mut brackets: Vec<Vec<PathBuf>> = Vec::new();
-    for raf in rafs {
-        let bias = frame_bias(&raf)?;
+    for raw in raws {
+        let bias = frame_bias(&raw)?;
         let base_frame = bias.is_none_or(|b| b.abs() < 0.01);
         match brackets.last_mut() {
-            Some(current) if !base_frame => current.push(raf),
-            _ => brackets.push(vec![raf]),
+            Some(current) if !base_frame => current.push(raw),
+            _ => brackets.push(vec![raw]),
         }
     }
 
@@ -119,9 +119,9 @@ fn batch(dir: &Path, output: &Path, tone: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
+fn probe(raw: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
     let data = FrameData {
-        raf: Arc::new(std::fs::read(raf)?),
+        raw: Arc::new(std::fs::read(raw)?),
         jpeg: jpeg.map(std::fs::read).transpose()?,
     };
     let (transfer, report) = postframe::measure(&data)?;
@@ -130,17 +130,17 @@ fn probe(raf: &Path, jpeg: Option<&Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_frame(raf: &Path) -> anyhow::Result<FrameData> {
+fn read_frame(raw: &Path) -> anyhow::Result<FrameData> {
     Ok(FrameData {
-        raf: Arc::new(std::fs::read(raf)?),
-        jpeg: sibling_jpeg(raf).map(std::fs::read).transpose()?,
+        raw: Arc::new(std::fs::read(raw)?),
+        jpeg: sibling_jpeg(raw).map(std::fs::read).transpose()?,
     })
 }
 
-fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result<()> {
-    let frames = rafs
+fn merge(raws: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result<()> {
+    let frames = raws
         .iter()
-        .map(|raf| read_frame(raf))
+        .map(|raw| read_frame(raw))
         .collect::<anyhow::Result<Vec<_>>>()?;
     let merged = postframe::merge(&frames)?;
 
@@ -189,20 +189,28 @@ fn merge(rafs: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
     Ok(())
 }
 
-fn frame_bias(raf: &Path) -> anyhow::Result<Option<f32>> {
-    match sibling_jpeg(raf) {
+fn frame_bias(raw: &Path) -> anyhow::Result<Option<f32>> {
+    match sibling_jpeg(raw) {
         Some(jpeg) => Ok(postframe::decode::sooc::exposure_bias(&std::fs::read(
             jpeg,
         )?)),
-        None => Ok(postframe::bracket::exposure_bias(&read_frame(raf)?)?),
+        None => Ok(postframe::bracket::exposure_bias(&read_frame(raw)?)?),
     }
 }
 
-fn sibling_jpeg(raf: &Path) -> Option<PathBuf> {
+fn sibling_jpeg(raw: &Path) -> Option<PathBuf> {
     ["JPG", "jpg", "JPEG", "jpeg"]
         .iter()
-        .map(|ext| raf.with_extension(ext))
+        .map(|ext| raw.with_extension(ext))
         .find(|p| p.is_file())
+}
+
+fn is_supported_raw(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| {
+        rawler::decoders::supported_extensions()
+            .iter()
+            .any(|supported| extension.eq_ignore_ascii_case(supported))
+    })
 }
 
 fn print_fit(report: &postframe::Report) {

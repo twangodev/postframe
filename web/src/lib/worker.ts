@@ -2,7 +2,7 @@ import init, { Session } from './pf/postframe.js';
 import wasmUrl from './pf/postframe_bg.wasm?url';
 
 export type Request =
-	| { type: 'load'; frames: { raf: ArrayBuffer; jpeg?: ArrayBuffer }[] }
+	| { type: 'load'; frames: { raw: ArrayBuffer; jpeg?: ArrayBuffer }[] }
 	| { type: 'preview'; ev: number; tone: boolean }
 	| { type: 'ultra' }
 	| { type: 'export' };
@@ -33,7 +33,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				for (const frame of message.frames) {
 					post({ type: 'progress', text: `decoding frame ${++done} of ${message.frames.length}` });
 					session.add_frame(
-						new Uint8Array(frame.raf),
+						new Uint8Array(frame.raw),
 						frame.jpeg ? new Uint8Array(frame.jpeg) : undefined
 					);
 				}

@@ -12,7 +12,7 @@ use crate::fit::pair::{Pairing, pair};
 use crate::fit::transfer::{Report, Transfer, measure as fit_transfer};
 
 pub struct FrameData {
-    pub raf: Arc<Vec<u8>>,
+    pub raw: Arc<Vec<u8>>,
     pub jpeg: Option<Vec<u8>>,
 }
 
@@ -61,10 +61,10 @@ pub fn load_full(data: &FrameData) -> Result<Frame> {
 }
 
 fn load_at(data: &FrameData, full_resolution: bool) -> Result<Frame> {
-    let source = RawSource::new_from_shared_vec(data.raf.clone());
+    let source = RawSource::new_from_shared_vec(data.raw.clone());
     let bytes = match &data.jpeg {
         Some(bytes) => bytes.as_slice(),
-        None => embedded_jpeg(&source, data.raf.len() as u64)?,
+        None => embedded_jpeg(&source, data.raw.len() as u64)?,
     };
     let sooc = sooc::decode(bytes)?;
 
@@ -100,6 +100,7 @@ fn load_at(data: &FrameData, full_resolution: bool) -> Result<Frame> {
 }
 
 fn embedded_jpeg(source: &RawSource, file_len: u64) -> Result<&[u8]> {
+    // TODO(WASM_TODOS.photoIngest): resolve embedded previews for non-RAF RAW sources.
     let (offset, len) = crate::decode::raf::jpeg_extent(
         source.subview(0, crate::decode::raf::HEADER_LEN)?,
         file_len,
@@ -111,8 +112,8 @@ pub fn exposure_bias(data: &FrameData) -> Result<Option<f32>> {
     let bias = match &data.jpeg {
         Some(bytes) => sooc::exposure_bias(bytes),
         None => {
-            let source = RawSource::new_from_shared_vec(data.raf.clone());
-            sooc::exposure_bias(embedded_jpeg(&source, data.raf.len() as u64)?)
+            let source = RawSource::new_from_shared_vec(data.raw.clone());
+            sooc::exposure_bias(embedded_jpeg(&source, data.raw.len() as u64)?)
         }
     };
     Ok(bias)
