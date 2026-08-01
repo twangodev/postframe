@@ -40,15 +40,35 @@ export const WASM_TODOS = {
 		bindings: ['constructor', 'free', 'add_frame', 'frame_count', 'merge', 'boost_stops'],
 		planned: ['Session::add_photo', 'Session::thumbnail']
 	},
+	editorCommands: {
+		scope: 'Route menus, shortcuts, context menus, and toolbars through one command system.',
+		bindings: [],
+		planned: ['web EditorCommand dispatcher']
+	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
 		bindings: ['preview_jpeg', 'preview_ultra'],
 		planned: ['Session::render_preview']
 	},
+	colorManagement: {
+		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
+		bindings: ['preview_jpeg', 'preview_ultra', 'export_ultra'],
+		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
+	},
 	adjustments: {
 		scope: 'Apply global and masked adjustments to the render graph.',
 		bindings: ['preview_jpeg'],
 		planned: ['Session::set_adjustments', 'Session::set_mask_adjustments']
+	},
+	documentGeometry: {
+		scope: 'Resize, crop, rotate, distort, warp, and transform document pixels and bounds.',
+		bindings: [],
+		planned: ['Session::resize', 'Session::resize_canvas', 'Session::transform']
+	},
+	selections: {
+		scope: 'Create, combine, refine, transform, save, and restore pixel selections.',
+		bindings: [],
+		planned: ['Session::select', 'Session::refine_selection', 'Session::transform_selection']
 	},
 	editorTools: {
 		scope: 'Execute selection, crop, retouch, paint, type, vector, and measurement tools.',
@@ -65,6 +85,11 @@ export const WASM_TODOS = {
 		bindings: [],
 		planned: ['Session::add_layer', 'Session::update_layer', 'Session::undo', 'Session::redo']
 	},
+	filters: {
+		scope: 'Apply destructive and smart blur, sharpen, noise, lens, and stylize filters.',
+		bindings: [],
+		planned: ['Session::apply_filter', 'Session::add_smart_filter']
+	},
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
 		bindings: ['add_frame'],
@@ -75,9 +100,16 @@ export const WASM_TODOS = {
 		bindings: [],
 		planned: ['model provider', 'Session::composite']
 	},
+	backgroundJobs: {
+		scope: 'Queue, report, cancel, and recover long-running decode, render, and export work.',
+		bindings: ['add_frame', 'merge', 'preview_jpeg', 'preview_ultra', 'export_ultra'],
+		planned: ['worker job queue', 'Session::cancel']
+	},
 	export: {
 		scope: 'Render and download the selected format, color space, quality, and dimensions.',
 		bindings: ['export_ultra'],
 		planned: ['Session::export']
 	}
 } as const satisfies Record<string, ImplementationTodo>;
+
+export type WasmTodoName = keyof typeof WASM_TODOS;
