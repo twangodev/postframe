@@ -34,6 +34,15 @@ export class PostframeWorkerClient {
 		await this.send((id) => ({ id, type: 'validate', raw }), 'validated', [raw]);
 	}
 
+	async inspectRaw(raw: ArrayBuffer, maxDimension = 768) {
+		const response = await this.send(
+			(id) => ({ id, type: 'inspect', raw, maxDimension }),
+			'inspected',
+			[raw]
+		);
+		return response.inspection;
+	}
+
 	async load(frames: RawFrameInput[]) {
 		const transfer = frames.flatMap((frame) =>
 			frame.jpeg ? [frame.raw, frame.jpeg] : [frame.raw]

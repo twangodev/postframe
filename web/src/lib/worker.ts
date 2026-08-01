@@ -1,4 +1,9 @@
-import init, { Session, supported_raw_extensions, validate_raw } from './pf/postframe.js';
+import init, {
+	Session,
+	inspect_raw,
+	supported_raw_extensions,
+	validate_raw
+} from './pf/postframe.js';
 import wasmUrl from './pf/postframe_bg.wasm?url';
 
 export interface RawFrameInput {
@@ -6,9 +11,29 @@ export interface RawFrameInput {
 	jpeg?: ArrayBuffer;
 }
 
+export interface RawMetadata {
+	width: number;
+	height: number;
+	orientation: number;
+	cameraMake: string | null;
+	cameraModel: string | null;
+	lens: string | null;
+	capturedAt: string | null;
+	exposureSeconds: number | null;
+	fNumber: number | null;
+	iso: number | null;
+	focalLengthMm: number | null;
+}
+
+export interface RawInspection {
+	thumbnailJpeg: ArrayBuffer;
+	metadata: RawMetadata;
+}
+
 export type Request =
 	| { id: number; type: 'capabilities' }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
+	| { id: number; type: 'inspect'; raw: ArrayBuffer; maxDimension: number }
 	| { id: number; type: 'load'; frames: RawFrameInput[] }
 	| { id: number; type: 'preview'; ev: number; tone: boolean }
 	| { id: number; type: 'ultra' }
@@ -18,6 +43,7 @@ export type Response =
 	| { id: number; type: 'progress'; text: string }
 	| { id: number; type: 'capabilities'; rawExtensions: string[] }
 	| { id: number; type: 'validated' }
+	| { id: number; type: 'inspected'; inspection: RawInspection }
 	| { id: number; type: 'merged'; boostStops: number }
 	| { id: number; type: 'preview'; jpeg: ArrayBuffer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
@@ -42,6 +68,38 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				validate_raw(new Uint8Array(message.raw));
 				post({ id: message.id, type: 'validated' });
 				break;
+			case 'inspect': {
+				const result = inspect_raw(new Uint8Array(message.raw), message.maxDimension);
+				try {
+					const thumbnailJpeg = result.thumbnail_jpeg.buffer as ArrayBuffer;
+					post(
+						{
+							id: message.id,
+							type: 'inspected',
+							inspection: {
+								thumbnailJpeg,
+								metadata: {
+									width: result.width,
+									height: result.height,
+									orientation: result.orientation,
+									cameraMake: result.camera_make ?? null,
+									cameraModel: result.camera_model ?? null,
+									lens: result.lens ?? null,
+									capturedAt: result.captured_at ?? null,
+									exposureSeconds: result.exposure_seconds ?? null,
+									fNumber: result.f_number ?? null,
+									iso: result.iso ?? null,
+									focalLengthMm: result.focal_length_mm ?? null
+								}
+							}
+						},
+						[thumbnailJpeg]
+					);
+				} finally {
+					result.free();
+				}
+				break;
+			}
 			case 'load': {
 				session?.free();
 				session = new Session();

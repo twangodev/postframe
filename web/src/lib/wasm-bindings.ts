@@ -12,6 +12,7 @@ interface WasmBinding {
 export const WASM_BINDINGS = {
 	supported_raw_extensions: { rust: 'supported_raw_extensions', worker: 'capabilities' },
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
+	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
 	constructor: { rust: 'Session::new', worker: 'load' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'load' },
 	add_frame: { rust: 'Session::add_frame', worker: 'load' },
@@ -22,7 +23,7 @@ export const WASM_BINDINGS = {
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
 } as const satisfies Record<
-	SessionMethod | 'constructor' | 'supported_raw_extensions' | 'validate_raw',
+	SessionMethod | 'constructor' | 'supported_raw_extensions' | 'validate_raw' | 'inspect_raw',
 	WasmBinding
 >;
 
@@ -45,6 +46,7 @@ export const WASM_TODOS = {
 		bindings: [
 			'supported_raw_extensions',
 			'validate_raw',
+			'inspect_raw',
 			'constructor',
 			'free',
 			'add_frame',
@@ -52,7 +54,7 @@ export const WASM_TODOS = {
 			'merge',
 			'boost_stops'
 		],
-		planned: ['Session::add_photo', 'Session::thumbnail']
+		planned: ['Session::add_photo']
 	},
 	editorCommands: {
 		scope: 'Route menus, shortcuts, context menus, and toolbars through one command system.',
@@ -106,8 +108,8 @@ export const WASM_TODOS = {
 	},
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
-		bindings: ['add_frame'],
-		planned: ['Session::frame_metadata', 'Session::histogram']
+		bindings: ['inspect_raw', 'add_frame'],
+		planned: ['Session::histogram']
 	},
 	generative: {
 		scope: 'Run a model-backed edit and composite its result into the active document.',
