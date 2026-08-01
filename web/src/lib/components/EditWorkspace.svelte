@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
+	import { onMount } from 'svelte';
+	import { tinykeys } from 'tinykeys';
 	import {
 		Blend,
 		Brush,
@@ -91,6 +93,86 @@
 		activeToolLabel = label;
 		if (tool.startsWith('mask')) inspectorTab = 'mask';
 	}
+
+	function selectShortcut(tool: string, label: string) {
+		return (event: KeyboardEvent) => {
+			event.preventDefault();
+			chooseTool(tool, label);
+		};
+	}
+
+	function cycleShortcut(tools: [string, string][]) {
+		return (event: KeyboardEvent) => {
+			event.preventDefault();
+			const current = tools.findIndex(([tool]) => tool === activeTool);
+			const [tool, label] = tools[(current + 1) % tools.length];
+			chooseTool(tool, label);
+		};
+	}
+
+	onMount(() =>
+		tinykeys(window, {
+			v: selectShortcut('move', 'move'),
+			h: selectShortcut('hand', 'hand'),
+			z: selectShortcut('zoom', 'zoom'),
+			r: selectShortcut('rotate-view', 'rotate view'),
+			w: cycleShortcut([
+				['object-select', 'object selection'],
+				['quick-select', 'quick selection'],
+				['magic-wand', 'magic wand']
+			]),
+			m: cycleShortcut([
+				['marquee', 'rectangular marquee'],
+				['ellipse-marquee', 'elliptical marquee']
+			]),
+			l: cycleShortcut([
+				['lasso', 'lasso'],
+				['polygon-lasso', 'polygonal lasso'],
+				['magnetic-lasso', 'magnetic lasso']
+			]),
+			c: cycleShortcut([
+				['crop', 'crop'],
+				['perspective-crop', 'perspective crop'],
+				['slice', 'slice'],
+				['frame', 'frame']
+			]),
+			j: cycleShortcut([
+				['remove', 'remove'],
+				['spot-heal', 'spot healing brush'],
+				['healing-brush', 'healing brush'],
+				['patch', 'patch']
+			]),
+			s: selectShortcut('clone-stamp', 'clone stamp'),
+			o: cycleShortcut([
+				['dodge', 'dodge'],
+				['burn', 'burn'],
+				['sponge', 'sponge']
+			]),
+			b: cycleShortcut([
+				['brush', 'brush'],
+				['pencil', 'pencil'],
+				['mixer-brush', 'mixer brush']
+			]),
+			e: selectShortcut('eraser', 'eraser'),
+			g: cycleShortcut([
+				['gradient', 'gradient'],
+				['paint-bucket', 'paint bucket']
+			]),
+			i: cycleShortcut([
+				['eyedropper', 'eyedropper'],
+				['color-sampler', 'color sampler'],
+				['ruler', 'ruler']
+			]),
+			p: cycleShortcut([
+				['pen', 'pen'],
+				['curvature-pen', 'curvature pen']
+			]),
+			a: selectShortcut('path-select', 'path selection'),
+			t: selectShortcut('type', 'type'),
+			u: selectShortcut('shape', 'shape'),
+			q: selectShortcut('mask', 'mask brush')
+		})
+	);
 
 	function addMask(kind: MaskKind) {
 		workspace.createMask(kind);
