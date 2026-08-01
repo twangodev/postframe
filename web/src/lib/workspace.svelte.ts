@@ -128,6 +128,7 @@ export class WorkspaceState {
 	recentCollections = $state<CollectionSummary[]>([]);
 	catalogReady = $state(false);
 	catalogError = $state<string | null>(null);
+	startupReady = $state(false);
 	localStorageAvailable = this.collectionStore !== null;
 	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
@@ -140,8 +141,7 @@ export class WorkspaceState {
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
 
 	constructor() {
-		void this.ensureCapabilities();
-		void this.refreshCollections();
+		void this.initialize();
 	}
 
 	async openSingle(file: File) {
@@ -521,6 +521,13 @@ export class WorkspaceState {
 		if (this.capabilitiesReady) return;
 		this.capabilityLoading ??= this.loadCapabilities();
 		await this.capabilityLoading;
+	}
+
+	private async initialize() {
+		await Promise.all([this.ensureCapabilities(), this.refreshCollections()]);
+		const collection = this.recentCollections.find((candidate) => candidate.photoCount > 0);
+		if (collection) await this.openCollection(collection.id);
+		this.startupReady = true;
 	}
 
 	private async loadCapabilities() {

@@ -6,6 +6,7 @@
 	import ExportDialog from '$lib/components/ExportDialog.svelte';
 	import OrganizeWorkspace from '$lib/components/OrganizeWorkspace.svelte';
 	import Welcome from '$lib/components/Welcome.svelte';
+	import postframeLogo from '$lib/assets/favicon.svg';
 	import { WorkspaceState } from '$lib/workspace.svelte';
 
 	const workspace = new WorkspaceState();
@@ -18,7 +19,14 @@
 	<title>postframe | photo workspace</title>
 </svelte:head>
 
-{#if workspace.mode === 'welcome'}
+{#if !workspace.startupReady}
+	<main class="bg-bg text-text flex min-h-svh items-center justify-center">
+		<div class="motion-enter flex items-center gap-2">
+			<img src={postframeLogo} alt="" class="size-7" />
+			<span class="text-[13px] font-medium tracking-tight">postframe</span>
+		</div>
+	</main>
+{:else if workspace.mode === 'welcome'}
 	<Welcome
 		acceptedPhotos={workspace.acceptedPhotos}
 		sourceReady={workspace.capabilitiesReady}
