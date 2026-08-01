@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { Github, Images, SquareDashed, Upload, X } from '@lucide/svelte';
+	import { Github, Images, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
@@ -40,13 +40,19 @@
 		busy = true;
 		await onCreateCollection(collectionName, files);
 		busy = false;
-		newCollectionOpen = false;
 	}
 
-	async function openEmptyCollection() {
+	async function closeCollectionSetup() {
+		if (!newCollectionOpen || busy) return;
+		newCollectionOpen = false;
 		busy = true;
-		await onCreateCollection('', []);
+		await onCreateCollection(collectionName, []);
 		busy = false;
+	}
+
+	function setCollectionDialogOpen(open: boolean) {
+		if (open) newCollectionOpen = true;
+		else void closeCollectionSetup();
 	}
 </script>
 
@@ -87,32 +93,20 @@
 				open photo
 			</button>
 
-			<div class="collection-action relative flex sm:flex-1">
-				<button
-					type="button"
-					class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 flex-1 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium"
-					style="--motion-delay: 120ms"
-					onclick={() => (newCollectionOpen = true)}
-					disabled={busy}
-				>
-					<span class="collection-label">new collection</span>
-				</button>
-				<button
-					type="button"
-					title="empty collection"
-					aria-label="Open an empty collection"
-					class="empty-collection-action border-subtle bg-elevated text-muted hover:text-text absolute top-1 right-1 flex size-7 cursor-pointer items-center justify-center rounded-sm border"
-					onclick={openEmptyCollection}
-					disabled={busy}
-				>
-					<SquareDashed size={12} strokeWidth={1.4} />
-				</button>
-			</div>
+			<button
+				type="button"
+				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
+				style="--motion-delay: 120ms"
+				onclick={() => (newCollectionOpen = true)}
+				disabled={busy}
+			>
+				new collection
+			</button>
 		</div>
 	</section>
 </main>
 
-<Dialog.Root bind:open={newCollectionOpen}>
+<Dialog.Root open={newCollectionOpen} onOpenChange={setCollectionDialogOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
 		<CenteredDialogContent class="p-5">
@@ -171,12 +165,7 @@
 					{/if}
 				</label>
 
-				<div class="mt-5 flex justify-end gap-2">
-					<Dialog.Close
-						class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-4 py-2 text-[10px] tracking-wide transition-colors"
-					>
-						cancel
-					</Dialog.Close>
+				<div class="mt-5 flex justify-end">
 					<button
 						type="submit"
 						disabled={files.length === 0 || busy}
@@ -189,43 +178,3 @@
 		</CenteredDialogContent>
 	</Dialog.Portal>
 </Dialog.Root>
-
-<style>
-	.collection-label {
-		transition: transform var(--motion-fast) var(--ease-out);
-	}
-
-	.empty-collection-action {
-		pointer-events: none;
-		opacity: 0;
-		transform: translateX(0.25rem) scale(0.96);
-		transition:
-			opacity var(--motion-fast) var(--ease-standard),
-			transform var(--motion-fast) var(--ease-out),
-			color var(--motion-fast) var(--ease-standard);
-	}
-
-	.collection-action:hover .collection-label,
-	.collection-action:focus-within .collection-label {
-		transform: translateX(-0.75rem);
-	}
-
-	.collection-action:hover .empty-collection-action,
-	.collection-action:focus-within .empty-collection-action {
-		pointer-events: auto;
-		opacity: 1;
-		transform: translateX(0) scale(1);
-	}
-
-	@media (hover: none) {
-		.collection-label {
-			transform: translateX(-0.75rem);
-		}
-
-		.empty-collection-action {
-			pointer-events: auto;
-			opacity: 1;
-			transform: translateX(0) scale(1);
-		}
-	}
-</style>
