@@ -86,21 +86,21 @@
 				open photo
 			</button>
 
-			<div class="group relative flex sm:flex-1">
+			<div class="collection-action relative flex sm:flex-1">
 				<button
 					type="button"
-					class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 flex-1 cursor-pointer items-center justify-center rounded border px-4 pr-11 text-xs font-medium"
+					class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 flex-1 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium"
 					style="--motion-delay: 120ms"
 					onclick={() => (newCollectionOpen = true)}
 					disabled={busy}
 				>
-					new collection
+					<span class="collection-label">new collection</span>
 				</button>
 				<button
 					type="button"
 					title="empty collection"
 					aria-label="Open an empty collection"
-					class="border-subtle bg-elevated text-muted hover:text-text absolute top-1 right-1 flex size-7 cursor-pointer items-center justify-center rounded-sm border transition-[opacity,transform,color] sm:translate-x-1 sm:opacity-0 sm:group-focus-within:translate-x-0 sm:group-focus-within:opacity-100 sm:group-hover:translate-x-0 sm:group-hover:opacity-100"
+					class="empty-collection-action border-subtle bg-elevated text-muted hover:text-text absolute top-1 right-1 flex size-7 cursor-pointer items-center justify-center rounded-sm border"
 					onclick={openEmptyCollection}
 					disabled={busy}
 				>
@@ -190,3 +190,43 @@
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
+
+<style>
+	.collection-label {
+		transition: transform var(--motion-fast) var(--ease-out);
+	}
+
+	.empty-collection-action {
+		pointer-events: none;
+		opacity: 0;
+		transform: translateX(0.25rem) scale(0.96);
+		transition:
+			opacity var(--motion-fast) var(--ease-standard),
+			transform var(--motion-fast) var(--ease-out),
+			color var(--motion-fast) var(--ease-standard);
+	}
+
+	.collection-action:hover .collection-label,
+	.collection-action:focus-within .collection-label {
+		transform: translateX(-0.75rem);
+	}
+
+	.collection-action:hover .empty-collection-action,
+	.collection-action:focus-within .empty-collection-action {
+		pointer-events: auto;
+		opacity: 1;
+		transform: translateX(0) scale(1);
+	}
+
+	@media (hover: none) {
+		.collection-label {
+			transform: translateX(-0.75rem);
+		}
+
+		.empty-collection-action {
+			pointer-events: auto;
+			opacity: 1;
+			transform: translateX(0) scale(1);
+		}
+	}
+</style>
