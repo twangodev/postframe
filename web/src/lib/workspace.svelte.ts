@@ -4,15 +4,23 @@ import {
 	type PhotoKind,
 	type PhotoSource
 } from './photo-source';
+import {
+	CollectionStore,
+	type CollectionManifest,
+	type OriginalWrite,
+	type StoredPhoto
+} from './collection-store';
 
 export { ACCEPTED_PHOTOS } from './photo-source';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
+export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 
 export interface Photo {
 	id: string;
+	storageName: string;
 	name: string;
 	extension: string;
 	src: string | null;
@@ -47,6 +55,11 @@ export interface Mask {
 	name: string;
 	kind: MaskKind;
 	visible: boolean;
+}
+
+interface PhotoImport {
+	photo: Photo;
+	original: OriginalWrite;
 }
 
 const defaultAdjustments = {
@@ -86,7 +99,13 @@ function dateLabel(timestamp: number) {
 }
 
 export class WorkspaceState {
-	// TODO(WASM_TODOS.collectionStorage): replace session-only state with an OPFS-backed catalog.
+	private readonly collectionStore = CollectionStore.supported() ? new CollectionStore() : null;
+	private collectionId: string | null = null;
+	private collectionCreatedAt = 0;
+	private persistence = Promise.resolve();
+	private persistenceRevision = 0;
+	private objectUrls = new Set<string>();
+
 	mode = $state<WorkspaceMode>('welcome');
 	collectionName = $state('');
 	photos = $state<Photo[]>([]);
@@ -96,6 +115,8 @@ export class WorkspaceState {
 	activePhotoId = $state<string | null>(null);
 	masks = $state<Mask[]>([]);
 	selectedMaskId = $state<string | null>(null);
+	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
+	storageError = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
 	adjustments = $state({ ...defaultAdjustments });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
@@ -104,39 +125,39 @@ export class WorkspaceState {
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
 
-	private objectUrls = new Set<string>();
-
 	async openSingle(file: File) {
 		// TODO(WASM_TODOS.photoIngest): route the file through worker load and the Session bindings.
 		this.clearFiles();
-		const photo = await this.photoFromFile(file);
-		if (!photo) return;
-		this.photos = [photo];
-		this.collectionName = file.name.replace(/\.[^.]+$/, '');
-		this.selectedIds = [photo.id];
-		this.activePhotoId = photo.id;
+		const imported = await this.photoFromFile(file);
+		if (!imported) return;
+		this.beginCollection(file.name.replace(/\.[^.]+$/, ''), [imported.photo]);
 		this.mode = 'edit';
-		this.resetEditState();
+		await this.queuePersistence([imported.original]);
 	}
 
 	async createCollection(name: string, files: File[]) {
-		// TODO(WASM_TODOS.collectionStorage): create the collection and originals store in OPFS.
 		this.clearFiles();
-		this.photos = await this.photosFromFiles(files);
-		this.collectionName = name.trim() || 'untitled collection';
-		this.selectedIds = this.photos[0] ? [this.photos[0].id] : [];
-		this.activePhotoId = this.photos[0]?.id ?? null;
+		const imported = await this.photosFromFiles(files);
+		this.beginCollection(
+			name.trim() || 'untitled collection',
+			imported.map(({ photo }) => photo)
+		);
 		this.mode = 'organize';
-		this.resetEditState();
+		await this.queuePersistence(imported.map(({ original }) => original));
 	}
 
 	async importFiles(files: File[]) {
 		// TODO(WASM_TODOS.photoIngest): ingest and thumbnail these files through the Wasm worker.
 		const imported = await this.photosFromFiles(files);
-		this.photos.push(...imported);
-		if (!this.activePhotoId && imported[0]) {
-			this.selectPhoto(imported[0].id);
+		this.photos.push(...imported.map(({ photo }) => photo));
+		if (!this.activePhotoId && imported[0]?.photo) {
+			this.selectPhoto(imported[0].photo.id);
 		}
+		await this.queuePersistence(imported.map(({ original }) => original));
+	}
+
+	async save() {
+		await this.queuePersistence();
 	}
 
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
@@ -162,17 +183,23 @@ export class WorkspaceState {
 
 	setRating(photoId: string, rating: number) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
-		if (photo) photo.rating = photo.rating === rating ? 0 : rating;
+		if (!photo) return;
+		photo.rating = photo.rating === rating ? 0 : rating;
+		void this.queuePersistence();
 	}
 
 	toggleFlag(photoId: string) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
-		if (photo) photo.flagged = !photo.flagged;
+		if (!photo) return;
+		photo.flagged = !photo.flagged;
+		void this.queuePersistence();
 	}
 
 	setColorLabel(photoId: string, colorLabel: ColorLabel) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
-		if (photo) photo.colorLabel = colorLabel;
+		if (!photo) return;
+		photo.colorLabel = colorLabel;
+		void this.queuePersistence();
 	}
 
 	createAlbum(name: string) {
@@ -181,6 +208,7 @@ export class WorkspaceState {
 		const album = { id: id('album'), name: trimmed };
 		this.albums.push(album);
 		for (const photo of this.selectedPhotos) photo.albumIds.push(album.id);
+		void this.queuePersistence();
 	}
 
 	toggleAlbum(photoId: string, albumId: string) {
@@ -189,6 +217,7 @@ export class WorkspaceState {
 		photo.albumIds = photo.albumIds.includes(albumId)
 			? photo.albumIds.filter((id) => id !== albumId)
 			: [...photo.albumIds, albumId];
+		void this.queuePersistence();
 	}
 
 	createStack() {
@@ -216,6 +245,7 @@ export class WorkspaceState {
 		for (const photo of this.photos) {
 			if (photoIds.includes(photo.id)) photo.stackId = stack.id;
 		}
+		void this.queuePersistence();
 	}
 
 	ungroupStack(stackId: string) {
@@ -223,11 +253,14 @@ export class WorkspaceState {
 			if (photo.stackId === stackId) photo.stackId = null;
 		}
 		this.stacks = this.stacks.filter((stack) => stack.id !== stackId);
+		void this.queuePersistence();
 	}
 
 	toggleStack(stackId: string) {
 		const stack = this.stacks.find((candidate) => candidate.id === stackId);
-		if (stack) stack.collapsed = !stack.collapsed;
+		if (!stack) return;
+		stack.collapsed = !stack.collapsed;
+		void this.queuePersistence();
 	}
 
 	createMask(kind: MaskKind) {
@@ -260,6 +293,9 @@ export class WorkspaceState {
 
 	reset() {
 		this.clearFiles();
+		this.persistenceRevision += 1;
+		this.collectionId = null;
+		this.collectionCreatedAt = 0;
 		this.mode = 'welcome';
 		this.collectionName = '';
 		this.photos = [];
@@ -267,6 +303,8 @@ export class WorkspaceState {
 		this.stacks = [];
 		this.selectedIds = [];
 		this.activePhotoId = null;
+		this.storageStatus = this.collectionStore ? 'saved' : 'memory';
+		this.storageError = null;
 		this.resetEditState();
 	}
 
@@ -286,12 +324,25 @@ export class WorkspaceState {
 		this.objectUrls.clear();
 	}
 
-	private async photosFromFiles(files: File[]) {
-		const photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
-		return photos.filter((photo): photo is Photo => photo !== null);
+	private beginCollection(name: string, photos: Photo[]) {
+		this.collectionId = id('collection');
+		this.collectionCreatedAt = Date.now();
+		this.collectionName = name;
+		this.photos = photos;
+		this.albums = [];
+		this.stacks = [];
+		this.selectedIds = photos[0] ? [photos[0].id] : [];
+		this.activePhotoId = photos[0]?.id ?? null;
+		this.storageError = null;
+		this.resetEditState();
 	}
 
-	private async photoFromFile(file: File): Promise<Photo | null> {
+	private async photosFromFiles(files: File[]) {
+		const imported = await Promise.all(files.map((file) => this.photoFromFile(file)));
+		return imported.filter((photo): photo is PhotoImport => photo !== null);
+	}
+
+	private async photoFromFile(file: File): Promise<PhotoImport | null> {
 		// TODO(WASM_TODOS.photoIngest): replace browser metadata and the RAW placeholder with Wasm output.
 		const source = describePhotoSource(file);
 		if (!source) return null;
@@ -300,8 +351,11 @@ export class WorkspaceState {
 		if (src) this.objectUrls.add(src);
 
 		const dimensions = src ? await this.readDimensions(src) : null;
-		return {
-			id: id('photo'),
+		const photoId = id('photo');
+		const storageName = `${photoId}.${source.format}`;
+		const photo = {
+			id: photoId,
+			storageName,
 			name: file.name,
 			extension: extension(file.name),
 			src,
@@ -317,7 +371,67 @@ export class WorkspaceState {
 			colorLabel: 'none',
 			albumIds: [],
 			stackId: null
+		} satisfies Photo;
+
+		return { photo, original: { storageName, file } };
+	}
+
+	private collectionManifest(): CollectionManifest | null {
+		if (!this.collectionId) return null;
+
+		return {
+			version: 1,
+			id: this.collectionId,
+			name: this.collectionName,
+			createdAt: this.collectionCreatedAt,
+			updatedAt: Date.now(),
+			photos: this.photos.map((photo) => this.storedPhoto(photo)),
+			albums: this.albums.map((album) => ({ ...album })),
+			stacks: this.stacks.map((stack) => ({ ...stack, photoIds: [...stack.photoIds] }))
 		};
+	}
+
+	private storedPhoto(photo: Photo): StoredPhoto {
+		return {
+			id: photo.id,
+			storageName: photo.storageName,
+			name: photo.name,
+			source: { ...photo.source },
+			width: photo.width,
+			height: photo.height,
+			rating: photo.rating,
+			flagged: photo.flagged,
+			rejected: photo.rejected,
+			colorLabel: photo.colorLabel,
+			albumIds: [...photo.albumIds],
+			stackId: photo.stackId
+		};
+	}
+
+	private queuePersistence(originals: readonly OriginalWrite[] = []) {
+		const manifest = this.collectionManifest();
+		const store = this.collectionStore;
+		if (!store || !manifest) {
+			this.storageStatus = 'memory';
+			return Promise.resolve();
+		}
+
+		const revision = ++this.persistenceRevision;
+		this.storageStatus = 'saving';
+		this.storageError = null;
+		const save = this.persistence.then(() => store.saveCollection(manifest, originals));
+		this.persistence = save.then(
+			() => {
+				if (revision !== this.persistenceRevision) return;
+				this.storageStatus = 'saved';
+			},
+			(error: unknown) => {
+				if (revision !== this.persistenceRevision) return;
+				this.storageStatus = 'error';
+				this.storageError = error instanceof Error ? error.message : 'Unable to save collection';
+			}
+		);
+		return this.persistence;
 	}
 
 	private readDimensions(src: string): Promise<{ width: number; height: number } | null> {

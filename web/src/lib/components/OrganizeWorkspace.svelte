@@ -43,7 +43,6 @@
 	let importing = $state(false);
 
 	const active = $derived(workspace.selectedPhoto);
-	// TODO(WASM_TODOS.collectionStorage): persist organizer changes and restore this view from OPFS.
 	const selectedStack = $derived(
 		workspace.stacks.find((stack) =>
 			workspace.selectedIds.some((id) => stack.photoIds.includes(id))

@@ -31,10 +31,11 @@ export const RAW_EXTENSIONS = [
 ] as const;
 
 export const DISPLAY_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'avif'] as const;
+export const PHOTO_EXTENSIONS = [...DISPLAY_EXTENSIONS, ...RAW_EXTENSIONS] as const;
 
 export type RawExtension = (typeof RAW_EXTENSIONS)[number];
 export type DisplayExtension = (typeof DISPLAY_EXTENSIONS)[number];
-export type PhotoExtension = RawExtension | DisplayExtension;
+export type PhotoExtension = (typeof PHOTO_EXTENSIONS)[number];
 export type PhotoKind = 'raw' | 'image';
 
 export interface PhotoSource {
@@ -48,9 +49,7 @@ export interface PhotoSource {
 const rawExtensions = new Set<string>(RAW_EXTENSIONS);
 const displayExtensions = new Set<string>(DISPLAY_EXTENSIONS);
 
-export const ACCEPTED_PHOTOS = [...DISPLAY_EXTENSIONS, ...RAW_EXTENSIONS]
-	.map((extension) => `.${extension}`)
-	.join(',');
+export const ACCEPTED_PHOTOS = PHOTO_EXTENSIONS.map((extension) => `.${extension}`).join(',');
 
 export function fileExtension(name: string) {
 	return name.split('.').pop()?.toLowerCase() ?? '';

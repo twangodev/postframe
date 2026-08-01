@@ -49,7 +49,7 @@
 		<h1 class="mt-3 text-xl font-medium tracking-tight">a little more room, please.</h1>
 		<p class="text-muted mt-3 max-w-sm text-xs leading-relaxed">
 			postframe's editing workspace is designed for displays at least 900 pixels wide. your files
-			remain only in this browser session.
+			remain in this browser's local storage.
 		</p>
 		<button
 			type="button"

@@ -38,6 +38,9 @@
 			case 'show-organizer':
 				workspace.setMode('organize');
 				break;
+			case 'save-collection':
+				void workspace.save();
+				break;
 			case 'export':
 				onExport();
 				break;
@@ -57,6 +60,7 @@
 		tinykeys(window, {
 			'$mod+n': shortcut('new-collection'),
 			'$mod+o': shortcut('import-photos'),
+			'$mod+s': shortcut('save-collection'),
 			'$mod+Shift+e': shortcut('export'),
 			'$mod+w': shortcut('close-collection')
 		})
@@ -83,8 +87,19 @@
 			<span class="bg-subtle h-4 w-px"></span>
 			<div class="min-w-0">
 				<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
-				<p class="text-muted text-[10px] tracking-wide">
-					{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} · local
+				<p
+					class:text-negative={workspace.storageStatus === 'error'}
+					class="text-muted text-[10px] tracking-wide"
+					title={workspace.storageError ?? undefined}
+				>
+					{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} ·
+					{workspace.storageStatus === 'saving'
+						? 'saving'
+						: workspace.storageStatus === 'saved'
+							? 'saved locally'
+							: workspace.storageStatus === 'error'
+								? 'save failed'
+								: 'memory only'}
 				</p>
 			</div>
 		</div>

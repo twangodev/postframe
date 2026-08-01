@@ -31,9 +31,9 @@ interface ImplementationTodo {
 
 export const WASM_TODOS = {
 	collectionStorage: {
-		scope: 'Persist collections, originals, catalog data, and non-destructive edits in OPFS.',
+		scope: 'Restore saved collections and persist non-destructive render graph edits in OPFS.',
 		bindings: ['constructor', 'add_frame'],
-		planned: ['browser OPFS catalog']
+		planned: ['collection picker', 'OPFS recovery', 'versioned edit snapshots']
 	},
 	photoIngest: {
 		scope: 'Decode imported files, pair RAW and JPEG frames, merge brackets, and build thumbnails.',
