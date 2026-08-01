@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { Github, Images, Upload, X } from '@lucide/svelte';
+	import { Github, Images, SquareDashed, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import { ACCEPTED_PHOTOS } from '$lib/workspace.svelte';
 
@@ -86,26 +86,28 @@
 				open photo
 			</button>
 
-			<button
-				type="button"
-				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
-				style="--motion-delay: 120ms"
-				onclick={() => (newCollectionOpen = true)}
-				disabled={busy}
-			>
-				new collection
-			</button>
+			<div class="group relative flex sm:flex-1">
+				<button
+					type="button"
+					class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 flex-1 cursor-pointer items-center justify-center rounded border px-4 pr-11 text-xs font-medium"
+					style="--motion-delay: 120ms"
+					onclick={() => (newCollectionOpen = true)}
+					disabled={busy}
+				>
+					new collection
+				</button>
+				<button
+					type="button"
+					title="empty collection"
+					aria-label="Open an empty collection"
+					class="border-subtle bg-elevated text-muted hover:text-text absolute top-1 right-1 flex size-7 cursor-pointer items-center justify-center rounded-sm border transition-[opacity,transform,color] sm:translate-x-1 sm:opacity-0 sm:group-focus-within:translate-x-0 sm:group-focus-within:opacity-100 sm:group-hover:translate-x-0 sm:group-hover:opacity-100"
+					onclick={openEmptyCollection}
+					disabled={busy}
+				>
+					<SquareDashed size={12} strokeWidth={1.4} />
+				</button>
+			</div>
 		</div>
-
-		<button
-			type="button"
-			class="motion-action border-subtle text-muted hover:bg-surface hover:text-text mt-3 h-7 cursor-pointer rounded border px-2.5 text-[10px] transition-colors"
-			style="--motion-delay: 160ms"
-			onclick={openEmptyCollection}
-			disabled={busy}
-		>
-			empty collection
-		</button>
 	</section>
 </main>
 
