@@ -35,10 +35,14 @@
 		catalogReady={workspace.catalogReady}
 		catalogError={workspace.catalogError}
 		localStorageAvailable={workspace.localStorageAvailable}
+		storageStatus={workspace.browserStorageStatus}
+		storageError={workspace.browserStorageError}
 		onOpenPhoto={(file) => workspace.openSingle(file)}
 		onCreateCollection={(name, files) => workspace.createCollection(name, files)}
 		onOpenCollection={(collectionId) => workspace.openCollection(collectionId)}
 		onClearLocalData={() => workspace.clearLocalData()}
+		onRefreshStorage={() => workspace.refreshBrowserStorage()}
+		onRequestPersistence={() => workspace.requestPersistentStorage()}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">

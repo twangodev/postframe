@@ -13,6 +13,11 @@ import {
 	type StoredPhoto
 } from './collection-store';
 import { PostframeWorkerClient } from './worker-client';
+import {
+	BrowserStorageService,
+	storageErrorMessage,
+	type BrowserStorageStatus
+} from './browser-storage';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -101,6 +106,7 @@ function dateLabel(timestamp: number) {
 
 export class WorkspaceState {
 	private readonly collectionStore = CollectionStore.supported() ? new CollectionStore() : null;
+	private readonly browserStorage = new BrowserStorageService();
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
 	private readonly rawExtensions = new Set<string>();
@@ -132,6 +138,8 @@ export class WorkspaceState {
 	localStorageAvailable = this.collectionStore !== null;
 	storageStatus = $state<StorageStatus>(this.collectionStore ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
+	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
+	browserStorageError = $state<string | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
 	adjustments = $state({ ...defaultAdjustments });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
@@ -230,8 +238,31 @@ export class WorkspaceState {
 			await store.clearAll();
 			this.recentCollections = [];
 			this.catalogReady = true;
+			await this.refreshBrowserStorage();
 		} catch (error) {
 			this.catalogError = error instanceof Error ? error.message : 'Unable to clear local data';
+			throw error;
+		}
+	}
+
+	async refreshBrowserStorage() {
+		this.browserStorageError = null;
+		try {
+			this.browserStorageStatus = await this.browserStorage.status();
+		} catch (error) {
+			this.browserStorageError = storageErrorMessage(error);
+			throw error;
+		}
+	}
+
+	async requestPersistentStorage() {
+		this.browserStorageError = null;
+		try {
+			const result = await this.browserStorage.requestPersistence();
+			this.browserStorageStatus = result.status;
+		} catch (error) {
+			this.browserStorageError = storageErrorMessage(error);
+			throw error;
 		}
 	}
 
@@ -524,7 +555,11 @@ export class WorkspaceState {
 	}
 
 	private async initialize() {
-		await Promise.all([this.ensureCapabilities(), this.refreshCollections()]);
+		await Promise.all([
+			this.ensureCapabilities(),
+			this.refreshCollections(),
+			this.refreshBrowserStorage().catch(() => undefined)
+		]);
 		const collection = this.recentCollections.find((candidate) => candidate.photoCount > 0);
 		if (collection) await this.openCollection(collection.id);
 		this.startupReady = true;

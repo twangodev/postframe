@@ -4,6 +4,8 @@
 	import { Images, Upload, X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import StorageManagementDialog from './StorageManagementDialog.svelte';
+	import type { BrowserStorageStatus } from '$lib/browser-storage';
 	import type { CollectionSummary } from '$lib/collection-store';
 
 	interface Props {
@@ -14,10 +16,14 @@
 		catalogReady: boolean;
 		catalogError: string | null;
 		localStorageAvailable: boolean;
+		storageStatus: BrowserStorageStatus | null;
+		storageError: string | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onOpenCollection: (collectionId: string) => Promise<void>;
 		onClearLocalData: () => Promise<void>;
+		onRefreshStorage: () => Promise<void>;
+		onRequestPersistence: () => Promise<void>;
 	}
 
 	let {
@@ -28,17 +34,20 @@
 		catalogReady,
 		catalogError,
 		localStorageAvailable,
+		storageStatus,
+		storageError,
 		onOpenPhoto,
 		onCreateCollection,
 		onOpenCollection,
-		onClearLocalData
+		onClearLocalData,
+		onRefreshStorage,
+		onRequestPersistence
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
-	let clearDataOpen = $state(false);
+	let storageOpen = $state(false);
 	let collectionName = $state('');
 	let files = $state<File[]>([]);
 	let busy = $state(false);
-	let clearing = $state(false);
 	let openPhotoInput: HTMLInputElement;
 
 	async function openPhoto(event: Event) {
@@ -60,12 +69,9 @@
 		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(timestamp);
 	}
 
-	async function clearLocalData() {
-		if (clearing) return;
-		clearing = true;
-		await onClearLocalData();
-		clearing = false;
-		clearDataOpen = false;
+	function openStorage() {
+		storageOpen = true;
+		void onRefreshStorage();
 	}
 
 	function chooseFiles(list: FileList | null) {
@@ -130,9 +136,9 @@
 		<button
 			type="button"
 			class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute bottom-5 left-5 rounded px-2.5 py-2 text-[10px] transition-colors"
-			onclick={() => (clearDataOpen = true)}
+			onclick={openStorage}
 		>
-			clear local data
+			local storage
 		</button>
 	{/if}
 
@@ -280,43 +286,11 @@
 	</Dialog.Portal>
 </Dialog.Root>
 
-<Dialog.Root bind:open={clearDataOpen}>
-	<Dialog.Portal>
-		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<CenteredDialogContent class="p-5">
-			<div class="flex items-start justify-between">
-				<div>
-					<Dialog.Title class="text-sm font-medium tracking-tight">clear local data?</Dialog.Title>
-					<Dialog.Description class="text-muted mt-1 max-w-sm text-xs leading-relaxed">
-						deletes every postframe collection and original stored in this browser. this cannot be
-						undone.
-					</Dialog.Description>
-				</div>
-				<Dialog.Close
-					aria-label="Close"
-					disabled={clearing}
-					class="text-muted hover:text-text cursor-pointer rounded p-1 transition-colors disabled:cursor-wait disabled:opacity-40"
-				>
-					<X size={16} />
-				</Dialog.Close>
-			</div>
-
-			<div class="mt-6 flex justify-end gap-2">
-				<Dialog.Close
-					disabled={clearing}
-					class="border-subtle text-muted hover:bg-surface hover:text-text cursor-pointer rounded border px-3 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
-				>
-					cancel
-				</Dialog.Close>
-				<button
-					type="button"
-					disabled={clearing}
-					class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[10px] font-medium transition-opacity disabled:cursor-wait disabled:opacity-45"
-					onclick={clearLocalData}
-				>
-					{clearing ? 'clearing…' : 'clear all'}
-				</button>
-			</div>
-		</CenteredDialogContent>
-	</Dialog.Portal>
-</Dialog.Root>
+<StorageManagementDialog
+	bind:open={storageOpen}
+	status={storageStatus}
+	error={storageError}
+	onRefresh={onRefreshStorage}
+	{onRequestPersistence}
+	{onClearLocalData}
+/>
