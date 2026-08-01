@@ -8,6 +8,7 @@
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
 	},
-	"workers_dev": true,
+	"routes": [{ "pattern": "postframe.twango.dev", "custom_domain": true }],
+	"workers_dev": false,
 	"preview_urls": true
 }
