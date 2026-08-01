@@ -54,15 +54,15 @@
 		<Tabs.List class="border-subtle bg-surface flex h-8 items-center rounded border p-0.5">
 			<Tabs.Trigger
 				value="organize"
-				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.05em] uppercase transition-colors"
+				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.03em] transition-colors"
 			>
-				Organize
+				organize
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="edit"
-				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.05em] uppercase transition-colors"
+				class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 font-mono text-[10px] tracking-[0.03em] transition-colors"
 			>
-				Edit
+				edit
 			</Tabs.Trigger>
 		</Tabs.List>
 	</Tabs.Root>
@@ -105,7 +105,7 @@
 			onclick={onExport}
 		>
 			<Download size={12} strokeWidth={1.5} />
-			<span class="hidden sm:inline">Export</span>
+			<span class="hidden sm:inline">export</span>
 		</button>
 	</div>
 </header>

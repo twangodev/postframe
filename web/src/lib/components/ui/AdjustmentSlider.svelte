@@ -29,7 +29,7 @@
 </script>
 
 <div class="grid grid-cols-[4.75rem_1fr_2.75rem] items-center gap-2 py-1">
-	<span class="text-text/75 truncate text-[11px]">{label}</span>
+	<span class="text-text/75 truncate text-[10px] lowercase">{label}</span>
 	<Slider.Root
 		type="single"
 		bind:value

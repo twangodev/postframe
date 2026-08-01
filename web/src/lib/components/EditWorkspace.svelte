@@ -206,7 +206,7 @@
 					onclick={() => (before = !before)}
 				>
 					<Columns2 size={11} />
-					{before ? 'Before' : 'After'}
+					{before ? 'before' : 'after'}
 				</button>
 			</div>
 
@@ -218,11 +218,11 @@
 					<div
 						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded border px-2 py-1.5 shadow-lg"
 					>
-						<span class="text-muted font-mono text-[10px]">Aspect</span>
+						<span class="text-muted font-mono text-[10px]">aspect</span>
 						<button
 							type="button"
 							class="border-subtle bg-surface cursor-pointer rounded border px-2 py-1 text-[10px]"
-							>Original</button
+							>original</button
 						>
 						<span class="bg-subtle h-4 w-px"></span>
 						<RotateCcw size={12} class="text-muted" />
@@ -232,10 +232,10 @@
 					<div
 						class="motion-enter border-subtle bg-bg absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded border px-3 py-2 shadow-lg"
 					>
-						<span class="text-muted font-mono text-[10px]">Heal</span>
-						<span class="text-text text-[10px]">Size 42</span>
-						<span class="text-text text-[10px]">Feather 65</span>
-						<span class="text-text text-[10px]">Opacity 100</span>
+						<span class="text-muted font-mono text-[10px]">heal</span>
+						<span class="text-text text-[10px]">size 42</span>
+						<span class="text-text text-[10px]">feather 65</span>
+						<span class="text-text text-[10px]">opacity 100</span>
 					</div>
 				{/if}
 				{#if active}
@@ -252,7 +252,7 @@
 									<span
 										class="absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 font-mono text-[10px] tracking-wide text-white backdrop-blur"
 									>
-										Before
+										before
 									</span>
 								{/if}
 								{#if activeTool === 'crop'}
@@ -282,14 +282,14 @@
 						</div>
 					{/key}
 				{:else}
-					<p class="text-muted font-mono text-[10px]">Select a photo in Organize.</p>
+					<p class="text-muted font-mono text-[10px]">select a photo in organize.</p>
 				{/if}
 			</div>
 
 			<footer
 				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 font-mono text-[10px] tracking-wide"
 			>
-				<span>Display · SDR preview</span>
+				<span>display · SDR preview</span>
 				<span>{active?.width ?? '—'} × {active?.height ?? '—'} px</span>
 			</footer>
 		</section>
@@ -301,15 +301,15 @@
 				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-2 border-b px-2 pt-1">
 					<Tabs.Trigger
 						value="adjust"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.06em] uppercase"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.03em]"
 					>
-						Adjust
+						adjust
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="mask"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.06em] uppercase"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent font-mono text-[10px] tracking-[0.03em]"
 					>
-						Mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
+						mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
 								>{workspace.masks.length}</span
 							>{/if}
 					</Tabs.Trigger>
@@ -326,7 +326,7 @@
 							{/each}
 						</div>
 						<div class="text-muted mt-2 flex justify-between font-mono text-[10px]">
-							<span>0</span><span>Histogram</span><span>255</span>
+							<span>0</span><span>histogram</span><span>255</span>
 						</div>
 					</div>
 
@@ -335,7 +335,7 @@
 							type="button"
 							class="border-subtle bg-surface text-text/80 hover:border-muted flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[11px]"
 						>
-							<span>Camera Standard</span><span class="text-muted font-mono text-[10px]">PF</span>
+							<span>camera standard</span><span class="text-muted font-mono text-[10px]">PF</span>
 						</button>
 					</Panel>
 
@@ -413,7 +413,7 @@
 							type="button"
 							class="border-subtle text-muted hover:text-text mt-2 flex w-full cursor-pointer items-center justify-between rounded border px-2 py-2 text-[10px]"
 						>
-							Color mixer <SlidersHorizontal size={12} />
+							color mixer <SlidersHorizontal size={12} />
 						</button>
 					</Panel>
 
@@ -456,11 +456,11 @@
 					</Panel>
 
 					<Panel title="Optics" open={false}>
-						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[11px]">
-							<input type="checkbox" checked class="accent-accent" /> Remove chromatic aberration
+						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[10px]">
+							<input type="checkbox" checked class="accent-accent" /> remove chromatic aberration
 						</label>
-						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[11px]">
-							<input type="checkbox" checked class="accent-accent" /> Use lens profile
+						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[10px]">
+							<input type="checkbox" checked class="accent-accent" /> use lens profile
 						</label>
 					</Panel>
 
@@ -469,7 +469,7 @@
 							{#each ['Clean color', 'Soft highlight', 'Neutral portrait', 'Cinematic dusk'] as preset}
 								<button
 									type="button"
-									class="text-muted hover:bg-surface hover:text-text flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px]"
+									class="text-muted hover:bg-surface hover:text-text flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[10px] lowercase"
 								>
 									<Sparkles size={11} />
 									{preset}
@@ -482,7 +482,7 @@
 						<div class="border-subtle space-y-2 border-l pl-3">
 							{#each [...workspace.history].reverse() as item, index}
 								<div
-									class="flex items-center gap-2 text-[10px] {index === 0
+									class="flex items-center gap-2 text-[10px] lowercase {index === 0
 										? 'text-text'
 										: 'text-muted'}"
 								>
@@ -496,34 +496,32 @@
 
 				<Tabs.Content value="mask" class="motion-tab">
 					<div class="border-subtle border-b p-3">
-						<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.06em] uppercase">
-							New mask
-						</p>
+						<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.03em]">new mask</p>
 						<div class="grid grid-cols-3 gap-1.5">
 							<button type="button" class="mask-choice" onclick={() => addMask('brush')}
-								><Brush size={15} /><span>Brush</span></button
+								><Brush size={15} /><span>brush</span></button
 							>
 							<button type="button" class="mask-choice" onclick={() => addMask('linear')}
-								><Blend size={15} /><span>Linear</span></button
+								><Blend size={15} /><span>linear</span></button
 							>
 							<button type="button" class="mask-choice" onclick={() => addMask('radial')}
-								><CircleDashed size={15} /><span>Radial</span></button
+								><CircleDashed size={15} /><span>radial</span></button
 							>
 							<button type="button" class="mask-choice" onclick={() => addMask('subject')}
-								><UserRound size={15} /><span>Subject</span></button
+								><UserRound size={15} /><span>subject</span></button
 							>
 							<button type="button" class="mask-choice" onclick={() => addMask('sky')}
-								><CloudSun size={15} /><span>Sky</span></button
+								><CloudSun size={15} /><span>sky</span></button
 							>
 							<button type="button" class="mask-choice" onclick={() => addMask('background')}
-								><Mountain size={15} /><span>Background</span></button
+								><Mountain size={15} /><span>background</span></button
 							>
 						</div>
 					</div>
 
 					<div class="border-subtle border-b p-3">
 						<div class="mb-2 flex items-center justify-between">
-							<p class="text-muted font-mono text-[10px] tracking-[0.06em] uppercase">Layers</p>
+							<p class="text-muted font-mono text-[10px] tracking-[0.03em]">layers</p>
 							<button
 								type="button"
 								class="text-muted hover:text-text cursor-pointer"
@@ -550,7 +548,7 @@
 										class="bg-elevated text-muted flex size-7 items-center justify-center rounded-sm"
 										><Scan size={13} /></span
 									>
-									<span class="min-w-0 flex-1 truncate text-[11px]">{mask.name}</span>
+									<span class="min-w-0 flex-1 truncate text-[10px] lowercase">{mask.name}</span>
 									<button
 										type="button"
 										aria-label={mask.visible ? 'Hide mask' : 'Show mask'}
@@ -578,7 +576,7 @@
 							{#if workspace.masks.length === 0}
 								<div class="border-subtle rounded border border-dashed px-3 py-5 text-center">
 									<CircleDashed size={18} strokeWidth={1} class="text-muted mx-auto mb-2" />
-									<p class="text-muted text-[11px]">Choose a tool to create a mask.</p>
+									<p class="text-muted text-[10px]">choose a tool to create a mask.</p>
 								</div>
 							{/if}
 						</div>

@@ -101,44 +101,42 @@
 	class="bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]"
 >
 	<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
-		<div class="text-muted px-3 pb-2 font-mono text-[10px] tracking-[0.08em] uppercase">
-			Library
-		</div>
+		<div class="text-muted px-3 pb-2 font-mono text-[10px] tracking-[0.04em]">library</div>
 		<nav class="space-y-0.5 px-2" aria-label="Library">
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
 				'all'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
 				onclick={() => (source = 'all')}
 			>
 				<Image size={13} strokeWidth={1.5} />
-				<span class="flex-1">All photos</span>
+				<span class="flex-1">all photos</span>
 				<span class="font-mono text-[10px]">{workspace.photos.length}</span>
 			</button>
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
 				'recent'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
 				onclick={() => (source = 'recent')}
 			>
 				<Clock3 size={13} strokeWidth={1.5} />
-				<span class="flex-1">Recent</span>
+				<span class="flex-1">recent</span>
 				<span class="font-mono text-[10px]">{workspace.photos.length}</span>
 			</button>
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
 				'favorites'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
 				onclick={() => (source = 'favorites')}
 			>
 				<Flag size={13} strokeWidth={1.5} />
-				<span class="flex-1">Favorites</span>
+				<span class="flex-1">favorites</span>
 				<span class="font-mono text-[10px]">
 					{workspace.photos.filter((photo) => photo.flagged).length}
 				</span>
@@ -147,12 +145,12 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted font-mono text-[10px] tracking-[0.08em] uppercase">Shoots</span>
+			<span class="text-muted font-mono text-[10px] tracking-[0.04em]">shoots</span>
 		</div>
 		<div class="px-2">
 			<button
 				type="button"
-				class="bg-surface text-text flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs"
+				class="bg-surface text-text flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px]"
 				onclick={() => (source = 'all')}
 			>
 				<Folder size={13} strokeWidth={1.5} />
@@ -163,7 +161,7 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted font-mono text-[10px] tracking-[0.08em] uppercase">Albums</span>
+			<span class="text-muted font-mono text-[10px] tracking-[0.04em]">albums</span>
 			<Tooltip text="Create album">
 				{#snippet children(props)}
 					<button
@@ -182,7 +180,7 @@
 			{#each workspace.albums as album (album.id)}
 				<button
 					type="button"
-					class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-xs transition-colors {source ===
+					class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
 					`album:${album.id}`
 						? 'bg-surface text-text'
 						: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -194,7 +192,7 @@
 				</button>
 			{/each}
 			{#if workspace.albums.length === 0}
-				<p class="text-muted/65 px-2 py-2 text-[11px] leading-relaxed">No albums yet.</p>
+				<p class="text-muted/65 px-2 py-2 text-[10px] leading-relaxed">no albums yet.</p>
 			{/if}
 		</div>
 	</aside>
@@ -209,7 +207,7 @@
 				/>
 				<input
 					bind:value={search}
-					placeholder="Search this shoot"
+					placeholder="search this shoot"
 					class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 font-mono text-[10px] focus:outline-none"
 				/>
 			</label>
@@ -219,9 +217,9 @@
 				aria-label="Sort photos"
 				class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 font-mono text-[10px] focus:outline-none"
 			>
-				<option value="capture">Capture time</option>
-				<option value="name">Filename</option>
-				<option value="rating">Rating</option>
+				<option value="capture">capture time</option>
+				<option value="name">filename</option>
+				<option value="rating">rating</option>
 			</select>
 
 			<div class="ml-auto flex items-center gap-1">
@@ -231,7 +229,7 @@
 						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 font-mono text-[10px] transition-colors"
 						onclick={() => workspace.ungroupStack(selectedStack.id)}
 					>
-						<Ungroup size={12} /> Ungroup
+						<Ungroup size={12} /> ungroup
 					</button>
 				{:else}
 					<button
@@ -240,7 +238,7 @@
 						class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
 						onclick={() => workspace.createStack()}
 					>
-						<Layers3 size={12} /> Group stack
+						<Layers3 size={12} /> group stack
 					</button>
 				{/if}
 
@@ -354,9 +352,9 @@
 			{:else}
 				<div class="flex h-full flex-col items-center justify-center text-center">
 					<Box size={28} strokeWidth={1} class="text-muted mb-3" />
-					<p class="text-text text-sm">No photos in this view</p>
+					<p class="text-text text-xs">no photos in this view</p>
 					<p class="text-muted mt-1 font-mono text-[10px]">
-						Try another album or clear the search.
+						try another album or clear the search.
 					</p>
 				</div>
 			{/if}
@@ -380,7 +378,7 @@
 			<div class="border-subtle border-b p-3">
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
-						<p class="truncate text-xs font-medium">{active.name}</p>
+						<p class="truncate text-[11px] font-medium">{active.name}</p>
 						<p class="text-muted mt-1 font-mono text-[10px]">
 							{active.extension} · {formatBytes(active.size)}
 						</p>
@@ -425,23 +423,23 @@
 			</div>
 
 			<div class="border-subtle border-b p-3">
-				<p class="text-muted mb-3 font-mono text-[10px] tracking-[0.08em] uppercase">Metadata</p>
+				<p class="text-muted mb-3 font-mono text-[10px] tracking-[0.04em]">metadata</p>
 				<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[10px]">
-					<dt class="text-muted">Captured</dt>
+					<dt class="text-muted">captured</dt>
 					<dd class="text-text/80 text-right">{active.captured}</dd>
-					<dt class="text-muted">Dimensions</dt>
+					<dt class="text-muted">dimensions</dt>
 					<dd class="text-text/80 text-right font-mono">{dimensions(active)}</dd>
-					<dt class="text-muted">Camera</dt>
+					<dt class="text-muted">camera</dt>
 					<dd class="text-text/80 text-right">FUJIFILM X-T5</dd>
-					<dt class="text-muted">Lens</dt>
+					<dt class="text-muted">lens</dt>
 					<dd class="text-text/80 text-right">XF 23mm F1.4</dd>
-					<dt class="text-muted">Exposure</dt>
+					<dt class="text-muted">exposure</dt>
 					<dd class="text-text/80 text-right font-mono">1/250 · f/2.8 · ISO 160</dd>
 				</dl>
 			</div>
 
 			<div class="p-3">
-				<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.08em] uppercase">Albums</p>
+				<p class="text-muted mb-2 font-mono text-[10px] tracking-[0.04em]">albums</p>
 				<div class="space-y-1">
 					{#each workspace.albums as album (album.id)}
 						<label
@@ -462,7 +460,7 @@
 							class="text-muted hover:text-text cursor-pointer text-[11px] transition-colors"
 							onclick={() => (albumDialogOpen = true)}
 						>
-							+ Create an album
+							+ create an album
 						</button>
 					{/if}
 				</div>
@@ -471,7 +469,7 @@
 			<div
 				class="text-muted flex h-full items-center justify-center px-6 text-center font-mono text-[10px]"
 			>
-				Select a photo to inspect it.
+				select a photo to inspect it.
 			</div>
 		{/if}
 	</aside>
@@ -486,9 +484,9 @@
 			<form onsubmit={createAlbum}>
 				<div class="flex items-start justify-between">
 					<div>
-						<Dialog.Title class="text-lg font-semibold tracking-tight">Create album</Dialog.Title>
+						<Dialog.Title class="text-sm font-medium tracking-tight">create album</Dialog.Title>
 						<Dialog.Description class="text-muted mt-1 text-xs">
-							Selected photos will be added automatically.
+							selected photos will be added automatically.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
@@ -500,8 +498,8 @@
 				</div>
 				<input
 					bind:value={albumName}
-					placeholder="Album name"
-					class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent mt-5 w-full rounded border px-3 py-2 text-sm focus:outline-none"
+					placeholder="album name"
+					class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent mt-5 w-full rounded border px-3 py-2 text-xs focus:outline-none"
 				/>
 				<div class="mt-4 flex justify-end">
 					<button
@@ -509,7 +507,7 @@
 						disabled={!albumName.trim()}
 						class="bg-text text-bg cursor-pointer rounded px-3 py-2 font-mono text-[10px] disabled:opacity-35"
 					>
-						Create album
+						create album
 					</button>
 				</div>
 			</form>

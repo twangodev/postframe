@@ -54,8 +54,8 @@
 	</a>
 
 	<section class="motion-enter w-full max-w-md">
-		<h1 class="font-mono text-sm tracking-wide">pf.</h1>
-		<p class="text-muted mt-3 text-sm">Post-processing built on your JPEGs.</p>
+		<h1 class="font-mono text-xs tracking-wide">pf.</h1>
+		<p class="text-muted mt-3 text-xs">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">
 			<input
@@ -68,22 +68,22 @@
 			/>
 			<button
 				type="button"
-				class="motion-action bg-text text-bg flex h-10 cursor-pointer items-center justify-center rounded px-4 text-xs font-medium hover:opacity-85 sm:flex-1"
+				class="motion-action bg-text text-bg flex h-9 cursor-pointer items-center justify-center rounded px-4 text-[11px] font-medium hover:opacity-85 sm:flex-1"
 				style="--motion-delay: 80ms"
 				onclick={() => openPhotoInput.click()}
 				disabled={busy}
 			>
-				Open photo
+				open photo
 			</button>
 
 			<button
 				type="button"
-				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-10 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
+				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-[11px] font-medium sm:flex-1"
 				style="--motion-delay: 120ms"
 				onclick={() => (newShootOpen = true)}
 				disabled={busy}
 			>
-				New shoot
+				new shoot
 			</button>
 		</div>
 	</section>
@@ -98,9 +98,9 @@
 			<form onsubmit={createShoot}>
 				<div class="mb-5 flex items-start justify-between">
 					<div>
-						<Dialog.Title class="text-xl font-semibold tracking-tight">New shoot</Dialog.Title>
-						<Dialog.Description class="text-muted mt-1 text-sm">
-							Name the workspace and choose the photographs to organize.
+						<Dialog.Title class="text-sm font-medium tracking-tight">new shoot</Dialog.Title>
+						<Dialog.Description class="text-muted mt-1 text-xs">
+							name the workspace and choose photographs.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
@@ -112,13 +112,13 @@
 				</div>
 
 				<label class="mb-4 block">
-					<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-[0.08em] uppercase"
-						>Shoot name</span
+					<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-[0.04em]"
+						>shoot name</span
 					>
 					<input
 						bind:value={shootName}
-						placeholder="Untitled shoot"
-						class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent w-full rounded border px-3 py-2.5 text-sm focus:outline-none"
+						placeholder="untitled shoot"
+						class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent w-full rounded border px-3 py-2.5 text-xs focus:outline-none"
 					/>
 				</label>
 
@@ -136,7 +136,7 @@
 					/>
 					{#if files.length > 0}
 						<Images size={22} strokeWidth={1.25} class="text-accent mb-3" />
-						<p class="text-text text-sm">
+						<p class="text-text text-xs">
 							{files.length} photo{files.length === 1 ? '' : 's'} ready
 						</p>
 						<p class="text-muted mt-1 max-w-xs truncate font-mono text-[10px]">
@@ -147,8 +147,8 @@
 						</p>
 					{:else}
 						<Upload size={22} strokeWidth={1.25} class="text-muted mb-3" />
-						<p class="text-text text-sm">Choose photos or drop them here</p>
-						<p class="text-muted mt-1 font-mono text-[10px]">Local files only</p>
+						<p class="text-text text-xs">choose photos or drop them here</p>
+						<p class="text-muted mt-1 font-mono text-[10px]">local files only</p>
 					{/if}
 				</label>
 
@@ -156,14 +156,14 @@
 					<Dialog.Close
 						class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-4 py-2 font-mono text-[10px] tracking-wide transition-colors"
 					>
-						Cancel
+						cancel
 					</Dialog.Close>
 					<button
 						type="submit"
 						disabled={files.length === 0 || busy}
 						class="bg-text text-bg cursor-pointer rounded px-4 py-2 font-mono text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
-						Create shoot
+						create shoot
 					</button>
 				</div>
 			</form>

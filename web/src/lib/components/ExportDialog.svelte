@@ -38,15 +38,15 @@
 					<div>
 						<div class="text-muted mb-2 flex items-center gap-2">
 							<Download size={14} strokeWidth={1.4} />
-							<span class="font-mono text-[10px] tracking-[0.08em] uppercase">Export</span>
+							<span class="font-mono text-[10px] tracking-[0.04em]">export</span>
 						</div>
-						<Dialog.Title class="text-xl font-semibold tracking-tight">
+						<Dialog.Title class="text-sm font-medium tracking-tight">
 							{workspace.selectedIds.length > 1
 								? `${workspace.selectedIds.length} photographs`
-								: (workspace.selectedPhoto?.name ?? 'Photograph')}
+								: (workspace.selectedPhoto?.name ?? 'photograph')}
 						</Dialog.Title>
 						<Dialog.Description class="text-muted mt-1 text-xs">
-							Configure the final render. Export is intentionally disabled in this UI preview.
+							configure the final render. export is disabled in this UI preview.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
@@ -60,8 +60,8 @@
 				<div class="space-y-5 p-5">
 					<div class="grid grid-cols-2 gap-3">
 						<label>
-							<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-wide uppercase"
-								>Format</span
+							<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-[0.04em]"
+								>format</span
 							>
 							<select
 								bind:value={format}
@@ -73,8 +73,8 @@
 							</select>
 						</label>
 						<label>
-							<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-wide uppercase"
-								>Color space</span
+							<span class="text-muted mb-1.5 block font-mono text-[10px] tracking-[0.04em]"
+								>color space</span
 							>
 							<select
 								bind:value={colorSpace}
@@ -89,9 +89,9 @@
 
 					<label class="block">
 						<span
-							class="text-muted mb-1.5 flex justify-between font-mono text-[10px] tracking-wide uppercase"
+							class="text-muted mb-1.5 flex justify-between font-mono text-[10px] tracking-[0.04em]"
 						>
-							<span>Quality</span><span>{quality}</span>
+							<span>quality</span><span>{quality}</span>
 						</span>
 						<input
 							type="range"
@@ -107,14 +107,14 @@
 							<span>
 								<span class="text-text block">Ultra HDR gain map</span>
 								<span class="text-muted mt-0.5 block text-[10px]"
-									>Preserve display headroom in supported viewers.</span
+									>preserve display headroom in supported viewers.</span
 								>
 							</span>
 							<input type="checkbox" bind:checked={hdr} class="accent-accent" />
 						</label>
 						<div class="bg-subtle h-px"></div>
 						<label class="flex cursor-pointer items-center justify-between gap-3 text-xs">
-							<span class="text-text">Resize long edge</span>
+							<span class="text-text">resize long edge</span>
 							<input type="checkbox" bind:checked={resize} class="accent-accent" />
 						</label>
 						{#if resize}
@@ -141,13 +141,13 @@
 						<Dialog.Close
 							class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 font-mono text-[10px]"
 						>
-							Cancel
+							cancel
 						</Dialog.Close>
 						<button
 							type="submit"
 							class="bg-text text-bg flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded px-3 py-2 font-mono text-[10px]"
 						>
-							{#if completed}<Check size={12} /> Ready{:else}<Download size={12} /> Export{/if}
+							{#if completed}<Check size={12} /> ready{:else}<Download size={12} /> export{/if}
 						</button>
 					</div>
 				</div>

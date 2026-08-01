@@ -88,7 +88,7 @@ export class WorkspaceState {
 	masks = $state<Mask[]>([]);
 	selectedMaskId = $state<string | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
-	history = $state<string[]>(['Imported']);
+	history = $state<string[]>(['imported']);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
@@ -109,7 +109,7 @@ export class WorkspaceState {
 	async createShoot(name: string, files: File[]) {
 		this.clearFiles();
 		this.photos = await Promise.all(files.map((file) => this.photoFromFile(file)));
-		this.shootName = name.trim() || 'Untitled shoot';
+		this.shootName = name.trim() || 'untitled shoot';
 		this.selectedIds = this.photos[0] ? [this.photos[0].id] : [];
 		this.activePhotoId = this.photos[0]?.id ?? null;
 		this.mode = 'organize';
@@ -217,12 +217,12 @@ export class WorkspaceState {
 
 	createMask(kind: MaskKind) {
 		const labels: Record<MaskKind, string> = {
-			brush: 'Brush',
-			linear: 'Linear gradient',
-			radial: 'Radial gradient',
-			subject: 'Subject',
-			sky: 'Sky',
-			background: 'Background'
+			brush: 'brush',
+			linear: 'linear gradient',
+			radial: 'radial gradient',
+			subject: 'subject',
+			sky: 'sky',
+			background: 'background'
 		};
 		const mask = { id: id('mask'), name: labels[kind], kind, visible: true };
 		this.masks.push(mask);
@@ -260,7 +260,7 @@ export class WorkspaceState {
 		this.masks = [];
 		this.selectedMaskId = null;
 		this.adjustments = { ...defaultAdjustments };
-		this.history = ['Imported'];
+		this.history = ['imported'];
 	}
 
 	private clearFiles() {
