@@ -149,6 +149,7 @@ export class WorkspaceState {
 	private objectUrls = new Set<string>();
 	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
+	private exposureRenderTimer: ReturnType<typeof setTimeout> | null = null;
 	private removeProgressListener: (() => void) | null = null;
 
 	mode = $state<WorkspaceMode>('welcome');
@@ -175,8 +176,9 @@ export class WorkspaceState {
 	storageCleanupResult = $state<CleanupResult | null>(null);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
-	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
+	// TODO(WASM_TODOS.adjustments): route the remaining controls through render settings.
 	adjustments = $state({ ...defaultAdjustments });
+	renderSettings = $state({ exposure: 0, revision: 0 });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
 	history = $state<string[]>(['imported']);
 
@@ -191,6 +193,12 @@ export class WorkspaceState {
 					height: this.editPreview?.height ?? this.selectedPhoto.height
 				}
 			: null
+	);
+	canAdjustExposure = $derived(
+		this.selectedPhoto !== null &&
+			this.selectedPhoto.kind !== 'display' &&
+			this.documentStatus.kind === 'ready' &&
+			this.documentStatus.photoId === this.selectedPhoto.id
 	);
 
 	constructor() {
@@ -368,6 +376,23 @@ export class WorkspaceState {
 		this.documentStatus = { kind: 'cancelled', photoId };
 	};
 
+	previewExposure = (exposure: number) => {
+		if (!this.canAdjustExposure) return;
+		this.adjustments.exposure = exposure;
+		this.scheduleExposureRender(exposure);
+	};
+
+	commitExposure = (exposure: number) => {
+		if (!this.canAdjustExposure || !this.selectedPhoto) return;
+		this.adjustments.exposure = exposure;
+		this.applyExposureRender(exposure);
+		if (this.selectedPhoto.develop.exposure === exposure) return;
+		this.selectedPhoto.develop = { ...this.selectedPhoto.develop, exposure };
+		const photoId = this.selectedPhoto.id;
+		const settings = { ...this.selectedPhoto.develop };
+		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
+	};
+
 	renderTile = async (photoId: string, tile: RenderTileRequest) => {
 		if (
 			!this.workerClient ||
@@ -508,6 +533,7 @@ export class WorkspaceState {
 
 	destroy = () => {
 		this.documentRevision += 1;
+		this.clearExposureRender();
 		this.removeProgressListener?.();
 		this.removeProgressListener = null;
 		this.clearFiles();
@@ -515,16 +541,22 @@ export class WorkspaceState {
 		this.libraryService?.close();
 	};
 
-	private resetEditState() {
+	private resetEditState(develop = defaultDevelopSettings()) {
+		this.clearExposureRender();
 		this.masks = [];
 		this.selectedMaskId = null;
-		this.adjustments = { ...defaultAdjustments };
+		this.adjustments = { ...defaultAdjustments, exposure: develop.exposure };
+		this.renderSettings = {
+			exposure: develop.exposure,
+			revision: this.renderSettings.revision + 1
+		};
 		this.history = ['imported'];
 	}
 
 	private async openDocument(photoId: string) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo || this.mode !== 'edit') return;
+		this.resetEditState(photo.develop);
 
 		const revision = ++this.documentRevision;
 		if (this.documentStatus.kind !== 'idle') {
@@ -557,7 +589,11 @@ export class WorkspaceState {
 			}
 			const frames = await this.documentFrames(photo);
 			if (revision !== this.documentRevision) return;
-			const result = await this.workerClient!.openDocument(frames, previewDimension());
+			const result = await this.workerClient!.openDocument(
+				frames,
+				previewDimension(),
+				photo.develop.exposure
+			);
 			if (revision !== this.documentRevision) return;
 
 			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
@@ -608,6 +644,7 @@ export class WorkspaceState {
 
 	private closeDocument() {
 		this.documentRevision += 1;
+		this.clearExposureRender();
 		const hadDocument = this.documentStatus.kind !== 'idle';
 		this.releaseEditPreview();
 		this.documentStatus = { kind: 'idle' };
@@ -619,6 +656,26 @@ export class WorkspaceState {
 		URL.revokeObjectURL(this.editPreview.src);
 		this.objectUrls.delete(this.editPreview.src);
 		this.editPreview = null;
+	}
+
+	private scheduleExposureRender(exposure: number) {
+		this.clearExposureRender();
+		this.exposureRenderTimer = setTimeout(() => {
+			this.exposureRenderTimer = null;
+			this.applyExposureRender(exposure);
+		}, 75);
+	}
+
+	private applyExposureRender(exposure: number) {
+		this.clearExposureRender();
+		if (this.renderSettings.exposure === exposure) return;
+		this.renderSettings = { exposure, revision: this.renderSettings.revision + 1 };
+	}
+
+	private clearExposureRender() {
+		if (this.exposureRenderTimer === null) return;
+		clearTimeout(this.exposureRenderTimer);
+		this.exposureRenderTimer = null;
 	}
 
 	private clearFiles() {

@@ -6,7 +6,8 @@ import {
 	PYRAMID_TILE_OVERLAP,
 	PYRAMID_TILE_SIZE,
 	pyramidLevels,
-	pyramidTileRegion
+	pyramidTileRegion,
+	pyramidTileUrl
 } from '../src/lib/postframe-tile-source.ts';
 
 const image = { width: 6001, height: 4003 };
@@ -58,4 +59,8 @@ test('rejects levels outside the supported render pyramid', () => {
 	const { maxLevel } = pyramidLevels(image);
 	assert.throws(() => pyramidTileRegion(image, maxLevel, maxLevel - 7, 0, 0), RangeError);
 	assert.throws(() => pyramidTileRegion(image, maxLevel, maxLevel, 20, 0), RangeError);
+});
+
+test('keys tile caches by photo and render revision', () => {
+	assert.equal(pyramidTileUrl('photo one', 7, 13, 2, 4), 'postframe://photo%20one/7/13/2/4.png');
 });

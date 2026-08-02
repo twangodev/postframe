@@ -830,6 +830,8 @@
 							image={imageSize}
 							transform={viewportTransform}
 							renderTile={workspace.renderTile}
+							renderRevision={workspace.renderSettings.revision}
+							ev={workspace.renderSettings.exposure}
 						/>
 						<div
 							class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
@@ -1014,7 +1016,7 @@
 				</Tabs.List>
 
 				<Tabs.Content value="adjust" class="motion-tab">
-					<!-- TODO(WASM_TODOS.adjustments): render slider changes instead of storing UI-only values. -->
+					<!-- TODO(WASM_TODOS.adjustments): connect the remaining sliders to the renderer. -->
 					<div class="border-subtle border-b p-3">
 						<!-- TODO(WASM_TODOS.metadata): replace the placeholder histogram with Session data. -->
 						<div
@@ -1050,6 +1052,9 @@
 							step={0.05}
 							decimals={2}
 							suffix=" EV"
+							disabled={!workspace.canAdjustExposure}
+							onValueChange={workspace.previewExposure}
+							onValueCommit={workspace.commitExposure}
 						/>
 						<AdjustmentSlider
 							label="Contrast"

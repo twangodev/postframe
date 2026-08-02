@@ -50,9 +50,9 @@ export class PostframeWorkerClient {
 		return response.inspection;
 	}
 
-	async openDocument(frames: RawFrameHandleInput[], maxDimension: number) {
+	async openDocument(frames: RawFrameHandleInput[], maxDimension: number, ev: number) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open', frames, maxDimension }),
+			(id) => ({ id, type: 'open', frames, maxDimension, ev }),
 			'opened'
 		);
 		return {

@@ -38,8 +38,10 @@ test('reports document progress before resolving the developed preview', async (
 	const progress: Response[] = [];
 	client.onProgress((message) => progress.push(message));
 
-	const opened = client.openDocument([], 2048);
-	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'open', frames: [], maxDimension: 2048 }]);
+	const opened = client.openDocument([], 2048, 1.25);
+	assert.deepEqual(workers[0]?.messages, [
+		{ id: 1, type: 'open', frames: [], maxDimension: 2048, ev: 1.25 }
+	]);
 
 	workers[0]?.respond({
 		id: 1,

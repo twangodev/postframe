@@ -55,7 +55,7 @@ export type Request =
 	| { id: number; type: 'capabilities' }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
 	| { id: number; type: 'inspect'; raw: ArrayBuffer; maxDimension: number }
-	| { id: number; type: 'open'; frames: RawFrameHandleInput[]; maxDimension: number }
+	| { id: number; type: 'open'; frames: RawFrameHandleInput[]; maxDimension: number; ev: number }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| { id: number; type: 'preview'; ev: number; tone: boolean }
 	| { id: number; type: 'ultra' }
@@ -234,7 +234,7 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 		progress('merging', message.frames.length);
 		next.merge(message.maxDimension);
 		progress('rendering', message.frames.length);
-		const jpeg = next.preview_jpeg(0, true).buffer as ArrayBuffer;
+		const jpeg = next.preview_jpeg(message.ev, true).buffer as ArrayBuffer;
 		const boostStops = next.boost_stops();
 		const width = next.width();
 		const height = next.height();

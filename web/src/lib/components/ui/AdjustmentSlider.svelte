@@ -10,6 +10,9 @@
 		suffix?: string;
 		decimals?: number;
 		signed?: boolean;
+		disabled?: boolean;
+		onValueChange?: (value: number) => void;
+		onValueCommit?: (value: number) => void;
 	}
 
 	let {
@@ -20,7 +23,10 @@
 		step = 1,
 		suffix = '',
 		decimals = 0,
-		signed = true
+		signed = true,
+		disabled = false,
+		onValueChange = () => {},
+		onValueCommit = () => {}
 	}: Props = $props();
 
 	const formatted = $derived(
@@ -28,7 +34,10 @@
 	);
 </script>
 
-<div class="grid grid-cols-[4.75rem_1fr_2.75rem] items-center gap-2 py-1">
+<div
+	class="grid grid-cols-[4.75rem_1fr_2.75rem] items-center gap-2 py-1 transition-opacity"
+	class:opacity-40={disabled}
+>
 	<span class="text-text/75 truncate text-[10px] lowercase">{label}</span>
 	<Slider.Root
 		type="single"
@@ -36,6 +45,9 @@
 		{min}
 		{max}
 		{step}
+		{disabled}
+		{onValueChange}
+		{onValueCommit}
 		class="relative flex h-4 w-full touch-none items-center"
 	>
 		{#snippet children({ thumbItems })}

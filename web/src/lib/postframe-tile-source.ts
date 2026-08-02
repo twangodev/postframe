@@ -31,11 +31,22 @@ export interface PyramidTileEvent {
 
 interface TileSourceOptions {
 	photoId: string;
+	revision: number;
 	image: Size;
 	renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ArrayBuffer>;
 	ev: number;
 	tone: boolean;
 	onTileEvent?: (event: PyramidTileEvent) => void;
+}
+
+export function pyramidTileUrl(
+	photoId: string,
+	revision: number,
+	level: number,
+	column: number,
+	row: number
+) {
+	return `postframe://${encodeURIComponent(photoId)}/${revision}/${level}/${column}/${row}.png`;
 }
 
 interface TileJobState {
@@ -108,10 +119,10 @@ export function createPostframeTileSource(
 	});
 
 	source.getTileUrl = (level, column, row) =>
-		`postframe://${encodeURIComponent(options.photoId)}/${level}/${column}/${row}.png`;
+		pyramidTileUrl(options.photoId, options.revision, level, column, row);
 	source.downloadTileStart = (job) => {
 		const { level, x: column, y: row } = job.tile;
-		const key = `${level}:${column}:${row}`;
+		const key = `${options.revision}:${level}:${column}:${row}`;
 		const state: TileJobState = { cancelled: false };
 		job.userData.postframe = state;
 		options.onTileEvent?.({ key, phase: 'rendering' });

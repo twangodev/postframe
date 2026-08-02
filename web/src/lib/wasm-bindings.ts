@@ -78,7 +78,7 @@ export const WASM_TODOS = {
 	},
 	adjustments: {
 		scope: 'Apply global and masked adjustments to the render graph.',
-		bindings: ['preview_jpeg'],
+		bindings: ['preview_jpeg', 'render_tile_png'],
 		planned: ['Session::set_adjustments', 'Session::set_mask_adjustments']
 	},
 	documentGeometry: {
