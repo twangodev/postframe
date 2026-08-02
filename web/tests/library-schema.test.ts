@@ -14,6 +14,7 @@ const photo = {
 				id: 'asset-one',
 				storageName: 'asset-one.dng',
 				name: 'frame.dng',
+				contentHash: '0'.repeat(64),
 				source: {
 					kind: 'raw' as const,
 					format: 'dng',

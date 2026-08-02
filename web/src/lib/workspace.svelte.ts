@@ -203,11 +203,14 @@ export class WorkspaceState {
 		this.ingestError = null;
 		const imported = (await this.photosFromFiles([file]))[0];
 		if (!imported) return;
-		this.photos.push(imported.photo);
-		this.selectPhoto(imported.photo.id);
-		await this.queuePersistence(imported.originals, imported.thumbnails);
+		const committed = await this.persistImports([imported]);
+		if (!committed) return;
+		this.photos.push(...committed.photos);
+		const photoId = committed.photoIds[0];
+		if (!photoId) return;
+		this.selectPhoto(photoId);
 		this.mode = 'edit';
-		await this.openDocument(imported.photo.id);
+		await this.openDocument(photoId);
 	};
 
 	createCollection = async (name: string, files: File[]) => {
@@ -217,9 +220,8 @@ export class WorkspaceState {
 		if (!trimmed) return;
 		const imported = await this.photosFromFiles(files);
 		const importedPhotos = imported.map(({ photo }) => photo);
-		this.photos.push(...importedPhotos);
 		const now = Date.now();
-		this.collections.push({
+		const collection = {
 			id: id('collection'),
 			name: trimmed,
 			createdAt: now,
@@ -228,28 +230,24 @@ export class WorkspaceState {
 				importedPhotos.length > 0
 					? importedPhotos.map((photo) => photo.id)
 					: this.selectedIds.filter((photoId) => this.photos.some((photo) => photo.id === photoId))
-		});
-		if (importedPhotos[0]) this.selectPhoto(importedPhotos[0].id);
+		} satisfies PhotoCollection;
+		const committed = await this.persistImports(imported, collection);
+		if (!committed?.collection) return;
+		this.photos.push(...committed.photos);
+		this.collections.push(committed.collection);
+		if (committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
 		this.mode = 'organize';
 		this.collectionDialogOpen = false;
-		await this.queuePersistence(
-			imported.flatMap(({ originals }) => originals),
-			imported.flatMap(({ thumbnails }) => thumbnails)
-		);
 	};
 
 	importFiles = async (files: File[]) => {
 		await this.ensureCapabilities();
 		this.ingestError = null;
 		const imported = await this.photosFromFiles(files);
-		this.photos.push(...imported.map(({ photo }) => photo));
-		if (!this.activePhotoId && imported[0]?.photo) {
-			this.selectPhoto(imported[0].photo.id);
-		}
-		await this.queuePersistence(
-			imported.flatMap(({ originals }) => originals),
-			imported.flatMap(({ thumbnails }) => thumbnails)
-		);
+		const committed = await this.persistImports(imported);
+		if (!committed) return;
+		this.photos.push(...committed.photos);
+		if (!this.activePhotoId && committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
 	};
 
 	async save() {
@@ -615,13 +613,17 @@ export class WorkspaceState {
 	private async photosFromFiles(files: File[]) {
 		const grouping = groupPhotoFiles(files, this.rawExtensions);
 		const imported: PhotoImport[] = [];
+		const contentHashes = new Map<string, string>();
 		if (grouping.rejectedFiles[0]) {
 			this.ingestError = `${grouping.rejectedFiles[0].name}: unsupported photo format`;
+		}
+		for (const [assetKey, file] of grouping.filesByAssetKey) {
+			contentHashes.set(assetKey, await fileContentHash(file));
 		}
 
 		for (const group of grouping.groups) {
 			try {
-				imported.push(await this.photoFromGroup(group, grouping.filesByAssetKey));
+				imported.push(await this.photoFromGroup(group, grouping.filesByAssetKey, contentHashes));
 			} catch (error) {
 				const name = firstGroupedAsset(group)?.name ?? 'photo';
 				const reason = error instanceof Error ? error.message : 'unsupported photo';
@@ -634,10 +636,11 @@ export class WorkspaceState {
 
 	private async photoFromGroup(
 		group: PhotoGroup,
-		filesByAssetKey: ReadonlyMap<string, File>
+		filesByAssetKey: ReadonlyMap<string, File>,
+		contentHashes: ReadonlyMap<string, string>
 	): Promise<PhotoImport> {
 		const importedFrames = groupedFrames(group).map(({ photo, filenameExposureHint }) =>
-			this.importFrame(photo, filenameExposureHint, filesByAssetKey)
+			this.importFrame(photo, filenameExposureHint, filesByAssetKey, contentHashes)
 		);
 		const selectedFrame = importedFrames[primaryFrameIndex(group)];
 		if (!selectedFrame) throw new Error('photo group has no frames');
@@ -766,12 +769,13 @@ export class WorkspaceState {
 	private importFrame(
 		frame: GroupedPhotoFrame,
 		filenameExposureHint: number | null,
-		filesByAssetKey: ReadonlyMap<string, File>
+		filesByAssetKey: ReadonlyMap<string, File>,
+		contentHashes: ReadonlyMap<string, string>
 	): FrameImport {
 		const raw = frame.kind === 'raw' || frame.kind === 'raw-pair' ? frame.raw : null;
 		const display = frame.kind === 'display' || frame.kind === 'raw-pair' ? frame.display : null;
-		const rawImport = raw ? importedAsset(raw, filesByAssetKey) : null;
-		const displayImport = display ? importedAsset(display, filesByAssetKey) : null;
+		const rawImport = raw ? importedAsset(raw, filesByAssetKey, contentHashes) : null;
+		const displayImport = display ? importedAsset(display, filesByAssetKey, contentHashes) : null;
 
 		return {
 			frame: {
@@ -831,6 +835,71 @@ export class WorkspaceState {
 		} finally {
 			if (revision === this.libraryRevision) this.libraryReady = true;
 		}
+	}
+
+	private async persistImports(
+		imports: readonly PhotoImport[],
+		collection: PhotoCollection | null = null
+	): Promise<{ photos: Photo[]; photoIds: string[]; collection: PhotoCollection | null } | null> {
+		const store = this.libraryService;
+		if (!store) {
+			this.storageStatus = 'memory';
+			return {
+				photos: imports.map(({ photo }) => photo),
+				photoIds: imports.map(({ photo }) => photo.id),
+				collection
+			};
+		}
+
+		const importedById = new Map(imports.map((entry) => [entry.photo.id, entry]));
+		const revision = ++this.persistenceRevision;
+		this.storageStatus = 'saving';
+		this.storageError = null;
+		const transaction = this.persistence.then(() =>
+			store.importPhotos(
+				this.libraryCreatedAt,
+				imports.map(({ photo }) => this.storedPhoto(photo)),
+				imports.flatMap(({ originals }) => originals),
+				imports.flatMap(({ thumbnails }) => thumbnails),
+				collection
+			)
+		);
+		this.persistence = transaction.then(
+			() => {
+				if (revision === this.persistenceRevision) this.storageStatus = 'saved';
+			},
+			(error: unknown) => {
+				if (revision !== this.persistenceRevision) return;
+				this.storageStatus = 'error';
+				this.storageError = error instanceof Error ? error.message : 'Unable to import photos';
+			}
+		);
+
+		try {
+			const result = await transaction;
+			const additionIds = new Set(result.photos.map(({ id }) => id));
+			for (const entry of imports) {
+				if (!additionIds.has(entry.photo.id)) this.discardImport(entry);
+			}
+			return {
+				photos: result.photos.flatMap((photo) => {
+					const imported = importedById.get(photo.id);
+					return imported ? [imported.photo] : [];
+				}),
+				photoIds: result.photoIds,
+				collection: result.collection
+			};
+		} catch {
+			for (const entry of imports) this.discardImport(entry);
+			return null;
+		}
+	}
+
+	private discardImport({ photo }: PhotoImport) {
+		if (!photo.src) return;
+		URL.revokeObjectURL(photo.src);
+		this.objectUrls.delete(photo.src);
+		photo.src = null;
 	}
 
 	private async ensureCapabilities() {
@@ -949,18 +1018,27 @@ function firstGroupedAsset(group: PhotoGroup) {
 
 function importedAsset(
 	asset: GroupedPhotoAsset,
-	filesByAssetKey: ReadonlyMap<string, File>
+	filesByAssetKey: ReadonlyMap<string, File>,
+	contentHashes: ReadonlyMap<string, string>
 ): { asset: StoredAsset; original: OriginalWrite; file: File } {
 	const file = filesByAssetKey.get(asset.key);
 	if (!file) throw new Error(`${asset.name} is unavailable`);
+	const contentHash = contentHashes.get(asset.key);
+	if (!contentHash) throw new Error(`${asset.name} has no content identity`);
 	const assetId = id('asset');
 	const stored = {
 		id: assetId,
 		storageName: `${assetId}.${asset.source.format}`,
 		name: asset.name,
+		contentHash,
 		source: { ...asset.source }
 	} satisfies StoredAsset;
 	return { asset: stored, original: { storageName: stored.storageName, file }, file };
+}
+
+async function fileContentHash(file: File) {
+	const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function storedMetadata(metadata: RawMetadata): StoredMetadata {

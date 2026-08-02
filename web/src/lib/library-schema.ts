@@ -15,6 +15,7 @@ const assetSchema = z.object({
 	id: identifierSchema,
 	storageName: storageNameSchema,
 	name: z.string().min(1),
+	contentHash: z.string().regex(/^[a-f0-9]{64}$/),
 	source: sourceSchema
 });
 const frameSchema = z
@@ -60,7 +61,7 @@ const photoStateSchema = z.object({
 	stackId: identifierSchema.nullable()
 });
 
-const storedPhotoSchema = photoStateSchema
+export const storedPhotoSchema = photoStateSchema
 	.extend({
 		id: identifierSchema,
 		kind: z.enum(['display', 'raw', 'raw-pair', 'bracket']),
@@ -93,7 +94,7 @@ const storedPhotoSchema = photoStateSchema
 		}
 	});
 
-const collectionSchema = z.object({
+export const photoCollectionSchema = z.object({
 	id: identifierSchema,
 	name: z.string().min(1),
 	createdAt: z.number().int().nonnegative(),
@@ -114,7 +115,7 @@ export const libraryManifestSchema = z
 		createdAt: z.number().int().nonnegative(),
 		updatedAt: z.number().int().nonnegative(),
 		photos: z.array(storedPhotoSchema),
-		collections: z.array(collectionSchema),
+		collections: z.array(photoCollectionSchema),
 		stacks: z.array(stackSchema)
 	})
 	.superRefine((library, context) => {
@@ -175,5 +176,5 @@ export type StoredAsset = z.infer<typeof assetSchema>;
 export type StoredFrame = z.infer<typeof frameSchema>;
 export type StoredMetadata = z.infer<typeof metadataSchema>;
 export type StoredPhoto = z.infer<typeof storedPhotoSchema>;
-export type PhotoCollection = z.infer<typeof collectionSchema>;
+export type PhotoCollection = z.infer<typeof photoCollectionSchema>;
 export type LibraryManifest = z.infer<typeof libraryManifestSchema>;

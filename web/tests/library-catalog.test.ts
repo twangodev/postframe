@@ -23,6 +23,7 @@ function manifest(): LibraryManifest {
 							id: 'asset-one',
 							storageName: 'asset-one.dng',
 							name: 'frame.dng',
+							contentHash: '0'.repeat(64),
 							source: {
 								kind: 'raw',
 								format: 'dng',
@@ -87,6 +88,42 @@ test('rolls back the catalog when a collection name conflicts', async () => {
 
 		await assert.rejects(catalog.saveLibrary(conflicting));
 		assert.deepEqual(await catalog.loadLibrary(), original);
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('resolves a repeated import to the existing photo by content', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const library = manifest();
+		await catalog.saveLibrary(library);
+		const duplicate = structuredClone(library.photos[0]!);
+		duplicate.id = 'photo-two';
+		duplicate.frames[0]!.raw!.id = 'asset-two';
+		duplicate.frames[0]!.raw!.storageName = 'asset-two.dng';
+
+		const resolution = await catalog.resolveImports([duplicate]);
+		assert.deepEqual(resolution.additions, []);
+		assert.equal(resolution.photoIds.get('photo-two'), 'photo-one');
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('deduplicates repeated content within one import batch', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const first = manifest().photos[0]!;
+		const duplicate = structuredClone(first);
+		duplicate.id = 'photo-two';
+		duplicate.frames[0]!.raw!.id = 'asset-two';
+		duplicate.frames[0]!.raw!.storageName = 'asset-two.dng';
+
+		const resolution = await catalog.resolveImports([first, duplicate]);
+		assert.deepEqual(resolution.additions, [first]);
+		assert.equal(resolution.photoIds.get('photo-one'), 'photo-one');
+		assert.equal(resolution.photoIds.get('photo-two'), 'photo-one');
 	} finally {
 		await catalog.clear();
 	}

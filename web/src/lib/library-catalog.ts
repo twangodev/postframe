@@ -22,13 +22,15 @@ interface CatalogFrame {
 	filenameExposureHint: number | null;
 }
 
-type PhotoRecord = Omit<StoredPhoto, 'frames'> & { frames: CatalogFrame[] };
+type PhotoRecord = Omit<StoredPhoto, 'frames'> & {
+	fingerprint: string;
+	frames: CatalogFrame[];
+};
 
 interface AssetRecord extends StoredAsset {
 	photoId: string;
 	frameIndex: number;
 	role: 'raw' | 'display';
-	contentHash: string | null;
 }
 
 interface CollectionRecord extends Omit<PhotoCollection, 'photoIds'> {
@@ -78,7 +80,23 @@ export class PostframeDatabase extends Dexie {
 			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
 			pendingDeletes: '&storageName, queuedAt'
 		});
+		this.version(2).stores({
+			library: '&id',
+			photos:
+				'&id, &fingerprint, importedAt, metadata.capturedAt, flagged, rejected, rating, stackId, [kind+importedAt]',
+			assets: '&id, &storageName, &contentHash, photoId, [photoId+frameIndex], role',
+			collections: '&id, &normalizedName, updatedAt',
+			collectionPhotos: '[collectionId+photoId], photoId, [collectionId+position]',
+			stacks: '&id',
+			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
+			pendingDeletes: '&storageName, queuedAt'
+		});
 	}
+}
+
+export interface ImportResolution {
+	additions: StoredPhoto[];
+	photoIds: ReadonlyMap<string, string>;
 }
 
 export class LibraryCatalog {
@@ -159,6 +177,68 @@ export class LibraryCatalog {
 		);
 	}
 
+	async resolveImports(photos: readonly StoredPhoto[]): Promise<ImportResolution> {
+		const candidates = photos.map((photo) => ({ photo, fingerprint: photoFingerprint(photo) }));
+		const fingerprints = [...new Set(candidates.map(({ fingerprint }) => fingerprint))];
+		const existing =
+			fingerprints.length > 0
+				? await this.database.photos.where('fingerprint').anyOf(fingerprints).toArray()
+				: [];
+		const resolvedByFingerprint = new Map(
+			existing.map((photo) => [photo.fingerprint, photo.id] as const)
+		);
+		const additions: StoredPhoto[] = [];
+		const photoIds = new Map<string, string>();
+
+		for (const { photo, fingerprint } of candidates) {
+			const resolvedId = resolvedByFingerprint.get(fingerprint);
+			if (resolvedId) {
+				photoIds.set(photo.id, resolvedId);
+				continue;
+			}
+			resolvedByFingerprint.set(fingerprint, photo.id);
+			photoIds.set(photo.id, photo.id);
+			additions.push(photo);
+		}
+
+		return { additions, photoIds };
+	}
+
+	async addPhotos(
+		libraryCreatedAt: number,
+		photos: readonly StoredPhoto[],
+		collection: PhotoCollection | null = null
+	) {
+		const photoRecords = photos.map(photoRecord);
+		const assets = photos.flatMap(photoAssets);
+
+		await this.database.transaction(
+			'rw',
+			[
+				this.database.library,
+				this.database.photos,
+				this.database.assets,
+				this.database.collections,
+				this.database.collectionPhotos
+			],
+			async () => {
+				const now = Date.now();
+				const library = await this.database.library.get(LIBRARY_ID);
+				await this.database.library.put({
+					id: LIBRARY_ID,
+					createdAt: library?.createdAt ?? libraryCreatedAt,
+					updatedAt: now
+				});
+				await bulkAdd(this.database.photos, photoRecords);
+				await bulkAdd(this.database.assets, assets);
+				if (collection) {
+					await this.database.collections.add(collectionRecord(collection));
+					await bulkAdd(this.database.collectionPhotos, collectionPhotoRecords(collection));
+				}
+			}
+		);
+	}
+
 	async clear() {
 		await this.database.delete();
 	}
@@ -173,39 +253,66 @@ function catalogRecords(library: LibraryManifest) {
 	const assets: AssetRecord[] = [];
 
 	for (const photo of library.photos) {
-		photos.push({
-			...photo,
-			frames: photo.frames.map((frame) => ({
-				rawAssetId: frame.raw?.id ?? null,
-				displayAssetId: frame.display?.id ?? null,
-				filenameExposureHint: frame.filenameExposureHint
-			}))
-		});
-		for (const [frameIndex, frame] of photo.frames.entries()) {
-			if (frame.raw) assets.push(assetRecord(frame.raw, photo.id, frameIndex, 'raw'));
-			if (frame.display) assets.push(assetRecord(frame.display, photo.id, frameIndex, 'display'));
-		}
+		photos.push(photoRecord(photo));
+		assets.push(...photoAssets(photo));
 	}
 
 	return {
 		photos,
 		assets,
-		collections: library.collections.map(({ photoIds: _, ...collection }) => ({
-			...collection,
-			normalizedName: normalizeCollectionName(collection.name)
-		})),
-		collectionPhotos: library.collections.flatMap((collection) =>
-			collection.photoIds.map((photoId, position) => ({
-				collectionId: collection.id,
-				photoId,
-				position
-			}))
-		),
+		collections: library.collections.map(collectionRecord),
+		collectionPhotos: library.collections.flatMap(collectionPhotoRecords),
 		stacks: library.stacks.map(({ photoIds: _, ...stack }) => stack),
 		stackPhotos: library.stacks.flatMap((stack) =>
 			stack.photoIds.map((photoId, position) => ({ stackId: stack.id, photoId, position }))
 		)
 	};
+}
+
+function photoRecord(photo: StoredPhoto): PhotoRecord {
+	return {
+		...photo,
+		fingerprint: photoFingerprint(photo),
+		frames: photo.frames.map((frame) => ({
+			rawAssetId: frame.raw?.id ?? null,
+			displayAssetId: frame.display?.id ?? null,
+			filenameExposureHint: frame.filenameExposureHint
+		}))
+	};
+}
+
+function photoAssets(photo: StoredPhoto) {
+	return photo.frames.flatMap((frame, frameIndex) => {
+		const assets: AssetRecord[] = [];
+		if (frame.raw) assets.push(assetRecord(frame.raw, photo.id, frameIndex, 'raw'));
+		if (frame.display) assets.push(assetRecord(frame.display, photo.id, frameIndex, 'display'));
+		return assets;
+	});
+}
+
+function photoFingerprint(photo: StoredPhoto) {
+	return [
+		photo.kind,
+		...photo.frames.map((frame) =>
+			[
+				frame.raw?.contentHash ?? '',
+				frame.display?.contentHash ?? '',
+				frame.filenameExposureHint ?? ''
+			].join(':')
+		)
+	].join('|');
+}
+
+function collectionRecord({ photoIds: _, ...collection }: PhotoCollection): CollectionRecord {
+	return { ...collection, normalizedName: normalizeCollectionName(collection.name) };
+}
+
+function collectionPhotoRecords(collection: PhotoCollection): CollectionPhotoRecord[] {
+	return collection.photoIds.map((photoId, position) => ({
+		collectionId: collection.id,
+		photoId,
+		position
+	}));
 }
 
 function assetRecord(
@@ -219,8 +326,7 @@ function assetRecord(
 		source: { ...asset.source },
 		photoId,
 		frameIndex,
-		role,
-		contentHash: null
+		role
 	};
 }
 
@@ -229,7 +335,7 @@ function hydratePhoto(
 	assetsById: ReadonlyMap<string, AssetRecord>
 ): StoredPhoto {
 	return {
-		...photo,
+		...storedPhotoRecord(photo),
 		frames: photo.frames.map((frame) => ({
 			raw: storedAsset(frame.rawAssetId, assetsById),
 			display: storedAsset(frame.displayAssetId, assetsById),
@@ -245,8 +351,12 @@ function storedAsset(
 	if (!id) return null;
 	const asset = assetsById.get(id);
 	if (!asset) throw new Error(`Asset ${id} is missing from the catalog`);
-	const { photoId: _, frameIndex: __, role: ___, contentHash: ____, ...stored } = asset;
+	const { photoId: _, frameIndex: __, role: ___, ...stored } = asset;
 	return { ...stored, source: { ...stored.source } };
+}
+
+function storedPhotoRecord({ fingerprint: _, ...photo }: PhotoRecord) {
+	return photo;
 }
 
 function orderedMembers(records: Array<{ photoId: string; position: number }>) {
@@ -261,4 +371,8 @@ function normalizeCollectionName(name: string) {
 
 async function bulkPut<T, TKey>(table: Table<T, TKey>, values: readonly T[]) {
 	if (values.length > 0) await table.bulkPut([...values]);
+}
+
+async function bulkAdd<T, TKey>(table: Table<T, TKey>, values: readonly T[]) {
+	if (values.length > 0) await table.bulkAdd([...values]);
 }
