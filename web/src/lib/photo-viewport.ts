@@ -13,6 +13,15 @@ export interface ViewportTransform {
 	pan: Point;
 }
 
+export interface WheelModifiers {
+	altKey: boolean;
+	ctrlKey: boolean;
+	metaKey: boolean;
+	shiftKey: boolean;
+}
+
+export type WheelNavigation = { kind: 'pan'; delta: Point } | { kind: 'zoom'; delta: number };
+
 export const MAX_ZOOM_SCALE = 32;
 export const MIN_ZOOM_SCALE = 0.05;
 export const VIEWPORT_INSET = 24;
@@ -87,6 +96,19 @@ export function panBy(transform: ViewportTransform, delta: Point, viewport: Size
 		viewport,
 		image
 	);
+}
+
+export function wheelNavigation(delta: Point, modifiers: WheelModifiers): WheelNavigation {
+	if (modifiers.altKey || modifiers.ctrlKey) return { kind: 'zoom', delta: delta.y };
+	const horizontal = modifiers.shiftKey || modifiers.metaKey;
+	const x = horizontal ? delta.x || delta.y : delta.x;
+	return {
+		kind: 'pan',
+		delta: {
+			x: x === 0 ? 0 : -x,
+			y: horizontal || delta.y === 0 ? 0 : -delta.y
+		}
+	};
 }
 
 export function screenToImage(

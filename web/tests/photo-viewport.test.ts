@@ -9,6 +9,7 @@ import {
 	nextZoomScale,
 	panBy,
 	screenToImage,
+	wheelNavigation,
 	zoomAt
 } from '../src/lib/photo-viewport.ts';
 
@@ -40,6 +41,34 @@ test('clamps panning while retaining a small overscroll allowance', () => {
 
 	assert.deepEqual(panned.pan, { x: 2448, y: -1648 });
 	assert.deepEqual(clampTransform(panned, viewport, image), panned);
+});
+
+test('maps wheel input to Photoshop-style canvas navigation', () => {
+	const modifiers = { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false };
+	assert.deepEqual(wheelNavigation({ x: 0, y: 120 }, modifiers), {
+		kind: 'pan',
+		delta: { x: 0, y: -120 }
+	});
+	assert.deepEqual(wheelNavigation({ x: 36, y: 4 }, modifiers), {
+		kind: 'pan',
+		delta: { x: -36, y: -4 }
+	});
+	assert.deepEqual(wheelNavigation({ x: 0, y: 120 }, { ...modifiers, shiftKey: true }), {
+		kind: 'pan',
+		delta: { x: -120, y: 0 }
+	});
+	assert.deepEqual(wheelNavigation({ x: 0, y: 120 }, { ...modifiers, metaKey: true }), {
+		kind: 'pan',
+		delta: { x: -120, y: 0 }
+	});
+	assert.deepEqual(wheelNavigation({ x: 0, y: 120 }, { ...modifiers, altKey: true }), {
+		kind: 'zoom',
+		delta: 120
+	});
+	assert.deepEqual(wheelNavigation({ x: 0, y: -2 }, { ...modifiers, ctrlKey: true }), {
+		kind: 'zoom',
+		delta: -2
+	});
 });
 
 test('steps through useful photographic zoom presets', () => {

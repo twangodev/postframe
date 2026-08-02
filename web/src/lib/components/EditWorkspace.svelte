@@ -46,6 +46,7 @@
 		nextZoomScale,
 		panBy,
 		surfaceTransform,
+		wheelNavigation,
 		zoomAt,
 		type Point,
 		type Size,
@@ -244,15 +245,17 @@
 					? viewportSize.height
 					: 1;
 		const delta = { x: event.deltaX * unit, y: event.deltaY * unit };
-		const horizontalGesture = event.shiftKey || Math.abs(delta.x) > Math.abs(delta.y);
-		if (!event.ctrlKey && horizontalGesture) {
-			const distance = event.shiftKey ? delta.x || delta.y : delta.x;
+		const navigation = wheelNavigation(delta, event);
+		if (navigation.kind === 'pan') {
 			viewportMode = 'manual';
-			viewportTransform = panBy(viewportTransform, { x: -distance, y: 0 }, viewportSize, imageSize);
+			viewportTransform = panBy(viewportTransform, navigation.delta, viewportSize, imageSize);
 			return;
 		}
 		const sensitivity = event.ctrlKey ? 0.008 : 0.0018;
-		setZoom(viewportTransform.scale * Math.exp(-delta.y * sensitivity), viewportPoint(event));
+		setZoom(
+			viewportTransform.scale * Math.exp(-navigation.delta * sensitivity),
+			viewportPoint(event)
+		);
 	}
 
 	function handlePointerDown(event: PointerEvent) {
