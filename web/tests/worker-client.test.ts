@@ -55,11 +55,18 @@ test('reports document progress before resolving the developed preview', async (
 		id: 1,
 		type: 'opened',
 		jpeg: new ArrayBuffer(12),
-		boostStops: 1.5
+		boostStops: 1.5,
+		width: 6240,
+		height: 4160
 	});
 
 	assert.equal(progress.length, 1);
-	assert.deepEqual(await opened, { jpeg: new ArrayBuffer(12), boostStops: 1.5 });
+	assert.deepEqual(await opened, {
+		jpeg: new ArrayBuffer(12),
+		boostStops: 1.5,
+		width: 6240,
+		height: 4160
+	});
 	client.destroy();
 });
 
@@ -81,6 +88,25 @@ test('restarting cancels stale work and accepts requests on a fresh worker', asy
 		type: 'capabilities',
 		rawExtensions: ['dng', 'raf']
 	});
+	client.destroy();
+});
+
+test('requests a lossless source tile at the selected bin', async () => {
+	const { client, workers } = setup();
+	const request = {
+		x: 1024,
+		y: 512,
+		width: 1024,
+		height: 1024,
+		bin: 2,
+		ev: 0,
+		tone: true
+	};
+	const tile = client.renderTile(request);
+
+	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'tile', ...request }]);
+	workers[0]?.respond({ id: 1, type: 'tile', png: new ArrayBuffer(24) });
+	assert.deepEqual(await tile, new ArrayBuffer(24));
 	client.destroy();
 });
 

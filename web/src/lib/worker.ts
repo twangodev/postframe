@@ -41,11 +41,22 @@ export interface DevelopProgress {
 	activeFrame: number;
 }
 
+export interface RenderTileRequest {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	bin: number;
+	ev: number;
+	tone: boolean;
+}
+
 export type Request =
 	| { id: number; type: 'capabilities' }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
 	| { id: number; type: 'inspect'; raw: ArrayBuffer; maxDimension: number }
 	| { id: number; type: 'open'; frames: RawFrameHandleInput[]; maxDimension: number }
+	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| { id: number; type: 'preview'; ev: number; tone: boolean }
 	| { id: number; type: 'ultra' }
 	| { id: number; type: 'export' }
@@ -65,7 +76,15 @@ export type Response =
 	| { id: number; type: 'capabilities'; rawExtensions: string[] }
 	| { id: number; type: 'validated' }
 	| { id: number; type: 'inspected'; inspection: RawInspection }
-	| { id: number; type: 'opened'; jpeg: ArrayBuffer; boostStops: number }
+	| {
+			id: number;
+			type: 'opened';
+			jpeg: ArrayBuffer;
+			boostStops: number;
+			width: number;
+			height: number;
+	  }
+	| { id: number; type: 'tile'; png: ArrayBuffer }
 	| { id: number; type: 'preview'; jpeg: ArrayBuffer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
@@ -125,6 +144,19 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'open':
 				await openDocument(message);
 				break;
+			case 'tile': {
+				const png = activeSession().render_tile_png(
+					message.x,
+					message.y,
+					message.width,
+					message.height,
+					message.bin,
+					message.ev,
+					message.tone
+				).buffer as ArrayBuffer;
+				post({ id: message.id, type: 'tile', png }, [png]);
+				break;
+			}
 			case 'preview': {
 				const jpeg = activeSession().preview_jpeg(message.ev, message.tone).buffer as ArrayBuffer;
 				post({ id: message.id, type: 'preview', jpeg }, [jpeg]);
@@ -204,8 +236,10 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 		progress('rendering', message.frames.length);
 		const jpeg = next.preview_jpeg(0, true).buffer as ArrayBuffer;
 		const boostStops = next.boost_stops();
+		const width = next.width();
+		const height = next.height();
 		session = next;
-		post({ id: message.id, type: 'opened', jpeg, boostStops }, [jpeg]);
+		post({ id: message.id, type: 'opened', jpeg, boostStops, width, height }, [jpeg]);
 	} catch (error) {
 		next.free();
 		throw error;

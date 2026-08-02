@@ -19,7 +19,10 @@ export const WASM_BINDINGS = {
 	frame_count: { rust: 'Session::frame_count', worker: null },
 	merge: { rust: 'Session::merge', worker: 'open' },
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open' },
+	width: { rust: 'Session::width', worker: 'open' },
+	height: { rust: 'Session::height', worker: 'open' },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
+	render_tile_png: { rust: 'Session::render_tile_png', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
 } as const satisfies Record<
@@ -52,9 +55,11 @@ export const WASM_TODOS = {
 			'add_frame',
 			'frame_count',
 			'merge',
-			'boost_stops'
+			'boost_stops',
+			'width',
+			'height'
 		],
-		planned: ['Session::add_photo']
+		planned: ['Session::add_photo', 'region-aware RAW demosaic']
 	},
 	editorCommands: {
 		scope: 'Route menus, shortcuts, context menus, and toolbars through one command system.',
@@ -63,8 +68,8 @@ export const WASM_TODOS = {
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
-		bindings: ['preview_jpeg', 'preview_ultra'],
-		planned: ['Session::render_preview']
+		bindings: ['preview_jpeg', 'render_tile_png', 'preview_ultra'],
+		planned: ['GPU display transform', 'tile invalidation after edits']
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
@@ -108,7 +113,7 @@ export const WASM_TODOS = {
 	},
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
-		bindings: ['inspect_raw', 'add_frame'],
+		bindings: ['inspect_raw', 'add_frame', 'width', 'height'],
 		planned: ['display EXIF parser', 'Session::histogram']
 	},
 	generative: {
@@ -118,7 +123,14 @@ export const WASM_TODOS = {
 	},
 	backgroundJobs: {
 		scope: 'Queue, report, cancel, and recover long-running decode, render, and export work.',
-		bindings: ['add_frame', 'merge', 'preview_jpeg', 'preview_ultra', 'export_ultra'],
+		bindings: [
+			'add_frame',
+			'merge',
+			'preview_jpeg',
+			'render_tile_png',
+			'preview_ultra',
+			'export_ultra'
+		],
 		planned: ['worker job queue', 'Session::cancel']
 	},
 	export: {

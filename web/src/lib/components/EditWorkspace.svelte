@@ -26,6 +26,7 @@
 		UserRound
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import PhotoTileLayer from './PhotoTileLayer.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
@@ -45,12 +46,12 @@
 		nextZoomScale,
 		panBy,
 		surfaceTransform,
-		visibleImageSize,
 		zoomAt,
 		type Point,
 		type Size,
 		type ViewportTransform
 	} from '$lib/photo-viewport';
+	import { visibleImageRect } from '$lib/photo-tiles';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -84,7 +85,7 @@
 		height: Math.max(1, active?.height ?? 1067)
 	});
 	const imageOffset = $derived(surfaceTransform(viewportSize, imageSize, viewportTransform));
-	const visiblePixels = $derived(visibleImageSize(viewportSize, imageSize, viewportTransform));
+	const visiblePixels = $derived(visibleImageRect(viewportSize, imageSize, viewportTransform));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -796,6 +797,16 @@
 							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 						>
 							<PhotoVisual photo={active} contain />
+							<PhotoTileLayer
+								photoId={active.id}
+								enabled={workspace.documentStatus.kind === 'ready' &&
+									workspace.documentStatus.photoId === active.id &&
+									active.kind !== 'display'}
+								viewport={viewportSize}
+								image={imageSize}
+								transform={viewportTransform}
+								renderTile={workspace.renderTile}
+							/>
 							{#if cropTools.has(activeTool)}
 								<div
 									class="viewport-hairline pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"

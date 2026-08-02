@@ -1,4 +1,4 @@
-import type { RawFrameHandleInput, Request, Response } from './worker';
+import type { RawFrameHandleInput, RenderTileRequest, Request, Response } from './worker';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
@@ -55,7 +55,17 @@ export class PostframeWorkerClient {
 			(id) => ({ id, type: 'open', frames, maxDimension }),
 			'opened'
 		);
-		return { jpeg: response.jpeg, boostStops: response.boostStops };
+		return {
+			jpeg: response.jpeg,
+			boostStops: response.boostStops,
+			width: response.width,
+			height: response.height
+		};
+	}
+
+	async renderTile(tile: RenderTileRequest) {
+		const response = await this.send((id) => ({ id, type: 'tile', ...tile }), 'tile');
+		return response.png;
 	}
 
 	async preview(ev: number, tone: boolean) {

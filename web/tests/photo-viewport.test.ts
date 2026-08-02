@@ -9,7 +9,6 @@ import {
 	nextZoomScale,
 	panBy,
 	screenToImage,
-	visibleImageSize,
 	zoomAt
 } from '../src/lib/photo-viewport.ts';
 
@@ -41,18 +40,6 @@ test('clamps panning while retaining a small overscroll allowance', () => {
 
 	assert.deepEqual(panned.pan, { x: 2448, y: -1648 });
 	assert.deepEqual(clampTransform(panned, viewport, image), panned);
-});
-
-test('reports the source pixel area visible through the viewport', () => {
-	assert.deepEqual(visibleImageSize(viewport, image, fittedTransform(viewport, image)), image);
-	assert.deepEqual(visibleImageSize(viewport, image, { scale: 2, pan: { x: 0, y: 0 } }), {
-		width: 600,
-		height: 400
-	});
-	assert.deepEqual(visibleImageSize(viewport, image, { scale: 1, pan: { x: 2448, y: 0 } }), {
-		width: 1152,
-		height: 800
-	});
 });
 
 test('steps through useful photographic zoom presets', () => {

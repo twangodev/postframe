@@ -17,7 +17,13 @@ import {
 	type PhotoFrame as GroupedPhotoFrame,
 	type PhotoGroup
 } from './photo-group';
-import type { DevelopPhase, DevelopProgress, RawFrameHandleInput, RawMetadata } from './worker';
+import type {
+	DevelopPhase,
+	DevelopProgress,
+	RawFrameHandleInput,
+	RawMetadata,
+	RenderTileRequest
+} from './worker';
 import {
 	BrowserStorageService,
 	storageErrorMessage,
@@ -169,7 +175,7 @@ export class WorkspaceState {
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageError = $state<string | null>(null);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
-	editPreviewSrc = $state<string | null>(null);
+	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
 	adjustments = $state({ ...defaultAdjustments });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
@@ -179,7 +185,12 @@ export class WorkspaceState {
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
 	editingPhoto = $derived(
 		this.selectedPhoto
-			? { ...this.selectedPhoto, src: this.editPreviewSrc ?? this.selectedPhoto.src }
+			? {
+					...this.selectedPhoto,
+					src: this.editPreview?.src ?? this.selectedPhoto.src,
+					width: this.editPreview?.width ?? this.selectedPhoto.width,
+					height: this.editPreview?.height ?? this.selectedPhoto.height
+				}
 			: null
 	);
 
@@ -349,6 +360,18 @@ export class WorkspaceState {
 		this.workerClient?.restart('Development cancelled');
 		this.releaseEditPreview();
 		this.documentStatus = { kind: 'cancelled', photoId };
+	};
+
+	renderTile = async (photoId: string, tile: RenderTileRequest) => {
+		if (
+			!this.workerClient ||
+			this.documentStatus.kind !== 'ready' ||
+			this.documentStatus.photoId !== photoId ||
+			this.selectedPhoto?.kind === 'display'
+		) {
+			throw new Error('RAW document is not ready for tile rendering');
+		}
+		return this.workerClient.renderTile(tile);
 	};
 
 	setRating(photoId: string, rating: number) {
@@ -535,7 +558,7 @@ export class WorkspaceState {
 
 			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
 			this.objectUrls.add(src);
-			this.editPreviewSrc = src;
+			this.editPreview = { src, width: result.width, height: result.height };
 			this.documentStatus = { kind: 'ready', photoId, boostStops: result.boostStops };
 		} catch (error) {
 			if (revision !== this.documentRevision) return;
@@ -573,16 +596,16 @@ export class WorkspaceState {
 	}
 
 	private releaseEditPreview() {
-		if (!this.editPreviewSrc) return;
-		URL.revokeObjectURL(this.editPreviewSrc);
-		this.objectUrls.delete(this.editPreviewSrc);
-		this.editPreviewSrc = null;
+		if (!this.editPreview) return;
+		URL.revokeObjectURL(this.editPreview.src);
+		this.objectUrls.delete(this.editPreview.src);
+		this.editPreview = null;
 	}
 
 	private clearFiles() {
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
-		this.editPreviewSrc = null;
+		this.editPreview = null;
 	}
 
 	private beginCollection(name: string, photos: Photo[]) {
