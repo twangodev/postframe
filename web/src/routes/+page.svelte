@@ -31,15 +31,13 @@
 		acceptedPhotos={workspace.acceptedPhotos}
 		sourceReady={workspace.capabilitiesReady}
 		ingestError={workspace.ingestError}
-		recentCollections={workspace.recentCollections}
-		catalogReady={workspace.catalogReady}
-		catalogError={workspace.catalogError}
+		libraryError={workspace.libraryError}
 		localStorageAvailable={workspace.localStorageAvailable}
 		storageStatus={workspace.browserStorageStatus}
 		storageError={workspace.browserStorageError}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
-		onOpenCollection={workspace.openCollection}
+		onEnterLibrary={workspace.enterLibrary}
 		onClearLocalData={workspace.clearLocalData}
 		onRefreshStorage={workspace.refreshBrowserStorage}
 		onRequestPersistence={workspace.requestPersistentStorage}

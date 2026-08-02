@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Dialog, ToggleGroup } from 'bits-ui';
 	import {
-		Album,
 		Box,
 		Clock3,
 		Flag,
@@ -37,9 +36,10 @@
 	let view = $state('grid');
 	let source = $state('all');
 	let sort = $state('capture');
-	let albumDialogOpen = $state(false);
-	let albumName = $state('');
+	let collectionName = $state('');
+	let collectionBusy = $state(false);
 	let importing = $state(false);
+	const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
 	const active = $derived(workspace.selectedPhoto);
 	const selectedStack = $derived(
@@ -47,13 +47,19 @@
 			workspace.selectedIds.some((id) => stack.photoIds.includes(id))
 		)
 	);
+	const recentCount = $derived(
+		workspace.photos.filter((photo) => photo.importedAt >= recentCutoff).length
+	);
 	const visiblePhotos = $derived.by(() => {
 		const query = search.trim().toLowerCase();
+		const collection = source.startsWith('collection:')
+			? workspace.collections.find((candidate) => candidate.id === source.slice(11))
+			: null;
 		let photos = workspace.photos.filter((photo) => {
 			if (query && !photo.name.toLowerCase().includes(query)) return false;
-			// TODO(WASM_TODOS.collectionStorage): filter recent photos using persisted import activity.
+			if (source === 'recent' && photo.importedAt < recentCutoff) return false;
 			if (source === 'favorites' && !photo.flagged) return false;
-			if (source.startsWith('album:') && !photo.albumIds.includes(source.slice(6))) return false;
+			if (collection && !collection.photoIds.includes(photo.id)) return false;
 			return true;
 		});
 
@@ -72,19 +78,20 @@
 		});
 	});
 
-	function countForAlbum(albumId: string) {
-		return workspace.photos.filter((photo) => photo.albumIds.includes(albumId)).length;
-	}
-
 	function stackFor(photo: Photo) {
 		return workspace.stacks.find((stack) => stack.id === photo.stackId);
 	}
 
-	function createAlbum(event: SubmitEvent) {
+	async function createCollection(event: SubmitEvent) {
 		event.preventDefault();
-		workspace.createAlbum(albumName);
-		albumName = '';
-		albumDialogOpen = false;
+		if (!collectionName.trim() || collectionBusy) return;
+		collectionBusy = true;
+		try {
+			await workspace.createCollection(collectionName, []);
+			collectionName = '';
+		} finally {
+			collectionBusy = false;
+		}
 	}
 
 	async function importFiles(list: FileList | null) {
@@ -166,7 +173,7 @@
 			>
 				<Clock3 size={13} strokeWidth={1.5} />
 				<span class="flex-1">recent</span>
-				<span class="font-mono text-[10px]">{workspace.photos.length}</span>
+				<span class="font-mono text-[10px]">{recentCount}</span>
 			</button>
 			<button
 				type="button"
@@ -187,30 +194,14 @@
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
 			<span class="text-muted text-[10px] tracking-[0.04em]">collections</span>
-		</div>
-		<div class="px-2">
-			<button
-				type="button"
-				class="bg-surface text-text flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px]"
-				onclick={() => (source = 'all')}
-			>
-				<Folder size={13} strokeWidth={1.5} />
-				<span class="min-w-0 flex-1 truncate">{workspace.collectionName}</span>
-				<span class="text-muted font-mono text-[10px]">{workspace.photos.length}</span>
-			</button>
-		</div>
-
-		<div class="bg-subtle mx-3 my-3 h-px"></div>
-		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted text-[10px] tracking-[0.04em]">albums</span>
-			<Tooltip text="Create album">
+			<Tooltip text="Create collection">
 				{#snippet children(props)}
 					<button
 						{...props}
 						type="button"
-						aria-label="Create album"
+						aria-label="Create collection"
 						class="text-muted hover:text-text cursor-pointer rounded transition-colors"
-						onclick={() => (albumDialogOpen = true)}
+						onclick={workspace.requestCollectionCreation}
 					>
 						<FolderPlus size={13} strokeWidth={1.5} />
 					</button>
@@ -218,22 +209,22 @@
 			</Tooltip>
 		</div>
 		<div class="space-y-0.5 px-2">
-			{#each workspace.albums as album (album.id)}
+			{#each workspace.collections as collection (collection.id)}
 				<button
 					type="button"
 					class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
-					`album:${album.id}`
+					`collection:${collection.id}`
 						? 'bg-surface text-text'
 						: 'text-muted hover:bg-surface/60 hover:text-text'}"
-					onclick={() => (source = `album:${album.id}`)}
+					onclick={() => (source = `collection:${collection.id}`)}
 				>
-					<Album size={13} strokeWidth={1.5} />
-					<span class="min-w-0 flex-1 truncate">{album.name}</span>
-					<span class="font-mono text-[10px]">{countForAlbum(album.id)}</span>
+					<Folder size={13} strokeWidth={1.5} />
+					<span class="min-w-0 flex-1 truncate">{collection.name}</span>
+					<span class="font-mono text-[10px]">{collection.photoIds.length}</span>
 				</button>
 			{/each}
-			{#if workspace.albums.length === 0}
-				<p class="text-muted/65 px-2 py-2 text-[10px] leading-relaxed">no albums yet.</p>
+			{#if workspace.collections.length === 0}
+				<p class="text-muted/65 px-2 py-2 text-[10px] leading-relaxed">no collections yet.</p>
 			{/if}
 		</div>
 	</aside>
@@ -249,7 +240,7 @@
 					/>
 					<input
 						bind:value={search}
-						placeholder="search this collection"
+						placeholder="search photos"
 						class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
 					/>
 				</label>
@@ -317,7 +308,7 @@
 					>
 						<ImagePlus size={17} strokeWidth={1.25} />
 					</div>
-					<p class="text-text text-xs font-medium">empty collection</p>
+					<p class="text-text text-xs font-medium">empty library</p>
 					<p class="text-muted mt-1 text-[10px]">add photographs when you're ready.</p>
 					<label
 						class="bg-text text-bg mt-4 flex h-8 cursor-pointer items-center rounded px-3 text-[10px] font-medium hover:opacity-85"
@@ -419,7 +410,7 @@
 				<div class="flex h-full flex-col items-center justify-center text-center">
 					<Box size={28} strokeWidth={1} class="text-muted mb-3" />
 					<p class="text-text text-xs">no photos in this view</p>
-					<p class="text-muted mt-1 text-[10px]">try another album or clear the search.</p>
+					<p class="text-muted mt-1 text-[10px]">try another collection or clear the search.</p>
 				</div>
 			{/if}
 		</div>
@@ -516,28 +507,28 @@
 			</div>
 
 			<div class="p-3">
-				<p class="text-muted mb-2 text-[10px] tracking-[0.04em]">albums</p>
+				<p class="text-muted mb-2 text-[10px] tracking-[0.04em]">collections</p>
 				<div class="space-y-1">
-					{#each workspace.albums as album (album.id)}
+					{#each workspace.collections as collection (collection.id)}
 						<label
 							class="text-muted hover:text-text flex cursor-pointer items-center gap-2 py-1 text-[11px]"
 						>
 							<input
 								type="checkbox"
-								checked={active.albumIds.includes(album.id)}
-								onchange={() => workspace.toggleAlbum(active.id, album.id)}
+								checked={collection.photoIds.includes(active.id)}
+								onchange={() => workspace.toggleCollection(active.id, collection.id)}
 								class="accent-accent"
 							/>
-							{album.name}
+							{collection.name}
 						</label>
 					{/each}
-					{#if workspace.albums.length === 0}
+					{#if workspace.collections.length === 0}
 						<button
 							type="button"
 							class="text-muted hover:text-text cursor-pointer text-[11px] transition-colors"
-							onclick={() => (albumDialogOpen = true)}
+							onclick={workspace.requestCollectionCreation}
 						>
-							+ create an album
+							+ create a collection
 						</button>
 					{/if}
 				</div>
@@ -550,14 +541,15 @@
 	</aside>
 </div>
 
-<Dialog.Root bind:open={albumDialogOpen}>
+<Dialog.Root bind:open={workspace.collectionDialogOpen}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
 		<CenteredDialogContent size="sm" class="p-5">
-			<form onsubmit={createAlbum}>
+			<form onsubmit={createCollection}>
 				<div class="flex items-start justify-between">
 					<div>
-						<Dialog.Title class="text-sm font-medium tracking-tight">create album</Dialog.Title>
+						<Dialog.Title class="text-sm font-medium tracking-tight">create collection</Dialog.Title
+						>
 						<Dialog.Description class="text-muted mt-1 text-xs">
 							selected photos will be added automatically.
 						</Dialog.Description>
@@ -570,17 +562,17 @@
 					</Dialog.Close>
 				</div>
 				<input
-					bind:value={albumName}
-					placeholder="album name"
+					bind:value={collectionName}
+					placeholder="collection name"
 					class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent mt-5 w-full rounded border px-3 py-2 text-xs focus:outline-none"
 				/>
 				<div class="mt-4 flex justify-end">
 					<button
 						type="submit"
-						disabled={!albumName.trim()}
+						disabled={!collectionName.trim() || collectionBusy}
 						class="bg-text text-bg cursor-pointer rounded px-3 py-2 text-[10px] disabled:opacity-35"
 					>
-						create album
+						create collection
 					</button>
 				</div>
 			</form>

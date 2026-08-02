@@ -6,21 +6,18 @@
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
-	import type { CollectionSummary } from '$lib/collection-store';
 
 	interface Props {
 		acceptedPhotos: string;
 		sourceReady: boolean;
 		ingestError: string | null;
-		recentCollections: CollectionSummary[];
-		catalogReady: boolean;
-		catalogError: string | null;
+		libraryError: string | null;
 		localStorageAvailable: boolean;
 		storageStatus: BrowserStorageStatus | null;
 		storageError: string | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
-		onOpenCollection: (collectionId: string) => Promise<void>;
+		onEnterLibrary: () => void;
 		onClearLocalData: () => Promise<void>;
 		onRefreshStorage: () => Promise<void>;
 		onRequestPersistence: () => Promise<void>;
@@ -30,15 +27,13 @@
 		acceptedPhotos,
 		sourceReady,
 		ingestError,
-		recentCollections,
-		catalogReady,
-		catalogError,
+		libraryError,
 		localStorageAvailable,
 		storageStatus,
 		storageError,
 		onOpenPhoto,
 		onCreateCollection,
-		onOpenCollection,
+		onEnterLibrary,
 		onClearLocalData,
 		onRefreshStorage,
 		onRequestPersistence
@@ -54,19 +49,11 @@
 		const file = (event.currentTarget as HTMLInputElement).files?.[0];
 		if (!file) return;
 		busy = true;
-		await onOpenPhoto(file);
-		busy = false;
-	}
-
-	async function openCollection(collectionId: string) {
-		if (busy) return;
-		busy = true;
-		await onOpenCollection(collectionId);
-		busy = false;
-	}
-
-	function collectionDate(timestamp: number) {
-		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(timestamp);
+		try {
+			await onOpenPhoto(file);
+		} finally {
+			busy = false;
+		}
 	}
 
 	function openStorage() {
@@ -85,38 +72,29 @@
 
 	async function createCollection(event: SubmitEvent) {
 		event.preventDefault();
-		if (files.length === 0) return;
+		if (!collectionName.trim()) return;
 		busy = true;
-		await onCreateCollection(collectionName, files);
-		busy = false;
-	}
-
-	async function closeCollectionSetup() {
-		if (!newCollectionOpen || busy) return;
-		newCollectionOpen = false;
-		await openEmptyCollection(collectionName);
-	}
-
-	async function openEmptyCollection(name = '') {
-		if (busy) return;
-		busy = true;
-		await onCreateCollection(name, []);
-		busy = false;
+		try {
+			await onCreateCollection(collectionName, files);
+			newCollectionOpen = false;
+		} finally {
+			busy = false;
+		}
 	}
 
 	function setCollectionDialogOpen(open: boolean) {
-		if (open) newCollectionOpen = true;
-		else void closeCollectionSetup();
+		newCollectionOpen = open;
+		if (!open && !busy) onEnterLibrary();
 	}
 </script>
 
 <main class="bg-bg text-text flex min-h-svh items-center justify-center px-6">
 	<button
 		type="button"
-		aria-label="Continue with an empty collection"
-		title="Continue with an empty collection"
+		aria-label="Enter photo library"
+		title="Enter photo library"
 		class="motion-header text-muted hover:bg-surface hover:text-text absolute top-5 right-5 flex size-9 items-center justify-center rounded transition-colors"
-		onclick={() => openEmptyCollection()}
+		onclick={onEnterLibrary}
 		disabled={busy}
 	>
 		<X size={17} strokeWidth={1.5} />
@@ -184,29 +162,9 @@
 			</p>
 		{/if}
 
-		{#if catalogReady && recentCollections.length > 0}
-			<div class="motion-enter border-subtle mt-9 border-t pt-4">
-				<p class="text-muted mb-1.5 text-[10px] tracking-[0.04em]">recent</p>
-				<div class="flex flex-col gap-0.5">
-					{#each recentCollections.slice(0, 5) as collection, index (collection.id)}
-						<button
-							type="button"
-							class="motion-card hover:bg-surface flex min-w-0 cursor-pointer items-center justify-between rounded px-2 py-2 text-left disabled:cursor-wait disabled:opacity-45"
-							style={`--motion-delay: ${160 + index * 30}ms`}
-							disabled={busy}
-							onclick={() => openCollection(collection.id)}
-						>
-							<span class="truncate text-[11px] font-medium">{collection.name}</span>
-							<span class="text-muted ml-4 shrink-0 font-mono text-[9px]">
-								{collection.photoCount} · {collectionDate(collection.updatedAt)}
-							</span>
-						</button>
-					{/each}
-				</div>
-			</div>
-		{:else if catalogError}
-			<p class="text-negative mt-5 truncate text-[10px]" title={catalogError}>
-				couldn't read local collections
+		{#if libraryError}
+			<p class="text-negative mt-5 truncate text-[10px]" title={libraryError}>
+				couldn't read the local library
 			</p>
 		{/if}
 	</section>
@@ -221,7 +179,7 @@
 					<div>
 						<Dialog.Title class="text-sm font-medium tracking-tight">new collection</Dialog.Title>
 						<Dialog.Description class="text-muted mt-1 text-xs">
-							name the workspace and choose photographs.
+							group photographs without moving them.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
@@ -275,7 +233,7 @@
 				<div class="mt-5 flex justify-end">
 					<button
 						type="submit"
-						disabled={files.length === 0 || busy}
+						disabled={!collectionName.trim() || busy}
 						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
 						create collection

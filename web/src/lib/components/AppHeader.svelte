@@ -2,9 +2,10 @@
 	import { Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
-	import { Download, Plus, Upload } from '@lucide/svelte';
+	import { Database, Download, Plus, Upload } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import EditorMenuBar from './EditorMenuBar.svelte';
+	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import type { EditorMenuAction } from '$lib/editor-menu';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -17,6 +18,7 @@
 
 	let { workspace, onImport, onExport }: Props = $props();
 	let importing = $state(false);
+	let storageOpen = $state(false);
 	let importInput: HTMLInputElement;
 
 	async function importFiles(list: FileList | null) {
@@ -29,7 +31,9 @@
 	function runMenuAction(action: EditorMenuAction) {
 		switch (action) {
 			case 'new-collection':
-			case 'close-collection':
+				workspace.requestCollectionCreation();
+				break;
+			case 'close-library':
 				workspace.reset();
 				break;
 			case 'import-photos':
@@ -38,7 +42,7 @@
 			case 'show-organizer':
 				workspace.setMode('organize');
 				break;
-			case 'save-collection':
+			case 'save-library':
 				void workspace.save();
 				break;
 			case 'export':
@@ -47,6 +51,11 @@
 			case 'open-github':
 				window.open('https://github.com/twangodev/postframe', '_blank', 'noopener,noreferrer');
 		}
+	}
+
+	function openStorage() {
+		storageOpen = true;
+		void workspace.refreshBrowserStorage();
 	}
 
 	function shortcut(action: EditorMenuAction) {
@@ -60,9 +69,9 @@
 		tinykeys(window, {
 			'$mod+n': shortcut('new-collection'),
 			'$mod+o': shortcut('import-photos'),
-			'$mod+s': shortcut('save-collection'),
+			'$mod+s': shortcut('save-library'),
 			'$mod+Shift+e': shortcut('export'),
-			'$mod+w': shortcut('close-collection')
+			'$mod+w': shortcut('close-library')
 		})
 	);
 </script>
@@ -70,14 +79,14 @@
 <header class="motion-header border-subtle bg-bg shrink-0 border-b">
 	<div class="flex h-12 items-center px-3">
 		<div class="flex min-w-0 flex-1 items-center gap-3">
-			<Tooltip text="Close this workspace">
+			<Tooltip text="Show photo library">
 				{#snippet children(props)}
 					<button
 						{...props}
 						type="button"
-						aria-label="Close this workspace"
+						aria-label="Show photo library"
 						class="hover:text-text flex cursor-pointer items-center gap-1.5 rounded transition-colors"
-						onclick={workspace.reset}
+						onclick={workspace.enterLibrary}
 					>
 						<img src={postframeLogo} alt="" class="size-5" />
 						<span class="text-[11px] font-medium tracking-tight">postframe</span>
@@ -86,7 +95,7 @@
 			</Tooltip>
 			<span class="bg-subtle h-4 w-px"></span>
 			<div class="min-w-0">
-				<p class="text-text truncate text-xs font-medium">{workspace.collectionName}</p>
+				<p class="text-text truncate text-xs font-medium">photo library</p>
 				<p
 					class:text-negative={workspace.storageStatus === 'error' || !!workspace.ingestError}
 					class="text-muted text-[10px] tracking-wide"
@@ -129,19 +138,34 @@
 		</Tabs.Root>
 
 		<div class="flex flex-1 items-center justify-end gap-1">
-			<Tooltip text="Create another collection">
+			<Tooltip text="Create collection">
 				{#snippet children(props)}
 					<button
 						{...props}
 						type="button"
-						aria-label="Create another collection"
+						aria-label="Create collection"
 						class="text-muted hover:bg-surface hover:text-text hidden size-7 cursor-pointer items-center justify-center rounded transition-colors sm:flex"
-						onclick={workspace.reset}
+						onclick={workspace.requestCollectionCreation}
 					>
 						<Plus size={14} strokeWidth={1.5} />
 					</button>
 				{/snippet}
 			</Tooltip>
+			{#if workspace.localStorageAvailable}
+				<Tooltip text="Local storage">
+					{#snippet children(props)}
+						<button
+							{...props}
+							type="button"
+							aria-label="Manage local storage"
+							class="text-muted hover:bg-surface hover:text-text flex size-7 cursor-pointer items-center justify-center rounded transition-colors"
+							onclick={openStorage}
+						>
+							<Database size={13} strokeWidth={1.5} />
+						</button>
+					{/snippet}
+				</Tooltip>
+			{/if}
 			<Tooltip text="Import more photos">
 				{#snippet children(props)}
 					<label
@@ -176,3 +200,12 @@
 		<EditorMenuBar onAction={runMenuAction} />
 	{/if}
 </header>
+
+<StorageManagementDialog
+	bind:open={storageOpen}
+	status={workspace.browserStorageStatus}
+	error={workspace.browserStorageError}
+	onRefresh={workspace.refreshBrowserStorage}
+	onRequestPersistence={workspace.requestPersistentStorage}
+	onClearLocalData={workspace.clearLocalData}
+/>

@@ -4,9 +4,9 @@ export type EditorMenuAction =
 	| 'new-collection'
 	| 'import-photos'
 	| 'show-organizer'
-	| 'save-collection'
+	| 'save-library'
 	| 'export'
-	| 'close-collection'
+	| 'close-library'
 	| 'open-github';
 
 interface MenuAction {
@@ -55,11 +55,11 @@ export const EDITOR_MENUS: EditorMenu[] = [
 			{ kind: 'action', label: 'import photos…', action: 'import-photos', shortcut: '⌘O' },
 			{ kind: 'action', label: 'show in organizer', action: 'show-organizer' },
 			separator(),
-			{ kind: 'action', label: 'save collection', action: 'save-collection', shortcut: '⌘S' },
+			{ kind: 'action', label: 'save library', action: 'save-library', shortcut: '⌘S' },
 			{ kind: 'action', label: 'export…', action: 'export', shortcut: '⇧⌘E' },
 			{ kind: 'todo', label: 'export Ultra HDR', todo: 'export' },
 			separator(),
-			{ kind: 'action', label: 'close collection', action: 'close-collection', shortcut: '⌘W' }
+			{ kind: 'action', label: 'close library', action: 'close-library', shortcut: '⌘W' }
 		]
 	},
 	{

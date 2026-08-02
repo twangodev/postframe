@@ -153,7 +153,7 @@
 
 				{#if confirmingClear}
 					<div class="border-negative/40 bg-negative/5 rounded border p-3">
-						<p class="text-xs">delete every local collection?</p>
+						<p class="text-xs">delete the local library?</p>
 						<p class="text-muted mt-1 text-[10px] leading-relaxed">
 							this removes originals and edits from this browser. it cannot be undone.
 						</p>
