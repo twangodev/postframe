@@ -242,11 +242,16 @@
 				: event.deltaMode === WheelEvent.DOM_DELTA_PAGE
 					? viewportSize.height
 					: 1;
+		const delta = { x: event.deltaX * unit, y: event.deltaY * unit };
+		const horizontalGesture = event.shiftKey || Math.abs(delta.x) > Math.abs(delta.y);
+		if (!event.ctrlKey && horizontalGesture) {
+			const distance = event.shiftKey ? delta.x || delta.y : delta.x;
+			viewportMode = 'manual';
+			viewportTransform = panBy(viewportTransform, { x: -distance, y: 0 }, viewportSize, imageSize);
+			return;
+		}
 		const sensitivity = event.ctrlKey ? 0.008 : 0.0018;
-		setZoom(
-			viewportTransform.scale * Math.exp(-event.deltaY * unit * sensitivity),
-			viewportPoint(event)
-		);
+		setZoom(viewportTransform.scale * Math.exp(-delta.y * sensitivity), viewportPoint(event));
 	}
 
 	function handlePointerDown(event: PointerEvent) {
@@ -936,13 +941,18 @@
 					<output
 						title="Visible source pixels · full image pixels"
 						aria-label={`Viewing ${Math.round(visiblePixels.width)} by ${Math.round(visiblePixels.height)} of ${imageSize.width} by ${imageSize.height} source pixels`}
-						class="font-mono tabular-nums"
+						class="flex items-baseline gap-1 whitespace-nowrap"
 					>
-						view {Math.round(visiblePixels.width)} × {Math.round(visiblePixels.height)} · total
-						{imageSize.width} × {imageSize.height} px
+						<span>view</span>
+						<span class="font-mono tabular-nums"
+							>{Math.round(visiblePixels.width)} × {Math.round(visiblePixels.height)}</span
+						>
+						<span>· total</span>
+						<span class="font-mono tabular-nums">{imageSize.width} × {imageSize.height}</span>
+						<span>px</span>
 					</output>
 				{:else}
-					<span class="font-mono">— × — px</span>
+					<span>— × — px</span>
 				{/if}
 			</footer>
 		</section>
