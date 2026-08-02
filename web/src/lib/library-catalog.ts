@@ -5,7 +5,7 @@ import {
 	type PhotoCollection,
 	type StoredAsset,
 	type StoredPhoto
-} from './library-store.ts';
+} from './library-schema.ts';
 
 const DATABASE_NAME = 'postframe-catalog';
 const LIBRARY_ID = 'library';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { libraryManifestSchema } from '../src/lib/library-store.ts';
+import { libraryManifestSchema } from '../src/lib/library-schema.ts';
 
 const photo = {
 	id: 'photo-one',

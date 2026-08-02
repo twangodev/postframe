@@ -1,15 +1,13 @@
 import { acceptedPhotoTypes, normalizedRawExtensions } from './photo-source';
-import {
-	LibraryStore,
-	type LibraryManifest,
-	type OriginalWrite,
-	type PhotoCollection,
-	type StoredAsset,
-	type StoredFrame,
-	type StoredMetadata,
-	type ThumbnailWrite,
-	type StoredPhoto
-} from './library-store';
+import { type OriginalWrite, type ThumbnailWrite, LibraryService } from './library-service';
+import type {
+	LibraryManifest,
+	PhotoCollection,
+	StoredAsset,
+	StoredFrame,
+	StoredMetadata,
+	StoredPhoto
+} from './library-schema';
 import { PostframeWorkerClient } from './worker-client';
 import {
 	groupPhotoFiles,
@@ -132,7 +130,7 @@ function dateLabel(timestamp: number) {
 }
 
 export class WorkspaceState {
-	private readonly libraryStore = LibraryStore.supported() ? new LibraryStore() : null;
+	private readonly libraryService = LibraryService.supported() ? new LibraryService() : null;
 	private readonly browserStorage = new BrowserStorageService();
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
@@ -162,8 +160,8 @@ export class WorkspaceState {
 	libraryError = $state<string | null>(null);
 	collectionDialogOpen = $state(false);
 	startupReady = $state(false);
-	localStorageAvailable = this.libraryStore !== null;
-	storageStatus = $state<StorageStatus>(this.libraryStore ? 'saved' : 'memory');
+	localStorageAvailable = this.libraryService !== null;
+	storageStatus = $state<StorageStatus>(this.libraryService ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageError = $state<string | null>(null);
@@ -268,7 +266,7 @@ export class WorkspaceState {
 	};
 
 	clearLocalData = async () => {
-		const store = this.libraryStore;
+		const store = this.libraryService;
 		if (!store) return;
 
 		this.libraryRevision += 1;
@@ -481,6 +479,7 @@ export class WorkspaceState {
 		this.removeProgressListener = null;
 		this.clearFiles();
 		this.workerClient?.destroy();
+		this.libraryService?.close();
 	};
 
 	private resetEditState() {
@@ -543,7 +542,7 @@ export class WorkspaceState {
 	}
 
 	private async documentFrames(photo: Photo): Promise<RawFrameHandleInput[]> {
-		const store = this.libraryStore;
+		const store = this.libraryService;
 		if (!store) throw new Error('RAW editing requires local OPFS storage');
 
 		return Promise.all(
@@ -675,7 +674,7 @@ export class WorkspaceState {
 	}
 
 	private async restorePhoto(photo: StoredPhoto): Promise<Photo> {
-		const store = this.libraryStore;
+		const store = this.libraryService;
 		if (!store) throw new Error('Local library storage is unavailable');
 		let src: string | null = null;
 		let metadata = photo.metadata ? { ...photo.metadata } : null;
@@ -758,7 +757,7 @@ export class WorkspaceState {
 	}
 
 	private async loadLibrary() {
-		const store = this.libraryStore;
+		const store = this.libraryService;
 		if (!store) {
 			this.libraryCreatedAt = Date.now();
 			this.libraryReady = true;
@@ -874,7 +873,7 @@ export class WorkspaceState {
 		thumbnails: readonly ThumbnailWrite[] = []
 	) {
 		const manifest = this.libraryManifest();
-		const store = this.libraryStore;
+		const store = this.libraryService;
 		if (!store || !manifest) {
 			this.storageStatus = 'memory';
 			return Promise.resolve();

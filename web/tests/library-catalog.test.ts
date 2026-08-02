@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LibraryCatalog } from '../src/lib/library-catalog.ts';
-import type { LibraryManifest } from '../src/lib/library-store.ts';
+import type { LibraryManifest } from '../src/lib/library-schema.ts';
 
 function manifest(): LibraryManifest {
 	return {
