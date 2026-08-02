@@ -175,25 +175,33 @@ select:focus-visible {
 	animation: menu-in 120ms var(--ease-out) both;
 }
 
-.develop-scan {
-	top: -24%;
-	height: 24%;
-	background: linear-gradient(to bottom, transparent, rgb(22 123 255 / 16%), transparent);
-	mix-blend-mode: screen;
-	animation: develop-scan 1.8s ease-in-out infinite;
+.develop-dither {
+	background-image:
+		radial-gradient(rgb(255 255 255 / 22%) 0.6px, transparent 0.7px),
+		radial-gradient(rgb(0 0 0 / 28%) 0.6px, transparent 0.7px);
+	background-position:
+		0 0,
+		1.5px 1.5px;
+	background-size: 3px 3px;
+	mix-blend-mode: soft-light;
+	opacity: 0.3;
+	animation: develop-dither 420ms steps(2) infinite;
 }
 
-.develop-pulse {
-	animation: develop-pulse 1.6s ease-in-out infinite;
+.develop-glimmer {
+	top: -20%;
+	bottom: -20%;
+	left: -55%;
+	width: 42%;
+	background: linear-gradient(100deg, transparent, rgb(255 255 255 / 13%), transparent);
+	mix-blend-mode: screen;
+	transform: skewX(-14deg);
+	animation: develop-glimmer 1.9s ease-in-out infinite;
 }
 
 .develop-progress-sweep {
 	background: linear-gradient(to right, transparent, rgb(255 255 255 / 55%), transparent);
 	animation: develop-sweep 1.25s ease-in-out infinite;
-}
-
-.develop-step-active {
-	animation: develop-step 1.2s ease-in-out infinite;
 }
 
 @keyframes enter-fade {
@@ -335,30 +343,32 @@ select:focus-visible {
 	}
 }
 
-@keyframes develop-scan {
+@keyframes develop-dither {
 	from {
-		transform: translateY(0);
-		opacity: 0;
-	}
-	20%,
-	80% {
-		opacity: 1;
+		background-position:
+			0 0,
+			1.5px 1.5px;
 	}
 	to {
-		transform: translateY(520%);
-		opacity: 0;
+		background-position:
+			1.5px 0,
+			0 1.5px;
 	}
 }
 
-@keyframes develop-pulse {
+@keyframes develop-glimmer {
 	0%,
-	100% {
-		transform: scale(0.92);
-		opacity: 0.65;
+	18% {
+		left: -55%;
+		opacity: 0;
 	}
-	50% {
-		transform: scale(1);
+	45% {
 		opacity: 1;
+	}
+	75%,
+	100% {
+		left: 115%;
+		opacity: 0;
 	}
 }
 
@@ -368,16 +378,6 @@ select:focus-visible {
 	}
 	to {
 		transform: translateX(420%);
-	}
-}
-
-@keyframes develop-step {
-	0%,
-	100% {
-		box-shadow: 0 0 0 0 rgb(22 123 255 / 0%);
-	}
-	50% {
-		box-shadow: 0 0 0 3px rgb(22 123 255 / 16%);
 	}
 }
 

@@ -56,13 +56,6 @@
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
 	type LoadingDocument = Extract<DocumentStatus, { kind: 'loading' }>;
-	type DevelopStage = DevelopPhase;
-	const developStages: { id: DevelopStage; label: string }[] = [
-		{ id: 'reading', label: 'read' },
-		{ id: 'decoding', label: 'decode' },
-		{ id: 'merging', label: 'merge' },
-		{ id: 'rendering', label: 'render' }
-	];
 	const selectionTools = new Set([
 		'object-select',
 		'quick-select',
@@ -284,17 +277,6 @@
 			return (status.framesDecoded / status.totalFrames) * 100;
 		}
 		return null;
-	}
-
-	function developStageState(stage: DevelopStage, status: LoadingDocument) {
-		if (stage === status.phase) return 'active';
-		if (stage === 'reading' && status.totalBytes > 0 && status.bytesRead >= status.totalBytes) {
-			return 'done';
-		}
-		if (stage === 'decoding' && status.framesDecoded >= status.totalFrames) return 'done';
-		if (stage === 'decoding' && status.framesDecoded > 0) return 'partial';
-		if (stage === 'merging' && status.phase === 'rendering') return 'done';
-		return 'waiting';
 	}
 </script>
 
@@ -518,38 +500,33 @@
 									></div>
 								{/if}
 								{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
-									<div class="absolute inset-0 z-20 overflow-hidden bg-black/20 text-white">
-										{#if workspace.documentStatus.phase === 'decoding'}
-											<div class="develop-scan pointer-events-none absolute right-0 left-0"></div>
+									<div class="absolute inset-0 z-20 overflow-hidden text-white">
+										{#if workspace.documentStatus.phase !== 'reading'}
+											<div class="develop-dither pointer-events-none absolute inset-0"></div>
+											<div class="develop-glimmer pointer-events-none absolute"></div>
 										{/if}
-										<div class="absolute right-4 bottom-4 left-4 flex justify-center">
+										<div class="absolute right-3 bottom-3 left-3 flex justify-center">
 											<div
-												class="motion-enter w-full max-w-80 rounded-md border border-white/12 bg-black/75 px-3.5 py-3 shadow-2xl backdrop-blur-md"
+												class="motion-enter w-full max-w-72 rounded border border-white/10 bg-black/70 px-3 py-2.5 shadow-xl backdrop-blur-md"
 											>
-												<div class="flex items-start gap-2.5">
-													<div
-														class="develop-pulse bg-accent/15 text-accent mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full"
-													>
-														<Sparkles size={12} />
-													</div>
-													<div class="min-w-0 flex-1">
-														<p class="text-[11px]">
-															{developPhaseLabel(workspace.documentStatus.phase)}
-														</p>
-														<p class="mt-0.5 font-mono text-[9px] text-white/45 tabular-nums">
+												<div class="flex min-w-0 items-center gap-2">
+													<p class="min-w-0 flex-1 truncate text-[10px]">
+														{developPhaseLabel(workspace.documentStatus.phase)}
+														<span class="font-mono text-[9px] text-white/40 tabular-nums">
+															·
 															{developDetail(workspace.documentStatus)}
-														</p>
-													</div>
+														</span>
+													</p>
 													<button
 														type="button"
-														class="cursor-pointer px-1 py-0.5 text-[9px] text-white/45 transition-colors hover:text-white"
+														class="cursor-pointer text-[9px] text-white/40 transition-colors hover:text-white"
 														onclick={workspace.cancelDocument}
 													>
 														cancel
 													</button>
 												</div>
 
-												<div class="relative mt-3 h-1 overflow-hidden rounded-full bg-white/10">
+												<div class="relative mt-2 h-0.5 overflow-hidden rounded-full bg-white/10">
 													{#if developProgress(workspace.documentStatus) !== null}
 														<div
 															class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
@@ -557,31 +534,6 @@
 														></div>
 													{/if}
 													<div class="develop-progress-sweep absolute inset-y-0 w-1/3"></div>
-												</div>
-
-												<div class="mt-2.5 grid grid-cols-4 gap-2">
-													{#each developStages as stage}
-														{@const state = developStageState(stage.id, workspace.documentStatus)}
-														<div
-															class="flex items-center gap-1.5 text-[8px] tracking-wide {state ===
-																'active' || state === 'done'
-																? 'text-white/75'
-																: state === 'partial'
-																	? 'text-white/50'
-																	: 'text-white/25'}"
-														>
-															<span
-																class="size-1 rounded-full {state === 'active'
-																	? 'develop-step-active bg-accent'
-																	: state === 'done'
-																		? 'bg-positive'
-																		: state === 'partial'
-																			? 'bg-accent/45'
-																			: 'bg-white/20'}"
-															></span>
-															{stage.label}
-														</div>
-													{/each}
 												</div>
 											</div>
 										</div>
