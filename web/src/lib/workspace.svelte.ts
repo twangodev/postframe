@@ -291,6 +291,7 @@ export class WorkspaceState {
 			this.libraryReady = true;
 			this.storageStatus = 'saved';
 			this.storageError = null;
+			this.storageCleanupResult = null;
 			this.resetEditState();
 			await this.refreshBrowserStorage();
 		} catch (error) {
@@ -965,11 +966,25 @@ export class WorkspaceState {
 	private async initialize() {
 		await Promise.all([
 			this.ensureCapabilities(),
-			this.refreshBrowserStorage().catch(() => undefined)
+			this.refreshBrowserStorage().catch(() => undefined),
+			this.resumePendingDeletions()
 		]);
 		await this.loadLibrary();
 		if (this.photos.length > 0) this.mode = 'organize';
 		this.startupReady = true;
+	}
+
+	private async resumePendingDeletions() {
+		const store = this.libraryService;
+		if (!store) return;
+		try {
+			const result = await store.resumePendingDeletions();
+			if (result.deletedFiles > 0 || result.failedFiles > 0) this.storageCleanupResult = result;
+		} catch (error) {
+			this.storageStatus = 'error';
+			this.storageError =
+				error instanceof Error ? error.message : 'Unable to finish storage cleanup';
+		}
 	}
 
 	private async loadCapabilities() {

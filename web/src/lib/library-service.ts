@@ -180,6 +180,18 @@ export class LibraryService {
 		return this.flushDeletions([...deletions.values()], files);
 	}
 
+	async resumePendingDeletions(): Promise<CleanupResult> {
+		const [deletions, originals, thumbnails] = await Promise.all([
+			this.catalog.pendingDeletions(),
+			this.assets.listOriginals(),
+			this.assets.listThumbnails()
+		]);
+		const files = new Map<string, StoredFile>();
+		for (const file of originals) files.set(deletionKey('original', file.storageName), file);
+		for (const file of thumbnails) files.set(deletionKey('thumbnail', file.storageName), file);
+		return this.flushDeletions(deletions, files);
+	}
+
 	async clearAll() {
 		const results = await Promise.allSettled([this.catalog.clear(), this.assets.clearAll()]);
 		const errors = results.flatMap((result) =>

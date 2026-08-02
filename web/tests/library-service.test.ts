@@ -178,3 +178,24 @@ test('cleans only unreferenced OPFS files', async () => {
 		await service.clearAll();
 	}
 });
+
+test('resumes file deletion queued by a committed catalog removal', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	const assets = new MemoryAssetStore();
+	const service = new LibraryService(catalog, assets as unknown as AssetStore);
+	try {
+		const photo = storedPhoto('photo-one', 'asset-one', '0'.repeat(64));
+		const photoWrites = writes(photo);
+		await service.importPhotos(1, [photo], photoWrites.originals, photoWrites.thumbnails);
+		await catalog.deletePhoto(photo.id);
+
+		const result = await service.resumePendingDeletions();
+		assert.equal(result.deletedFiles, 2);
+		assert.equal(result.failedFiles, 0);
+		assert.equal((await catalog.pendingDeletions()).length, 0);
+		assert.equal(assets.originals.size, 0);
+		assert.equal(assets.thumbnails.size, 0);
+	} finally {
+		await service.clearAll();
+	}
+});
