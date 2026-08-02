@@ -207,7 +207,7 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
     }
     let (transfer, fit) = fit_transfer(&Pairing { samples, rejected }, space)?;
 
-    let (shifts, radiance) = merge_radiance(&frames, &exposures, reference)?;
+    let (shifts, radiance) = merge_radiance(&mut frames, &exposures, reference)?;
     let radiance = upright(radiance, frames[reference].orientation);
     let radiance_max = radiance.rgb.iter().flatten().copied().fold(0.0, f32::max);
 
@@ -316,7 +316,7 @@ fn upright(linear: Linear, orientation: Orientation) -> Linear {
 }
 
 fn merge_radiance(
-    frames: &[Frame],
+    frames: &mut [Frame],
     exposures: &[f32],
     reference: usize,
 ) -> Result<(Vec<Shift>, Linear)> {
@@ -329,7 +329,11 @@ fn merge_radiance(
     }
 
     if frames.len() == 1 {
-        return Ok((vec![Shift::new(0, 0)], frames[0].image().clone()));
+        let radiance = frames[0]
+            .full
+            .take()
+            .unwrap_or_else(|| frames[0].camera.clone());
+        return Ok((vec![Shift::new(0, 0)], radiance));
     }
 
     let grays: Vec<Gray> = frames
@@ -459,7 +463,8 @@ mod tests {
             orientation: Orientation::Normal,
         };
 
-        let (shifts, radiance) = merge_radiance(&[frame], &[1.0], 0).unwrap();
+        let mut frames = [frame];
+        let (shifts, radiance) = merge_radiance(&mut frames, &[1.0], 0).unwrap();
 
         assert_eq!(shifts, vec![Shift::new(0, 0)]);
         assert_eq!(radiance.width, image.width);

@@ -1,5 +1,5 @@
-use crate::Merged;
 use crate::color;
+use crate::{Merged, Rendered};
 
 const SAMPLES: usize = 4096;
 const LOG2_LO: f32 = -18.0;
@@ -43,19 +43,75 @@ impl Preview {
         let white = (merged.report.radiance_max * gain).max(1.0);
         let mut rgb8 = Vec::with_capacity(merged.radiance.rgb.len() * 3);
         for pixel in &merged.radiance.rgb {
-            let exposed = pixel.map(|c| c * gain);
-            let compress = if tone {
-                let brightest = exposed.iter().fold(0.0f32, |m, &c| m.max(c));
-                (1.0 + brightest / (white * white)) / (1.0 + brightest)
-            } else {
-                1.0
-            };
-            let mixed = color::apply(&self.mix, exposed.map(|c| c * compress));
-            for (c, &value) in mixed.iter().enumerate() {
-                rgb8.push(self.lookup(c, value).round().clamp(0.0, 255.0) as u8);
-            }
+            rgb8.extend(self.render_pixel(*pixel, gain, white, tone));
         }
         rgb8
+    }
+
+    pub fn render_region(
+        &self,
+        merged: &Merged,
+        origin: (usize, usize),
+        size: (usize, usize),
+        bin: usize,
+        ev: f32,
+        tone: bool,
+    ) -> Rendered {
+        let bin = bin.max(1);
+        let x = origin.0.min(merged.radiance.width);
+        let y = origin.1.min(merged.radiance.height);
+        let width = size.0.min(merged.radiance.width - x);
+        let height = size.1.min(merged.radiance.height - y);
+        let out_width = width.div_ceil(bin);
+        let out_height = height.div_ceil(bin);
+        let gain = (2.0f32).powf(ev);
+        let white = (merged.report.radiance_max * gain).max(1.0);
+        let mut rgb8 = Vec::with_capacity(out_width * out_height * 3);
+
+        for output_y in 0..out_height {
+            let start_y = y + output_y * bin;
+            let end_y = (start_y + bin).min(y + height);
+            for output_x in 0..out_width {
+                let start_x = x + output_x * bin;
+                let end_x = (start_x + bin).min(x + width);
+                let mut sum = [0.0; 3];
+                for source_y in start_y..end_y {
+                    for source_x in start_x..end_x {
+                        let pixel =
+                            merged.radiance.rgb[source_y * merged.radiance.width + source_x];
+                        for (total, value) in sum.iter_mut().zip(pixel) {
+                            *total += value;
+                        }
+                    }
+                }
+                let samples = ((end_x - start_x) * (end_y - start_y)) as f32;
+                rgb8.extend(self.render_pixel(sum.map(|value| value / samples), gain, white, tone));
+            }
+        }
+
+        Rendered {
+            width: out_width,
+            height: out_height,
+            rgb8,
+        }
+    }
+
+    fn render_pixel(&self, pixel: [f32; 3], gain: f32, white: f32, tone: bool) -> [u8; 3] {
+        let exposed = pixel.map(|channel| channel * gain);
+        let compress = if tone {
+            let brightest = exposed
+                .iter()
+                .fold(0.0f32, |maximum, &channel| maximum.max(channel));
+            (1.0 + brightest / (white * white)) / (1.0 + brightest)
+        } else {
+            1.0
+        };
+        let mixed = color::apply(&self.mix, exposed.map(|channel| channel * compress));
+        std::array::from_fn(|channel| {
+            self.lookup(channel, mixed[channel])
+                .round()
+                .clamp(0.0, 255.0) as u8
+        })
     }
 }
 
@@ -115,5 +171,18 @@ mod tests {
             worst <= 1,
             "lut render drifted {worst} codes from direct eval"
         );
+
+        let tile = Preview::new(&merged).render_region(&merged, (2, 1), (3, 4), 1, 0.5, false);
+        let expected = (1..5)
+            .flat_map(|y| {
+                let start = (y * 8 + 2) * 3;
+                fast[start..start + 9].iter().copied()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!((tile.width, tile.height), (3, 4));
+        assert_eq!(tile.rgb8, expected);
+
+        let binned = Preview::new(&merged).render_region(&merged, (0, 0), (8, 8), 4, 0.0, true);
+        assert_eq!((binned.width, binned.height, binned.rgb8.len()), (2, 2, 12));
     }
 }

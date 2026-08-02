@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use image::DynamicImage;
+use image::codecs::png::PngEncoder;
+use image::{DynamicImage, ExtendedColorType, ImageEncoder};
 use rawler::decoders::{Orientation, RawDecodeParams, RawMetadata};
 use rawler::formats::tiff::Rational;
 use rawler::imgop::develop::RawDevelop;
@@ -9,6 +10,8 @@ use wasm_bindgen::prelude::*;
 
 use crate::bracket::{self, Frame, FrameData};
 use crate::{Merged, Preview};
+
+const MAX_TILE_DIMENSION: usize = 1024;
 
 fn err(error: crate::Error) -> JsError {
     JsError::new(&error.to_string())
@@ -252,7 +255,7 @@ impl Session {
             raw: Arc::new(raw),
             jpeg,
         };
-        self.frames.push(bracket::load(&data).map_err(err)?);
+        self.frames.push(bracket::load_full(&data).map_err(err)?);
         Ok(())
     }
 
@@ -276,11 +279,58 @@ impl Session {
             .unwrap_or(0.0)
     }
 
+    pub fn width(&self) -> Result<u32, JsError> {
+        self.merged
+            .as_ref()
+            .map(|merged| merged.radiance.width as u32)
+            .ok_or(JsError::new("merge first"))
+    }
+
+    pub fn height(&self) -> Result<u32, JsError> {
+        self.merged
+            .as_ref()
+            .map(|merged| merged.radiance.height as u32)
+            .ok_or(JsError::new("merge first"))
+    }
+
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
     pub fn preview_jpeg(&self, ev: f32, tone: bool) -> Result<Vec<u8>, JsError> {
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let rgb8 = lut.render(thumb, ev, tone);
         encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_tile_png(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        bin: u32,
+        ev: f32,
+        tone: bool,
+    ) -> Result<Vec<u8>, JsError> {
+        let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
+        let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let (x, y, width, height, bin) = (
+            x as usize,
+            y as usize,
+            width as usize,
+            height as usize,
+            bin as usize,
+        );
+        if bin == 0 || !bin.is_power_of_two() {
+            return Err(JsError::new("tile bin must be a non-zero power of two"));
+        }
+        if x >= merged.radiance.width || y >= merged.radiance.height || width == 0 || height == 0 {
+            return Err(JsError::new("tile is outside the image"));
+        }
+        if width.div_ceil(bin) > MAX_TILE_DIMENSION || height.div_ceil(bin) > MAX_TILE_DIMENSION {
+            return Err(JsError::new("tile output exceeds the maximum dimension"));
+        }
+        let rendered = lut.render_region(merged, (x, y), (width, height), bin, ev, tone);
+        encode_png(&rendered.rgb8, rendered.width, rendered.height)
     }
 
     /// Ultra HDR JPEG at the thumbnail size, for HDR-capable display.
@@ -312,6 +362,14 @@ fn encode_jpeg(rgb8: &[u8], width: usize, height: usize) -> Result<Vec<u8>, JsEr
             jpeg_encoder::ColorType::Rgb,
         )
         .map_err(|e| JsError::new(&e.to_string()))?;
+    Ok(bytes)
+}
+
+fn encode_png(rgb8: &[u8], width: usize, height: usize) -> Result<Vec<u8>, JsError> {
+    let mut bytes = Vec::new();
+    PngEncoder::new(&mut bytes)
+        .write_image(rgb8, width as u32, height as u32, ExtendedColorType::Rgb8)
+        .map_err(|error| JsError::new(&error.to_string()))?;
     Ok(bytes)
 }
 
