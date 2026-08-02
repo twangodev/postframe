@@ -135,6 +135,10 @@ select:focus-visible {
 	animation: photo-in var(--motion-slow) var(--ease-out) both;
 }
 
+.motion-viewport-photo {
+	animation: viewport-photo-in var(--motion-slow) var(--ease-out) both;
+}
+
 .motion-mask {
 	animation: mask-in 260ms var(--ease-out) both;
 }
@@ -177,12 +181,16 @@ select:focus-visible {
 
 .develop-soft-focus {
 	background: rgb(0 0 0 / 1%);
-	backdrop-filter: blur(1.35px) saturate(0.96);
+	backdrop-filter: blur(calc(1.35px / var(--viewport-scale, 1))) saturate(0.96);
+}
+
+.viewport-hairline {
+	border-width: calc(1px / var(--viewport-scale, 1));
 }
 
 .develop-pixel-shift {
 	opacity: 0.2;
-	filter: blur(0.45px) contrast(1.04);
+	filter: blur(calc(0.45px / var(--viewport-scale, 1))) contrast(1.04);
 }
 
 .develop-pixel-shift-a {
@@ -197,12 +205,18 @@ select:focus-visible {
 
 .develop-dither {
 	background-image:
-		radial-gradient(rgb(255 255 255 / 22%) 0.6px, transparent 0.7px),
-		radial-gradient(rgb(0 0 0 / 28%) 0.6px, transparent 0.7px);
+		radial-gradient(
+			rgb(255 255 255 / 22%) calc(0.6px / var(--viewport-scale, 1)),
+			transparent calc(0.7px / var(--viewport-scale, 1))
+		),
+		radial-gradient(
+			rgb(0 0 0 / 28%) calc(0.6px / var(--viewport-scale, 1)),
+			transparent calc(0.7px / var(--viewport-scale, 1))
+		);
 	background-position:
 		0 0,
-		1.5px 1.5px;
-	background-size: 3px 3px;
+		calc(1.5px / var(--viewport-scale, 1)) calc(1.5px / var(--viewport-scale, 1));
+	background-size: calc(3px / var(--viewport-scale, 1)) calc(3px / var(--viewport-scale, 1));
 	mix-blend-mode: soft-light;
 	opacity: 0.2;
 	animation: develop-dither 420ms steps(2) infinite;
@@ -301,6 +315,17 @@ select:focus-visible {
 	}
 }
 
+@keyframes viewport-photo-in {
+	from {
+		opacity: 0;
+		filter: saturate(0.92);
+	}
+	to {
+		opacity: 1;
+		filter: saturate(1);
+	}
+}
+
 @keyframes mask-in {
 	from {
 		opacity: 0;
@@ -367,38 +392,38 @@ select:focus-visible {
 	from {
 		background-position:
 			0 0,
-			1.5px 1.5px;
+			calc(1.5px / var(--viewport-scale, 1)) calc(1.5px / var(--viewport-scale, 1));
 	}
 	to {
 		background-position:
-			1.5px 0,
-			0 1.5px;
+			calc(1.5px / var(--viewport-scale, 1)) 0,
+			0 calc(1.5px / var(--viewport-scale, 1));
 	}
 }
 
 @keyframes develop-pixel-shift-a {
 	0%,
 	100% {
-		transform: translateX(-1px);
+		transform: translateX(calc(-1px / var(--viewport-scale, 1)));
 	}
 	35% {
-		transform: translateX(3px);
+		transform: translateX(calc(3px / var(--viewport-scale, 1)));
 	}
 	70% {
-		transform: translateX(-2px);
+		transform: translateX(calc(-2px / var(--viewport-scale, 1)));
 	}
 }
 
 @keyframes develop-pixel-shift-b {
 	0%,
 	100% {
-		transform: translateX(2px);
+		transform: translateX(calc(2px / var(--viewport-scale, 1)));
 	}
 	45% {
-		transform: translateX(-3px);
+		transform: translateX(calc(-3px / var(--viewport-scale, 1)));
 	}
 	75% {
-		transform: translateX(1px);
+		transform: translateX(calc(1px / var(--viewport-scale, 1)));
 	}
 }
 

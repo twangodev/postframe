@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Tabs } from 'bits-ui';
+	import { DropdownMenu, Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import {
@@ -37,6 +37,19 @@
 		type WorkspaceState
 	} from '$lib/workspace.svelte';
 	import type { DevelopPhase } from '$lib/worker';
+	import {
+		ZOOM_MENU_PRESETS,
+		clampTransform,
+		fitScale,
+		fittedTransform,
+		nextZoomScale,
+		panBy,
+		surfaceTransform,
+		zoomAt,
+		type Point,
+		type Size,
+		type ViewportTransform
+	} from '$lib/photo-viewport';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -46,12 +59,30 @@
 	let activeTool = $state('move');
 	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
-	let zoom = $state(72);
 	let before = $state(false);
 	let maskOverlay = $state(true);
 	let maskAdjustments = $state({ exposure: 0, highlights: 0, shadows: 0, saturation: 0 });
+	let viewportElement = $state<HTMLDivElement | null>(null);
+	let viewportSize = $state<Size>({ width: 1, height: 1 });
+	let viewportTransform = $state<ViewportTransform>({ scale: 1, pan: { x: 0, y: 0 } });
+	let viewportMode = $state<'fit' | 'manual'>('fit');
+	let panning = $state(false);
+	let spaceHeld = $state(false);
+	let fittedPhotoKey = '';
+	let drag: { pointerId: number; origin: Point; transform: ViewportTransform } | null = null;
+	let pinch: {
+		origin: Point;
+		distance: number;
+		transform: ViewportTransform;
+	} | null = null;
+	const pointers = new Map<number, Point>();
 
 	const active = $derived(workspace.editingPhoto);
+	const imageSize = $derived({
+		width: Math.max(1, active?.width ?? 1600),
+		height: Math.max(1, active?.height ?? 1067)
+	});
+	const imageOffset = $derived(surfaceTransform(viewportSize, imageSize, viewportTransform));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -119,6 +150,15 @@
 	const typeTools = new Set(['type', 'vertical-type', 'type-mask']);
 	const measureTools = new Set(['ruler', 'note', 'count']);
 	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
+	const zoomMenuItemClass =
+		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[10px] outline-none';
+
+	$effect(() => {
+		const key = active ? `${active.id}:${imageSize.width}:${imageSize.height}` : '';
+		if (!key || key === fittedPhotoKey) return;
+		fittedPhotoKey = key;
+		fitPhoto();
+	});
 
 	function chooseTool(tool: string, label = tool) {
 		// TODO(WASM_TODOS.editorTools): start the selected tool in the Wasm document.
@@ -141,6 +181,173 @@
 			const [tool, label] = tools[(current + 1) % tools.length];
 			chooseTool(tool, label);
 		};
+	}
+
+	function fitPhoto() {
+		viewportMode = 'fit';
+		viewportTransform = fittedTransform(viewportSize, imageSize);
+	}
+
+	function showActualPixels() {
+		setZoom(1);
+	}
+
+	function setZoom(scale: number, anchor = viewportCenter()) {
+		viewportMode = 'manual';
+		viewportTransform = zoomAt(viewportTransform, scale, anchor, viewportSize, imageSize);
+	}
+
+	function stepZoom(direction: -1 | 1, anchor = viewportCenter()) {
+		setZoom(
+			nextZoomScale(viewportTransform.scale, direction, fitScale(viewportSize, imageSize)),
+			anchor
+		);
+	}
+
+	function zoomIn() {
+		stepZoom(1);
+	}
+
+	function zoomOut() {
+		stepZoom(-1);
+	}
+
+	function chooseZoom(scale: number) {
+		return () => setZoom(scale);
+	}
+
+	function formatZoom(scale: number) {
+		const percent = scale * 100;
+		return `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;
+	}
+
+	function viewportCenter() {
+		return { x: viewportSize.width / 2, y: viewportSize.height / 2 };
+	}
+
+	function viewportPoint(event: PointerEvent | WheelEvent | MouseEvent) {
+		const bounds = viewportElement?.getBoundingClientRect();
+		if (!bounds) return viewportCenter();
+		return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+	}
+
+	function handleWheel(event: WheelEvent) {
+		if (!active) return;
+		event.preventDefault();
+		const unit =
+			event.deltaMode === WheelEvent.DOM_DELTA_LINE
+				? 16
+				: event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+					? viewportSize.height
+					: 1;
+		const sensitivity = event.ctrlKey ? 0.008 : 0.0018;
+		setZoom(
+			viewportTransform.scale * Math.exp(-event.deltaY * unit * sensitivity),
+			viewportPoint(event)
+		);
+	}
+
+	function handlePointerDown(event: PointerEvent) {
+		if (!active || !viewportElement) return;
+		const point = viewportPoint(event);
+
+		if (event.pointerType === 'touch') {
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			pointers.set(event.pointerId, point);
+			if (pointers.size >= 2) beginPinch();
+			else beginPan(event.pointerId, point);
+			return;
+		}
+
+		if (activeTool === 'zoom' && event.button === 0) {
+			event.preventDefault();
+			stepZoom(event.altKey ? -1 : 1, point);
+			return;
+		}
+
+		if (activeTool === 'hand' || spaceHeld || event.button === 1) {
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			beginPan(event.pointerId, point);
+		}
+	}
+
+	function handlePointerMove(event: PointerEvent) {
+		const point = viewportPoint(event);
+		if (pointers.has(event.pointerId)) pointers.set(event.pointerId, point);
+
+		if (pinch && pointers.size >= 2) {
+			const [first, second] = [...pointers.values()];
+			if (!first || !second) return;
+			const center = midpoint(first, second);
+			const scale = pinch.transform.scale * (distance(first, second) / pinch.distance);
+			const zoomed = zoomAt(pinch.transform, scale, pinch.origin, viewportSize, imageSize);
+			viewportMode = 'manual';
+			viewportTransform = panBy(
+				zoomed,
+				{ x: center.x - pinch.origin.x, y: center.y - pinch.origin.y },
+				viewportSize,
+				imageSize
+			);
+			return;
+		}
+
+		if (!drag || drag.pointerId !== event.pointerId) return;
+		event.preventDefault();
+		viewportMode = 'manual';
+		viewportTransform = panBy(
+			drag.transform,
+			{ x: point.x - drag.origin.x, y: point.y - drag.origin.y },
+			viewportSize,
+			imageSize
+		);
+	}
+
+	function handlePointerUp(event: PointerEvent) {
+		const wasPinching = pinch !== null;
+		pointers.delete(event.pointerId);
+		if (drag?.pointerId === event.pointerId) drag = null;
+		if (wasPinching && pointers.size === 1) {
+			const [remaining] = pointers.entries();
+			if (remaining) beginPan(...remaining);
+		} else if (pointers.size < 2) {
+			pinch = null;
+		}
+		panning = drag !== null || pinch !== null;
+	}
+
+	function handleDoubleClick(event: MouseEvent) {
+		if (!active || activeTool === 'zoom') return;
+		event.preventDefault();
+		if (viewportMode === 'fit') setZoom(1, viewportPoint(event));
+		else fitPhoto();
+	}
+
+	function beginPan(pointerId: number, origin: Point) {
+		drag = { pointerId, origin, transform: viewportTransform };
+		pinch = null;
+		panning = true;
+	}
+
+	function beginPinch() {
+		const [first, second] = [...pointers.values()];
+		if (!first || !second) return;
+		drag = null;
+		pinch = {
+			origin: midpoint(first, second),
+			distance: Math.max(1, distance(first, second)),
+			transform: viewportTransform
+		};
+		panning = true;
+	}
+
+	function midpoint(first: Point, second: Point) {
+		return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+	}
+
+	function distance(first: Point, second: Point) {
+		return Math.hypot(second.x - first.x, second.y - first.y);
 	}
 
 	onMount(() =>
@@ -236,6 +443,72 @@
 		})
 	);
 
+	onMount(() => {
+		const element = viewportElement;
+		if (!element) return;
+
+		const observer = new ResizeObserver(([entry]) => {
+			if (!entry) return;
+			const next = {
+				width: entry.contentRect.width,
+				height: entry.contentRect.height
+			};
+			viewportSize = next;
+			viewportTransform =
+				viewportMode === 'fit'
+					? fittedTransform(next, imageSize)
+					: clampTransform(viewportTransform, next, imageSize);
+		});
+		observer.observe(element);
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (!active || editableTarget(event.target)) return;
+			if (event.code === 'Space') {
+				event.preventDefault();
+				spaceHeld = true;
+				return;
+			}
+			if (event.key === '0') {
+				event.preventDefault();
+				fitPhoto();
+			} else if (event.key === '1') {
+				event.preventDefault();
+				showActualPixels();
+			} else if (event.key === '+' || event.key === '=') {
+				event.preventDefault();
+				stepZoom(1);
+			} else if (event.key === '-' || event.key === '_') {
+				event.preventDefault();
+				stepZoom(-1);
+			}
+		};
+		const handleKeyUp = (event: KeyboardEvent) => {
+			if (event.code === 'Space') spaceHeld = false;
+		};
+		const handleBlur = () => {
+			spaceHeld = false;
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+		window.addEventListener('keyup', handleKeyUp);
+		window.addEventListener('blur', handleBlur);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener('keydown', handleKeyDown);
+			window.removeEventListener('keyup', handleKeyUp);
+			window.removeEventListener('blur', handleBlur);
+		};
+	});
+
+	function editableTarget(target: EventTarget | null) {
+		return (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		);
+	}
+
 	function addMask(kind: MaskKind) {
 		// TODO(WASM_TODOS.masks): replace the visual-only mask with a rendered mask.
 		workspace.createMask(kind);
@@ -293,8 +566,11 @@
 								{...props}
 								type="button"
 								aria-label="Fit image to view"
-								class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded"
-								onclick={() => (zoom = 72)}
+								class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded {viewportMode ===
+								'fit'
+									? 'text-accent'
+									: ''}"
+								onclick={fitPhoto}
 							>
 								<Maximize2 size={12} />
 							</button>
@@ -304,16 +580,57 @@
 						type="button"
 						aria-label="Zoom out"
 						class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded"
-						onclick={() => (zoom = Math.max(25, zoom - 10))}
+						onclick={zoomOut}
 					>
 						<Minus size={12} />
 					</button>
-					<span class="w-9 text-center font-mono text-[10px] tabular-nums">{zoom}%</span>
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger
+							aria-label="Choose zoom level"
+							class="hover:bg-surface hover:text-text flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[10px] tabular-nums outline-none"
+						>
+							{formatZoom(viewportTransform.scale)}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Portal>
+							<DropdownMenu.Content
+								align="start"
+								sideOffset={4}
+								class="motion-menu border-subtle bg-bg z-50 min-w-36 rounded border p-1 shadow-2xl"
+							>
+								<DropdownMenu.Item class={zoomMenuItemClass} onSelect={fitPhoto}>
+									<span class="text-accent w-3">{viewportMode === 'fit' ? '•' : ''}</span>
+									<span class="flex-1">fit</span>
+									<kbd class="text-muted font-mono text-[9px]">0</kbd>
+								</DropdownMenu.Item>
+								<DropdownMenu.Item class={zoomMenuItemClass} onSelect={showActualPixels}>
+									<span class="text-accent w-3"
+										>{viewportMode === 'manual' && Math.abs(viewportTransform.scale - 1) < 0.0001
+											? '•'
+											: ''}</span
+									>
+									<span class="flex-1">actual pixels</span>
+									<kbd class="text-muted font-mono text-[9px]">1</kbd>
+								</DropdownMenu.Item>
+								<DropdownMenu.Separator class="bg-subtle my-1 h-px" />
+								{#each ZOOM_MENU_PRESETS as scale}
+									<DropdownMenu.Item class={zoomMenuItemClass} onSelect={chooseZoom(scale)}>
+										<span class="text-accent w-3"
+											>{viewportMode === 'manual' &&
+											Math.abs(viewportTransform.scale - scale) < 0.0001
+												? '•'
+												: ''}</span
+										>
+										<span>{formatZoom(scale)}</span>
+									</DropdownMenu.Item>
+								{/each}
+							</DropdownMenu.Content>
+						</DropdownMenu.Portal>
+					</DropdownMenu.Root>
 					<button
 						type="button"
 						aria-label="Zoom in"
 						class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded"
-						onclick={() => (zoom = Math.min(200, zoom + 10))}
+						onclick={zoomIn}
 					>
 						<Plus size={12} />
 					</button>
@@ -443,151 +760,169 @@
 				{/if}
 			</div>
 
-			<div class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">
+			<div
+				bind:this={viewportElement}
+				role="application"
+				aria-label="Photo viewport"
+				class="relative min-h-0 flex-1 touch-none overflow-hidden {panning
+					? 'cursor-grabbing'
+					: activeTool === 'hand' || spaceHeld
+						? 'cursor-grab'
+						: activeTool === 'zoom'
+							? 'cursor-zoom-in'
+							: 'cursor-default'}"
+				onwheel={handleWheel}
+				onpointerdown={handlePointerDown}
+				onpointermove={handlePointerMove}
+				onpointerup={handlePointerUp}
+				onpointercancel={handlePointerUp}
+				onlostpointercapture={handlePointerUp}
+				ondblclick={handleDoubleClick}
+			>
 				<div
 					class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
 				></div>
 				{#if active}
 					{#key `${active.id}:${active.src}`}
-						<div class="motion-photo max-h-full max-w-full">
-							<div
-								class="relative max-h-full max-w-full overflow-hidden bg-black shadow-2xl transition-transform duration-150"
-								style:transform={`scale(${zoom / 72})`}
-							>
-								<div class="h-[min(64vh,42rem)] w-[min(62vw,62rem)] max-w-full">
-									<PhotoVisual photo={active} contain />
+						<div
+							class="motion-viewport-photo absolute top-0 left-0 overflow-hidden bg-black shadow-2xl will-change-transform"
+							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
+						>
+							<PhotoVisual photo={active} contain />
+							{#if cropTools.has(activeTool)}
+								<div
+									class="viewport-hairline pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"
+								></div>
+							{:else if retouchTools.has(activeTool) || ['brush', 'pencil', 'mixer-brush', 'eraser'].includes(activeTool)}
+								<div
+									class="viewport-hairline pointer-events-none absolute top-[46%] left-[58%] rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
+									style="width: calc(40px / var(--viewport-scale)); height: calc(40px / var(--viewport-scale));"
+								></div>
+							{:else if selectionTools.has(activeTool)}
+								<div
+									class="viewport-hairline pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
+								></div>
+							{:else if typeTools.has(activeTool)}
+								<div
+									class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
+								>
+									<span class="absolute top-1 left-1 text-2xl font-medium text-white/90"
+										>postframe</span
+									>
 								</div>
-								{#if before}
-									<span
-										class="absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
+							{/if}
+							{#if selectedMask?.visible && maskOverlay}
+								<div
+									class="motion-mask pointer-events-none absolute inset-0 opacity-55 mix-blend-screen {selectedMask.kind ===
+									'linear'
+										? 'bg-[linear-gradient(135deg,rgba(22,123,255,0.95),transparent_62%)]'
+										: selectedMask.kind === 'sky'
+											? 'bg-[linear-gradient(to_bottom,rgba(22,123,255,0.95),transparent_52%)]'
+											: selectedMask.kind === 'radial' || selectedMask.kind === 'subject'
+												? 'bg-[radial-gradient(ellipse_at_center,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.5)_35%,transparent_68%)]'
+												: selectedMask.kind === 'background'
+													? 'bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(22,123,255,0.85)_72%)]'
+													: 'bg-[radial-gradient(circle_at_58%_46%,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.55)_12%,transparent_28%)]'}"
+								></div>
+							{/if}
+							{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
+								<div class="absolute inset-0 z-20 overflow-hidden text-white">
+									<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
+									<div
+										class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
 									>
-										before
-									</span>
-								{/if}
-								{#if cropTools.has(activeTool)}
+										<PhotoVisual photo={active} contain />
+									</div>
 									<div
-										class="pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"
-									></div>
-								{:else if retouchTools.has(activeTool) || ['brush', 'pencil', 'mixer-brush', 'eraser'].includes(activeTool)}
-									<div
-										class="pointer-events-none absolute top-[46%] left-[58%] size-10 rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
-									></div>
-								{:else if selectionTools.has(activeTool)}
-									<div
-										class="pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
-									></div>
-								{:else if typeTools.has(activeTool)}
-									<div
-										class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
+										class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
 									>
-										<span class="absolute top-1 left-1 text-2xl font-medium text-white/90"
-											>postframe</span
-										>
+										<PhotoVisual photo={active} contain />
 									</div>
-								{/if}
-								{#if selectedMask?.visible && maskOverlay}
-									<div
-										class="motion-mask pointer-events-none absolute inset-0 opacity-55 mix-blend-screen {selectedMask.kind ===
-										'linear'
-											? 'bg-[linear-gradient(135deg,rgba(22,123,255,0.95),transparent_62%)]'
-											: selectedMask.kind === 'sky'
-												? 'bg-[linear-gradient(to_bottom,rgba(22,123,255,0.95),transparent_52%)]'
-												: selectedMask.kind === 'radial' || selectedMask.kind === 'subject'
-													? 'bg-[radial-gradient(ellipse_at_center,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.5)_35%,transparent_68%)]'
-													: selectedMask.kind === 'background'
-														? 'bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(22,123,255,0.85)_72%)]'
-														: 'bg-[radial-gradient(circle_at_58%_46%,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.55)_12%,transparent_28%)]'}"
-									></div>
-								{/if}
-								{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
-									<div class="absolute inset-0 z-20 overflow-hidden text-white">
-										{#if workspace.documentStatus.phase !== 'reading'}
-											<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
-											<div
-												class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
-											>
-												<PhotoVisual photo={active} contain />
-											</div>
-											<div
-												class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
-											>
-												<PhotoVisual photo={active} contain />
-											</div>
-											<div class="develop-dither pointer-events-none absolute inset-0"></div>
-											<div class="develop-glimmer pointer-events-none absolute"></div>
-										{/if}
-										<div class="absolute right-3 bottom-3 left-3 flex justify-center">
-											<div
-												class="motion-enter w-full max-w-72 rounded border border-white/10 bg-black/70 px-3 py-2.5 shadow-xl backdrop-blur-md"
-											>
-												<div class="flex min-w-0 items-center gap-2">
-													<p class="min-w-0 flex-1 truncate text-[10px]">
-														{developPhaseLabel(workspace.documentStatus.phase)}
-														<span class="font-mono text-[9px] text-white/40 tabular-nums">
-															·
-															{developDetail(workspace.documentStatus)}
-														</span>
-													</p>
-													<button
-														type="button"
-														class="cursor-pointer text-[9px] text-white/40 transition-colors hover:text-white"
-														onclick={workspace.cancelDocument}
-													>
-														cancel
-													</button>
-												</div>
-
-												<div class="relative mt-2 h-0.5 overflow-hidden rounded-full bg-white/10">
-													{#if developProgress(workspace.documentStatus) !== null}
-														<div
-															class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
-															style:width={`${developProgress(workspace.documentStatus)}%`}
-														></div>
-													{/if}
-													<div class="develop-progress-sweep absolute inset-y-0 w-1/3"></div>
-												</div>
-											</div>
-										</div>
-									</div>
-								{:else if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
-									<div
-										class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
-									>
-										<div class="motion-enter flex flex-col items-center gap-2.5">
-											<p class="text-[11px]">development stopped</p>
-											<button
-												type="button"
-												class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
-												onclick={workspace.reloadDocument}
-											>
-												retry
-											</button>
-										</div>
-									</div>
-								{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
-									<div
-										class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
-									>
-										<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
-											<p class="text-[11px]">couldn't open raw</p>
-											<p class="text-[9px] leading-relaxed text-white/55">
-												{workspace.documentStatus.message}
-											</p>
-											<button
-												type="button"
-												class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
-												onclick={workspace.reloadDocument}
-											>
-												retry
-											</button>
-										</div>
-									</div>
-								{/if}
-							</div>
+									<div class="develop-dither pointer-events-none absolute inset-0"></div>
+									<div class="develop-glimmer pointer-events-none absolute"></div>
+								</div>
+							{/if}
 						</div>
 					{/key}
+					{#if before}
+						<span
+							class="pointer-events-none absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
+						>
+							before
+						</span>
+					{/if}
+					{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
+						<div
+							class="pointer-events-none absolute right-3 bottom-3 left-3 flex justify-center text-white"
+						>
+							<div
+								class="motion-enter pointer-events-auto w-full max-w-72 rounded border border-white/10 bg-black/70 px-3 py-2.5 shadow-xl backdrop-blur-md"
+							>
+								<div class="flex min-w-0 items-center gap-2">
+									<p class="min-w-0 flex-1 truncate text-[10px]">
+										{developPhaseLabel(workspace.documentStatus.phase)}
+										<span class="font-mono text-[9px] text-white/40 tabular-nums">
+											· {developDetail(workspace.documentStatus)}
+										</span>
+									</p>
+									<button
+										type="button"
+										class="cursor-pointer text-[9px] text-white/40 transition-colors hover:text-white"
+										onclick={workspace.cancelDocument}
+									>
+										cancel
+									</button>
+								</div>
+								<div class="relative mt-2 h-0.5 overflow-hidden rounded-full bg-white/10">
+									{#if developProgress(workspace.documentStatus) !== null}
+										<div
+											class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
+											style:width={`${developProgress(workspace.documentStatus)}%`}
+										></div>
+									{/if}
+									<div class="develop-progress-sweep absolute inset-y-0 w-1/3"></div>
+								</div>
+							</div>
+						</div>
+					{/if}
+					{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
+						<div
+							class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
+						>
+							<div class="motion-enter flex flex-col items-center gap-2.5">
+								<p class="text-[11px]">development stopped</p>
+								<button
+									type="button"
+									class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+									onclick={workspace.reloadDocument}
+								>
+									retry
+								</button>
+							</div>
+						</div>
+					{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
+						<div
+							class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
+						>
+							<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
+								<p class="text-[11px]">couldn't open raw</p>
+								<p class="text-[9px] leading-relaxed text-white/55">
+									{workspace.documentStatus.message}
+								</p>
+								<button
+									type="button"
+									class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+									onclick={workspace.reloadDocument}
+								>
+									retry
+								</button>
+							</div>
+						</div>
+					{/if}
 				{:else}
-					<p class="text-muted text-[10px]">select a photo in organize.</p>
+					<p class="text-muted absolute inset-0 flex items-center justify-center text-[10px]">
+						select a photo in organize.
+					</p>
 				{/if}
 			</div>
 

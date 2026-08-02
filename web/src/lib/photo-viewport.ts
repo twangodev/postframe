@@ -20,7 +20,7 @@ export const PAN_OVERSCROLL = 48;
 export const ZOOM_PRESETS = [
 	0.05, 0.0833, 0.125, 0.1667, 0.25, 0.3333, 0.5, 0.6667, 1, 2, 4, 8, 16, 32
 ] as const;
-export const ZOOM_MENU_PRESETS = [0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32] as const;
+export const ZOOM_MENU_PRESETS = [0.05, 0.1, 0.25, 0.5, 2, 4, 8, 16, 32] as const;
 
 export function fitScale(viewport: Size, image: Size, inset = VIEWPORT_INSET) {
 	if (!validSize(viewport) || !validSize(image)) return 1;
