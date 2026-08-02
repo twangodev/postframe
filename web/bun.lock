@@ -7,6 +7,7 @@
       "dependencies": {
         "@icons-pack/svelte-simple-icons": "^7.2.0",
         "dexie": "^4.4.4",
+        "openseadragon": "^6.0.2",
         "tinykeys": "^4.0.0",
         "zod": "^4.4.3",
       },
@@ -380,6 +381,8 @@
     "nanoid": ["nanoid@3.3.16", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q=="],
 
     "obug": ["obug@2.1.4", "", {}, "sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA=="],
+
+    "openseadragon": ["openseadragon@6.0.2", "", {}, "sha512-WNPPQWp9sHunyzkV9J2yhfxnSfDF9CfBsE6unmkdxh1uTWzFcueMvBPhmuZdY7M1v/ffJ3NdaF3Qq3jogphIbA=="],
 
     "path-to-regexp": ["path-to-regexp@6.3.0", "", {}, "sha512-Yhpw4T9C6hPpgPeA28us07OJeqZ5EzQTkbfwuhsUg0c237RomFoETJgmp2sa3F/41gfLE6G5cqcYwznmeEeOlQ=="],
 
