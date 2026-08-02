@@ -192,6 +192,28 @@ select:focus-visible {
 	border-width: calc(1px / var(--viewport-scale, 1));
 }
 
+.viewport-pixelated img {
+	image-rendering: pixelated;
+}
+
+.viewport-pixel-grid {
+	--pixel-grid-line: calc(1px / var(--viewport-scale, 1));
+	background-image:
+		linear-gradient(
+			to right,
+			rgb(232 229 223 / 52%) var(--pixel-grid-line),
+			transparent var(--pixel-grid-line)
+		),
+		linear-gradient(
+			to bottom,
+			rgb(232 229 223 / 52%) var(--pixel-grid-line),
+			transparent var(--pixel-grid-line)
+		);
+	background-size: 1px 1px;
+	mix-blend-mode: difference;
+	transition: opacity 90ms linear;
+}
+
 .develop-pixel-shift {
 	opacity: 0.2;
 	filter: blur(calc(0.45px / var(--viewport-scale, 1))) contrast(1.04);

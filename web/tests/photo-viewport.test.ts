@@ -8,6 +8,7 @@ import {
 	imageToScreen,
 	nextZoomScale,
 	panBy,
+	pixelGridOpacity,
 	screenToImage,
 	wheelNavigation,
 	zoomAt
@@ -76,4 +77,12 @@ test('steps through useful photographic zoom presets', () => {
 	assert.equal(nextZoomScale(1, 1, 0.188), 2);
 	assert.equal(nextZoomScale(1, -1, 0.188), 0.6667);
 	assert.equal(nextZoomScale(32, 1, 0.188), 32);
+});
+
+test('fades the source pixel grid in only at useful magnification', () => {
+	assert.equal(pixelGridOpacity(4), 0);
+	assert.equal(pixelGridOpacity(6), 0);
+	assert.equal(pixelGridOpacity(7), 0.5);
+	assert.equal(pixelGridOpacity(8), 1);
+	assert.equal(pixelGridOpacity(32), 1);
 });

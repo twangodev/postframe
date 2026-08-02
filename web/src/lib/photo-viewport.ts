@@ -24,6 +24,8 @@ export type WheelNavigation = { kind: 'pan'; delta: Point } | { kind: 'zoom'; de
 
 export const MAX_ZOOM_SCALE = 32;
 export const MIN_ZOOM_SCALE = 0.05;
+export const PIXEL_GRID_START_SCALE = 6;
+export const PIXEL_GRID_FULL_SCALE = 8;
 export const VIEWPORT_INSET = 24;
 export const PAN_OVERSCROLL = 48;
 export const ZOOM_PRESETS = [
@@ -147,6 +149,14 @@ export function nextZoomScale(current: number, direction: -1 | 1, fittedScale: n
 	const epsilon = 0.0001;
 	if (direction > 0) return scales.find((scale) => scale > current + epsilon) ?? MAX_ZOOM_SCALE;
 	return scales.findLast((scale) => scale < current - epsilon) ?? scales[0];
+}
+
+export function pixelGridOpacity(scale: number) {
+	return clamp(
+		(scale - PIXEL_GRID_START_SCALE) / (PIXEL_GRID_FULL_SCALE - PIXEL_GRID_START_SCALE),
+		0,
+		1
+	);
 }
 
 function panLimit(rendered: number, viewport: number, overscroll: number) {

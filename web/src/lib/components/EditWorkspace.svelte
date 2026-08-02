@@ -45,6 +45,7 @@
 		fittedTransform,
 		nextZoomScale,
 		panBy,
+		pixelGridOpacity,
 		surfaceTransform,
 		wheelNavigation,
 		zoomAt,
@@ -87,6 +88,7 @@
 	});
 	const imageOffset = $derived(surfaceTransform(viewportSize, imageSize, viewportTransform));
 	const visiblePixels = $derived(visibleImageRect(viewportSize, imageSize, viewportTransform));
+	const pixelGridStrength = $derived(pixelGridOpacity(viewportTransform.scale));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -796,6 +798,7 @@
 				{#if active}
 					{#key `${active.id}:${active.src}`}
 						<div
+							class:viewport-pixelated={pixelGridStrength > 0}
 							class="motion-viewport-photo absolute top-0 left-0 overflow-hidden bg-black shadow-2xl will-change-transform"
 							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 						>
@@ -810,6 +813,13 @@
 								transform={viewportTransform}
 								renderTile={workspace.renderTile}
 							/>
+							{#if pixelGridStrength > 0}
+								<div
+									data-pixel-grid
+									class="viewport-pixel-grid pointer-events-none absolute inset-0"
+									style:opacity={pixelGridStrength}
+								></div>
+							{/if}
 							{#if cropTools.has(activeTool)}
 								<div
 									class="viewport-hairline pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"

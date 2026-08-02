@@ -19,6 +19,12 @@ test('persists, deduplicates, cleans, and clears a local photo library', async (
 	};
 	await page.locator('main input[type="file"]').first().setInputFiles(pixel);
 	await expect(page.getByText('1 photo · saved locally')).toBeVisible();
+	await page.getByRole('button', { name: 'Choose zoom level' }).click();
+	await page.getByRole('menuitem', { name: '800%' }).click();
+	await expect(page.locator('[data-pixel-grid]')).toBeVisible();
+	await page.getByRole('button', { name: 'Choose zoom level' }).click();
+	await page.getByRole('menuitem', { name: '400%' }).click();
+	await expect(page.locator('[data-pixel-grid]')).toHaveCount(0);
 
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'Select pixel.png' })).toBeVisible();
