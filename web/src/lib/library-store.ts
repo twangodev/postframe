@@ -409,6 +409,7 @@ export class LibraryStore {
 			stacks: [...stacks.values()]
 		});
 		await writeJson(directory, LIBRARY_FILE, library);
+		await retireLegacyStorage(directory);
 		return library;
 	}
 
@@ -486,6 +487,13 @@ async function copyFile(
 ) {
 	const file = await source.getFileHandle(name).then((handle) => handle.getFile());
 	await writeFile(destination, name, file);
+}
+
+async function retireLegacyStorage(directory: FileSystemDirectoryHandle) {
+	await Promise.allSettled([
+		directory.removeEntry(LEGACY_CATALOG_FILE),
+		directory.removeEntry(LEGACY_COLLECTIONS_DIRECTORY, { recursive: true })
+	]);
 }
 
 async function readJson<T>(
