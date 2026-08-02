@@ -129,6 +129,43 @@ test('deduplicates repeated content within one import batch', async () => {
 	}
 });
 
+test('allows one asset content hash in distinct photo compositions', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const library = manifest();
+		const pair = structuredClone(library.photos[0]!);
+		pair.id = 'photo-two';
+		pair.kind = 'raw-pair';
+		pair.name = 'frame.jpg';
+		pair.thumbnailStorageName = 'photo-two.jpg';
+		pair.frames[0]!.raw!.id = 'asset-two';
+		pair.frames[0]!.raw!.storageName = 'asset-two.dng';
+		pair.frames[0]!.display = {
+			id: 'asset-three',
+			storageName: 'asset-three.jpg',
+			name: 'frame.jpg',
+			contentHash: '1'.repeat(64),
+			source: {
+				kind: 'image',
+				format: 'jpg',
+				mediaType: 'image/jpeg',
+				size: 1,
+				lastModified: 1
+			}
+		};
+		library.photos.push(pair);
+
+		await catalog.saveLibrary(library);
+		assert.equal((await catalog.loadLibrary())?.photos.length, 2);
+		assert.equal(
+			await catalog.database.assets.where('contentHash').equals('0'.repeat(64)).count(),
+			2
+		);
+	} finally {
+		await catalog.clear();
+	}
+});
+
 test('updates photo and collection state without replacing the library', async () => {
 	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
 	try {

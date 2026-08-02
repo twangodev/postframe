@@ -103,6 +103,17 @@ export class PostframeDatabase extends Dexie {
 			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
 			pendingDeletes: '[kind+storageName], queuedAt'
 		});
+		this.version(4).stores({
+			library: '&id',
+			photos:
+				'&id, &fingerprint, importedAt, metadata.capturedAt, flagged, rejected, rating, stackId, [kind+importedAt]',
+			assets: '&id, &storageName, contentHash, photoId, [photoId+frameIndex], role',
+			collections: '&id, &normalizedName, updatedAt',
+			collectionPhotos: '[collectionId+photoId], photoId, [collectionId+position]',
+			stacks: '&id',
+			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
+			pendingDeletes: '[kind+storageName], queuedAt'
+		});
 	}
 }
 
