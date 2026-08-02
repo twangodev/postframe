@@ -1,15 +1,10 @@
 import { z } from 'zod';
 
 const LIBRARY_VERSION = 1;
-const LEGACY_COLLECTION_VERSION = 2;
-const LEGACY_CATALOG_VERSION = 1;
 const APP_DIRECTORY = 'postframe';
 const LIBRARY_FILE = 'library.json';
 const ORIGINALS_DIRECTORY = 'originals';
 const THUMBNAILS_DIRECTORY = 'thumbnails';
-const LEGACY_CATALOG_FILE = 'catalog.json';
-const LEGACY_COLLECTIONS_DIRECTORY = 'collections';
-const LEGACY_MANIFEST_FILE = 'collection.json';
 
 const identifierSchema = z.string().regex(/^[a-z0-9-]+$/);
 const storageNameSchema = z.string().regex(/^[a-z0-9-]+\.[a-z0-9]+$/);
@@ -180,54 +175,6 @@ export const libraryManifestSchema = z
 		}
 	});
 
-const legacyPhotoStateSchema = photoStateSchema.extend({
-	albumIds: z.array(identifierSchema)
-});
-const legacyStoredPhotoSchema = legacyPhotoStateSchema.extend({
-	id: identifierSchema,
-	kind: z.enum(['display', 'raw', 'raw-pair', 'bracket']),
-	name: z.string().min(1),
-	frames: z.array(frameSchema).min(1),
-	bracketDetection: z.literal('filename-candidate').nullable(),
-	thumbnailStorageName: storageNameSchema.nullable(),
-	metadata: metadataSchema.nullable()
-});
-const legacyV1StoredPhotoSchema = legacyPhotoStateSchema.extend({
-	id: identifierSchema,
-	storageName: storageNameSchema,
-	name: z.string().min(1),
-	source: sourceSchema
-});
-const legacyAlbumSchema = z.object({ id: identifierSchema, name: z.string().min(1) });
-const legacyManifestBaseSchema = z.object({
-	id: identifierSchema,
-	name: z.string().min(1),
-	createdAt: z.number().int().nonnegative(),
-	updatedAt: z.number().int().nonnegative(),
-	albums: z.array(legacyAlbumSchema),
-	stacks: z.array(stackSchema)
-});
-const legacyV2ManifestSchema = legacyManifestBaseSchema.extend({
-	version: z.literal(LEGACY_COLLECTION_VERSION),
-	photos: z.array(legacyStoredPhotoSchema)
-});
-const legacyV1ManifestSchema = legacyManifestBaseSchema.extend({
-	version: z.literal(1),
-	photos: z.array(legacyV1StoredPhotoSchema)
-});
-const legacyManifestSchema = z
-	.union([legacyV2ManifestSchema, legacyV1ManifestSchema])
-	.transform((manifest) =>
-		manifest.version === LEGACY_COLLECTION_VERSION ? manifest : migrateLegacyV1Manifest(manifest)
-	);
-const legacySummarySchema = legacyManifestBaseSchema
-	.pick({ id: true, name: true, createdAt: true, updatedAt: true })
-	.extend({ photoCount: z.number().int().nonnegative() });
-const legacyCatalogSchema = z.object({
-	version: z.literal(LEGACY_CATALOG_VERSION),
-	collections: z.array(legacySummarySchema)
-});
-
 export type StoredAsset = z.infer<typeof assetSchema>;
 export type StoredFrame = z.infer<typeof frameSchema>;
 export type StoredMetadata = z.infer<typeof metadataSchema>;
@@ -256,8 +203,7 @@ export class LibraryStore {
 
 	async loadLibrary(): Promise<LibraryManifest | null> {
 		const directory = await this.appDirectory();
-		const library = await readJson(directory, LIBRARY_FILE, libraryManifestSchema);
-		return library ?? this.migrateLegacyCollections(directory);
+		return readJson(directory, LIBRARY_FILE, libraryManifestSchema);
 	}
 
 	async readOriginal(storageName: string): Promise<File> {
@@ -339,161 +285,10 @@ export class LibraryStore {
 		return files.getFileHandle(storageName);
 	}
 
-	private async migrateLegacyCollections(
-		directory: FileSystemDirectoryHandle
-	): Promise<LibraryManifest | null> {
-		const catalog = await readJson(directory, LEGACY_CATALOG_FILE, legacyCatalogSchema);
-		if (!catalog) return null;
-
-		const legacyCollections = await directory.getDirectoryHandle(LEGACY_COLLECTIONS_DIRECTORY);
-		const originals = await directory.getDirectoryHandle(ORIGINALS_DIRECTORY, { create: true });
-		const thumbnails = await directory.getDirectoryHandle(THUMBNAILS_DIRECTORY, { create: true });
-		const photos: StoredPhoto[] = [];
-		const collections: PhotoCollection[] = [];
-		const stacks = new Map<string, z.infer<typeof stackSchema>>();
-
-		for (const summary of catalog.collections) {
-			const legacyDirectory = await legacyCollections.getDirectoryHandle(summary.id);
-			const manifest = await readJson(legacyDirectory, LEGACY_MANIFEST_FILE, legacyManifestSchema);
-			if (!manifest) throw new Error(`Collection ${summary.id} has no manifest`);
-
-			for (const photo of manifest.photos) {
-				photos.push({
-					...photo,
-					importedAt: manifest.createdAt,
-					frames: photo.frames.map((frame) => ({
-						raw: frame.raw ? { ...frame.raw, source: { ...frame.raw.source } } : null,
-						display: frame.display
-							? { ...frame.display, source: { ...frame.display.source } }
-							: null,
-						filenameExposureHint: frame.filenameExposureHint
-					})),
-					metadata: photo.metadata ? { ...photo.metadata } : null
-				});
-			}
-
-			collections.push({
-				id: manifest.id,
-				name: manifest.name,
-				createdAt: manifest.createdAt,
-				updatedAt: manifest.updatedAt,
-				photoIds: manifest.photos.map((photo) => photo.id)
-			});
-			for (const album of manifest.albums) {
-				collections.push({
-					id: album.id,
-					name: album.name,
-					createdAt: manifest.createdAt,
-					updatedAt: manifest.updatedAt,
-					photoIds: manifest.photos
-						.filter((photo) => photo.albumIds.includes(album.id))
-						.map((photo) => photo.id)
-				});
-			}
-			for (const stack of manifest.stacks) stacks.set(stack.id, { ...stack });
-
-			await copyLegacyAssets(legacyDirectory, ORIGINALS_DIRECTORY, originals, manifest.photos);
-			await copyLegacyThumbnails(legacyDirectory, thumbnails, manifest.photos);
-		}
-
-		const timestamps = catalog.collections.flatMap((collection) => [
-			collection.createdAt,
-			collection.updatedAt
-		]);
-		const library = libraryManifestSchema.parse({
-			version: LIBRARY_VERSION,
-			createdAt: timestamps.length > 0 ? Math.min(...timestamps) : Date.now(),
-			updatedAt: timestamps.length > 0 ? Math.max(...timestamps) : Date.now(),
-			photos,
-			collections,
-			stacks: [...stacks.values()]
-		});
-		await writeJson(directory, LIBRARY_FILE, library);
-		await retireLegacyStorage(directory);
-		return library;
-	}
-
 	private async appDirectory() {
 		const root = await navigator.storage.getDirectory();
 		return root.getDirectoryHandle(APP_DIRECTORY, { create: true });
 	}
-}
-
-function migrateLegacyV1Manifest(
-	manifest: z.infer<typeof legacyV1ManifestSchema>
-): z.infer<typeof legacyV2ManifestSchema> {
-	return {
-		...manifest,
-		version: LEGACY_COLLECTION_VERSION,
-		photos: manifest.photos.map(({ storageName, source, ...photo }) => ({
-			...photo,
-			kind: source.kind === 'raw' ? 'raw' : 'display',
-			frames: [
-				{
-					raw:
-						source.kind === 'raw'
-							? { id: `${photo.id}-asset`, storageName, name: photo.name, source }
-							: null,
-					display:
-						source.kind === 'image'
-							? { id: `${photo.id}-asset`, storageName, name: photo.name, source }
-							: null,
-					filenameExposureHint: null
-				}
-			],
-			bracketDetection: null,
-			thumbnailStorageName: null,
-			metadata: null
-		}))
-	};
-}
-
-async function copyLegacyAssets(
-	legacyDirectory: FileSystemDirectoryHandle,
-	folder: string,
-	destination: FileSystemDirectoryHandle,
-	photos: readonly z.infer<typeof legacyStoredPhotoSchema>[]
-) {
-	const source = await legacyDirectory.getDirectoryHandle(folder);
-	const names = new Set(
-		photos.flatMap((photo) =>
-			photo.frames.flatMap((frame) =>
-				[frame.raw?.storageName, frame.display?.storageName].filter(
-					(name): name is string => name !== undefined
-				)
-			)
-		)
-	);
-	for (const name of names) await copyFile(source, destination, name);
-}
-
-async function copyLegacyThumbnails(
-	legacyDirectory: FileSystemDirectoryHandle,
-	destination: FileSystemDirectoryHandle,
-	photos: readonly z.infer<typeof legacyStoredPhotoSchema>[]
-) {
-	const names = photos.flatMap((photo) =>
-		photo.thumbnailStorageName ? [photo.thumbnailStorageName] : []
-	);
-	if (names.length === 0) return;
-	const source = await legacyDirectory.getDirectoryHandle(THUMBNAILS_DIRECTORY);
-	for (const name of new Set(names)) await copyFile(source, destination, name);
-}
-
-async function copyFile(
-	source: FileSystemDirectoryHandle,
-	destination: FileSystemDirectoryHandle,
-	name: string
-) {
-	const file = await source.getFileHandle(name).then((handle) => handle.getFile());
-	await writeFile(destination, name, file);
-}
-
-async function retireLegacyStorage(directory: FileSystemDirectoryHandle) {
-	await Promise.allSettled([
-		directory.removeEntry(LEGACY_CATALOG_FILE),
-		directory.removeEntry(LEGACY_COLLECTIONS_DIRECTORY, { recursive: true })
-	]);
 }
 
 async function readJson<T>(
