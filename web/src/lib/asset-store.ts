@@ -3,6 +3,7 @@ import { storageNameSchema } from './library-schema.ts';
 const APP_DIRECTORY = 'postframe';
 const ORIGINALS_DIRECTORY = 'originals';
 const THUMBNAILS_DIRECTORY = 'thumbnails';
+const EDITS_DIRECTORY = 'edits';
 
 export interface OriginalWrite {
 	storageName: string;
@@ -10,6 +11,11 @@ export interface OriginalWrite {
 }
 
 export interface ThumbnailWrite {
+	storageName: string;
+	blob: Blob;
+}
+
+export interface EditWrite {
 	storageName: string;
 	blob: Blob;
 }
@@ -48,6 +54,15 @@ export class AssetStore {
 		return this.fileHandle(THUMBNAILS_DIRECTORY, storageName).then((handle) => handle.getFile());
 	}
 
+	async readEdit(storageName: string): Promise<File | null> {
+		try {
+			return await this.fileHandle(EDITS_DIRECTORY, storageName).then((handle) => handle.getFile());
+		} catch (error) {
+			if (isNotFoundError(error)) return null;
+			throw error;
+		}
+	}
+
 	async writeOriginals(writes: readonly OriginalWrite[]) {
 		return this.writeFiles(
 			ORIGINALS_DIRECTORY,
@@ -62,6 +77,13 @@ export class AssetStore {
 		);
 	}
 
+	async writeEdits(writes: readonly EditWrite[]) {
+		return this.writeFiles(
+			EDITS_DIRECTORY,
+			writes.map(({ storageName, blob }) => ({ storageName, contents: blob }))
+		);
+	}
+
 	async deleteOriginals(storageNames: readonly string[]) {
 		await this.deleteFiles(ORIGINALS_DIRECTORY, storageNames);
 	}
@@ -70,12 +92,20 @@ export class AssetStore {
 		await this.deleteFiles(THUMBNAILS_DIRECTORY, storageNames);
 	}
 
+	async deleteEdits(storageNames: readonly string[]) {
+		await this.deleteFiles(EDITS_DIRECTORY, storageNames);
+	}
+
 	listOriginals() {
 		return this.listFiles(ORIGINALS_DIRECTORY);
 	}
 
 	listThumbnails() {
 		return this.listFiles(THUMBNAILS_DIRECTORY);
+	}
+
+	listEdits() {
+		return this.listFiles(EDITS_DIRECTORY);
 	}
 
 	async clearAll() {

@@ -31,6 +31,7 @@ import {
 	storageErrorMessage,
 	type BrowserStorageStatus
 } from './browser-storage';
+import { defaultDevelopSettings, type DevelopSettings } from './develop-settings';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -72,6 +73,7 @@ export interface Photo {
 	rejected: boolean;
 	colorLabel: ColorLabel;
 	stackId: string | null;
+	develop: DevelopSettings;
 }
 
 export interface PhotoStack {
@@ -721,7 +723,8 @@ export class WorkspaceState {
 			flagged: false,
 			rejected: false,
 			colorLabel: 'none',
-			stackId: null
+			stackId: null,
+			develop: defaultDevelopSettings()
 		} satisfies Photo;
 
 		return {
@@ -760,7 +763,8 @@ export class WorkspaceState {
 			flagged: photo.flagged,
 			rejected: photo.rejected,
 			colorLabel: photo.colorLabel,
-			stackId: photo.stackId
+			stackId: photo.stackId,
+			develop: await this.libraryService!.loadDevelopSettings(photo.id)
 		};
 	}
 

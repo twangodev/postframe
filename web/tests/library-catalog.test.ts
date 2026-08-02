@@ -197,12 +197,13 @@ test('queues asset deletion with the photo catalog transaction', async () => {
 			deletions.map(({ kind, storageName }) => ({ kind, storageName })),
 			[
 				{ kind: 'original', storageName: 'asset-one.dng' },
-				{ kind: 'thumbnail', storageName: 'photo-one.jpg' }
+				{ kind: 'thumbnail', storageName: 'photo-one.jpg' },
+				{ kind: 'edit', storageName: 'photo-one.json' }
 			]
 		);
 		assert.equal((await catalog.loadLibrary())?.photos.length, 0);
 		assert.equal((await catalog.loadLibrary())?.collections[0]?.photoIds.length, 0);
-		assert.equal((await catalog.pendingDeletions()).length, 2);
+		assert.equal((await catalog.pendingDeletions()).length, 3);
 		await catalog.completeDeletions(deletions);
 		assert.equal((await catalog.pendingDeletions()).length, 0);
 	} finally {

@@ -16,6 +16,12 @@ import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts'
 class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
 	readonly thumbnails = new Map<string, Blob>();
+	readonly edits = new Map<string, Blob>();
+
+	async readEdit(storageName: string) {
+		const blob = this.edits.get(storageName);
+		return blob ? new File([blob], storageName, { type: blob.type }) : null;
+	}
 
 	async writeOriginals(writes: readonly OriginalWrite[]) {
 		const created: string[] = [];
@@ -35,12 +41,25 @@ class MemoryAssetStore {
 		return created;
 	}
 
+	async writeEdits(writes: readonly { storageName: string; blob: Blob }[]) {
+		const created: string[] = [];
+		for (const { storageName, blob } of writes) {
+			if (!this.edits.has(storageName)) created.push(storageName);
+			this.edits.set(storageName, blob);
+		}
+		return created;
+	}
+
 	async deleteOriginals(storageNames: readonly string[]) {
 		for (const storageName of storageNames) this.originals.delete(storageName);
 	}
 
 	async deleteThumbnails(storageNames: readonly string[]) {
 		for (const storageName of storageNames) this.thumbnails.delete(storageName);
+	}
+
+	async deleteEdits(storageNames: readonly string[]) {
+		for (const storageName of storageNames) this.edits.delete(storageName);
 	}
 
 	async listOriginals(): Promise<StoredFile[]> {
@@ -51,11 +70,35 @@ class MemoryAssetStore {
 		return [...this.thumbnails].map(([storageName, blob]) => ({ storageName, size: blob.size }));
 	}
 
+	async listEdits(): Promise<StoredFile[]> {
+		return [...this.edits].map(([storageName, blob]) => ({ storageName, size: blob.size }));
+	}
+
 	async clearAll() {
 		this.originals.clear();
 		this.thumbnails.clear();
+		this.edits.clear();
 	}
 }
+
+test('round-trips versioned develop settings', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	const assets = new MemoryAssetStore();
+	const service = new LibraryService(catalog, assets as unknown as AssetStore);
+	try {
+		assert.deepEqual(await service.loadDevelopSettings('photo-one'), {
+			version: 1,
+			exposure: 0
+		});
+		await service.saveDevelopSettings('photo-one', { version: 1, exposure: 1.25 });
+		assert.deepEqual(await service.loadDevelopSettings('photo-one'), {
+			version: 1,
+			exposure: 1.25
+		});
+	} finally {
+		await service.clearAll();
+	}
+});
 
 function storedPhoto(id: string, assetId: string, contentHash: string): StoredPhoto {
 	return {
@@ -167,13 +210,15 @@ test('cleans only unreferenced OPFS files', async () => {
 		await service.importPhotos(1, [photo], photoWrites.originals, photoWrites.thumbnails);
 		assets.originals.set('orphan.dng', new File(['orphan'], 'orphan.dng'));
 		assets.thumbnails.set('orphan.jpg', new Blob(['orphan']));
+		assets.edits.set('orphan.json', new Blob(['{}']));
 
 		const result = await service.cleanup();
-		assert.equal(result.deletedFiles, 2);
+		assert.equal(result.deletedFiles, 3);
 		assert.equal(result.failedFiles, 0);
-		assert.equal(result.reclaimedBytes, 12);
+		assert.equal(result.reclaimedBytes, 14);
 		assert.deepEqual([...assets.originals.keys()], ['asset-one.dng']);
 		assert.deepEqual([...assets.thumbnails.keys()], ['photo-one.jpg']);
+		assert.deepEqual([...assets.edits.keys()], []);
 	} finally {
 		await service.clearAll();
 	}
@@ -190,7 +235,7 @@ test('resumes file deletion queued by a committed catalog removal', async () => 
 		await catalog.deletePhoto(photo.id);
 
 		const result = await service.resumePendingDeletions();
-		assert.equal(result.deletedFiles, 2);
+		assert.equal(result.deletedFiles, 3);
 		assert.equal(result.failedFiles, 0);
 		assert.equal((await catalog.pendingDeletions()).length, 0);
 		assert.equal(assets.originals.size, 0);
