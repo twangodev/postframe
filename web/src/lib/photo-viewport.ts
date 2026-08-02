@@ -120,6 +120,19 @@ export function surfaceTransform(viewport: Size, image: Size, transform: Viewpor
 	};
 }
 
+export function visibleImageSize(viewport: Size, image: Size, transform: ViewportTransform): Size {
+	const start = screenToImage({ x: 0, y: 0 }, viewport, image, transform);
+	const end = screenToImage({ x: viewport.width, y: viewport.height }, viewport, image, transform);
+	const left = clamp(start.x, 0, image.width);
+	const top = clamp(start.y, 0, image.height);
+	const right = clamp(end.x, 0, image.width);
+	const bottom = clamp(end.y, 0, image.height);
+	return {
+		width: Math.max(0, right - left),
+		height: Math.max(0, bottom - top)
+	};
+}
+
 export function nextZoomScale(current: number, direction: -1 | 1, fittedScale: number) {
 	const scales = [...new Set([...ZOOM_PRESETS, fittedScale])].sort((a, b) => a - b);
 	const epsilon = 0.0001;

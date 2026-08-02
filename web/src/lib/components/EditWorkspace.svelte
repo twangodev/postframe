@@ -45,6 +45,7 @@
 		nextZoomScale,
 		panBy,
 		surfaceTransform,
+		visibleImageSize,
 		zoomAt,
 		type Point,
 		type Size,
@@ -83,6 +84,7 @@
 		height: Math.max(1, active?.height ?? 1067)
 	});
 	const imageOffset = $derived(surfaceTransform(viewportSize, imageSize, viewportTransform));
+	const visiblePixels = $derived(visibleImageSize(viewportSize, imageSize, viewportTransform));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -930,7 +932,18 @@
 				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
 			>
 				<span>display · SDR preview</span>
-				<span class="font-mono">{active?.width ?? '—'} × {active?.height ?? '—'} px</span>
+				{#if active}
+					<output
+						title="Visible source pixels · full image pixels"
+						aria-label={`Viewing ${Math.round(visiblePixels.width)} by ${Math.round(visiblePixels.height)} of ${imageSize.width} by ${imageSize.height} source pixels`}
+						class="font-mono tabular-nums"
+					>
+						view {Math.round(visiblePixels.width)} × {Math.round(visiblePixels.height)} · total
+						{imageSize.width} × {imageSize.height} px
+					</output>
+				{:else}
+					<span class="font-mono">— × — px</span>
+				{/if}
 			</footer>
 		</section>
 
