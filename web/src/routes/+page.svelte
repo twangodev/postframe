@@ -35,12 +35,14 @@
 		localStorageAvailable={workspace.localStorageAvailable}
 		storageStatus={workspace.browserStorageStatus}
 		storageError={workspace.browserStorageError}
+		cleanupResult={workspace.storageCleanupResult}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
 		onEnterLibrary={workspace.enterLibrary}
 		onClearLocalData={workspace.clearLocalData}
 		onRefreshStorage={workspace.refreshBrowserStorage}
 		onRequestPersistence={workspace.requestPersistentStorage}
+		onCleanup={workspace.cleanupLocalData}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">

@@ -1,4 +1,4 @@
-import { storageNameSchema } from './library-schema';
+import { storageNameSchema } from './library-schema.ts';
 
 const APP_DIRECTORY = 'postframe';
 const ORIGINALS_DIRECTORY = 'originals';
@@ -12,6 +12,11 @@ export interface OriginalWrite {
 export interface ThumbnailWrite {
 	storageName: string;
 	blob: Blob;
+}
+
+export interface StoredFile {
+	storageName: string;
+	size: number;
 }
 
 type RootProvider = () => Promise<FileSystemDirectoryHandle>;
@@ -63,6 +68,14 @@ export class AssetStore {
 
 	async deleteThumbnails(storageNames: readonly string[]) {
 		await this.deleteFiles(THUMBNAILS_DIRECTORY, storageNames);
+	}
+
+	listOriginals() {
+		return this.listFiles(ORIGINALS_DIRECTORY);
+	}
+
+	listThumbnails() {
+		return this.listFiles(THUMBNAILS_DIRECTORY);
 	}
 
 	async clearAll() {
@@ -118,6 +131,24 @@ export class AssetStore {
 		storageNameSchema.parse(storageName);
 		const directory = await this.fileDirectory(folder, false);
 		return directory.getFileHandle(storageName);
+	}
+
+	private async listFiles(folder: string): Promise<StoredFile[]> {
+		let directory: FileSystemDirectoryHandle;
+		try {
+			directory = await this.fileDirectory(folder, false);
+		} catch (error) {
+			if (isNotFoundError(error)) return [];
+			throw error;
+		}
+
+		const files: StoredFile[] = [];
+		for await (const [storageName, handle] of directory.entries()) {
+			if (handle.kind !== 'file') continue;
+			const file = await handle.getFile();
+			files.push({ storageName, size: file.size });
+		}
+		return files;
 	}
 
 	private async fileDirectory(folder: string, create: boolean) {

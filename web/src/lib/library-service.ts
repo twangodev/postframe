@@ -1,5 +1,10 @@
-import { AssetStore, type OriginalWrite, type ThumbnailWrite } from './asset-store';
-import { LibraryCatalog } from './library-catalog';
+import {
+	AssetStore,
+	type OriginalWrite,
+	type StoredFile,
+	type ThumbnailWrite
+} from './asset-store.ts';
+import { LibraryCatalog, type LibraryStack, type PendingDeleteRecord } from './library-catalog.ts';
 import {
 	libraryManifestSchema,
 	photoCollectionSchema,
@@ -7,15 +12,21 @@ import {
 	type LibraryManifest,
 	type PhotoCollection,
 	type StoredPhoto
-} from './library-schema';
+} from './library-schema.ts';
 
-export type { OriginalWrite, ThumbnailWrite } from './asset-store';
+export type { OriginalWrite, ThumbnailWrite } from './asset-store.ts';
 
 export interface ImportResult {
 	photos: StoredPhoto[];
 	photoIds: string[];
 	collection: PhotoCollection | null;
 	duplicateCount: number;
+}
+
+export interface CleanupResult {
+	deletedFiles: number;
+	failedFiles: number;
+	reclaimedBytes: number;
 }
 
 export class LibraryService {
@@ -120,6 +131,55 @@ export class LibraryService {
 		};
 	}
 
+	updatePhotoState(photo: StoredPhoto) {
+		return this.catalog.updatePhotoState(storedPhotoSchema.parse(photo));
+	}
+
+	saveCollection(collection: PhotoCollection) {
+		return this.catalog.saveCollection(photoCollectionSchema.parse(collection));
+	}
+
+	deleteCollection(collectionId: string) {
+		return this.catalog.deleteCollection(collectionId);
+	}
+
+	saveStacks(stacks: readonly LibraryStack[], changedPhotos: ReadonlyMap<string, string | null>) {
+		return this.catalog.saveStacks(stacks, changedPhotos);
+	}
+
+	async deletePhoto(photoId: string): Promise<CleanupResult> {
+		const deletions = await this.catalog.deletePhoto(photoId);
+		return this.flushDeletions(deletions, new Map());
+	}
+
+	async cleanup(): Promise<CleanupResult> {
+		const [references, originals, thumbnails, pending] = await Promise.all([
+			this.catalog.storageReferences(),
+			this.assets.listOriginals(),
+			this.assets.listThumbnails(),
+			this.catalog.pendingDeletions()
+		]);
+		const files = new Map<string, StoredFile>();
+		for (const file of originals) files.set(deletionKey('original', file.storageName), file);
+		for (const file of thumbnails) files.set(deletionKey('thumbnail', file.storageName), file);
+		const deletions = new Map<string, PendingDeleteRecord>();
+		for (const deletion of pending)
+			deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
+		for (const file of originals) {
+			if (!references.originals.has(file.storageName)) {
+				const deletion = pendingDeletion('original', file.storageName);
+				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
+			}
+		}
+		for (const file of thumbnails) {
+			if (!references.thumbnails.has(file.storageName)) {
+				const deletion = pendingDeletion('thumbnail', file.storageName);
+				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
+			}
+		}
+		return this.flushDeletions([...deletions.values()], files);
+	}
+
 	async clearAll() {
 		const results = await Promise.allSettled([this.catalog.clear(), this.assets.clearAll()]);
 		const errors = results.flatMap((result) =>
@@ -131,6 +191,47 @@ export class LibraryService {
 	close() {
 		this.catalog.close();
 	}
+
+	private async flushDeletions(
+		deletions: readonly PendingDeleteRecord[],
+		files: ReadonlyMap<string, StoredFile>
+	): Promise<CleanupResult> {
+		const completed: PendingDeleteRecord[] = [];
+		let reclaimedBytes = 0;
+
+		await Promise.all(
+			deletions.map(async (deletion) => {
+				try {
+					if (deletion.kind === 'original') {
+						await this.assets.deleteOriginals([deletion.storageName]);
+					} else {
+						await this.assets.deleteThumbnails([deletion.storageName]);
+					}
+					completed.push(deletion);
+					reclaimedBytes += files.get(deletionKey(deletion.kind, deletion.storageName))?.size ?? 0;
+				} catch {
+					return;
+				}
+			})
+		);
+		await this.catalog.completeDeletions(completed);
+		return {
+			deletedFiles: completed.length,
+			failedFiles: deletions.length - completed.length,
+			reclaimedBytes
+		};
+	}
+}
+
+function pendingDeletion(
+	kind: PendingDeleteRecord['kind'],
+	storageName: string
+): PendingDeleteRecord {
+	return { kind, storageName, queuedAt: Date.now() };
+}
+
+function deletionKey(kind: PendingDeleteRecord['kind'], storageName: string) {
+	return `${kind}:${storageName}`;
 }
 
 function validateWrites(

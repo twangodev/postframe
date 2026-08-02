@@ -2,17 +2,20 @@
 	import { Dialog } from 'bits-ui';
 	import { Database, RefreshCw, ShieldCheck, Trash2, X } from '@lucide/svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
+	import type { CleanupResult } from '$lib/library-service';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 
-	type Action = 'refresh' | 'persist' | 'clear';
+	type Action = 'refresh' | 'persist' | 'cleanup' | 'clear';
 	type Callback = () => void | Promise<void>;
 
 	interface Props {
 		open?: boolean;
 		status: BrowserStorageStatus | null;
 		error?: string | null;
+		cleanupResult?: CleanupResult | null;
 		onRefresh: Callback;
 		onRequestPersistence: Callback;
+		onCleanup: Callback;
 		onClearLocalData: Callback;
 	}
 
@@ -20,8 +23,10 @@
 		open = $bindable(false),
 		status,
 		error = null,
+		cleanupResult = null,
 		onRefresh,
 		onRequestPersistence,
+		onCleanup,
 		onClearLocalData
 	}: Props = $props();
 	let action = $state<Action | null>(null);
@@ -150,6 +155,16 @@
 				{#if error || actionError}
 					<p class="text-negative text-[10px]" role="status">{actionError ?? error}</p>
 				{/if}
+				{#if cleanupResult}
+					<p class="text-muted text-[10px]" role="status">
+						{cleanupResult.deletedFiles === 0
+							? 'nothing to clean up.'
+							: `removed ${cleanupResult.deletedFiles} files · ${formatBytes(cleanupResult.reclaimedBytes)}`}
+						{#if cleanupResult.failedFiles > 0}
+							· {cleanupResult.failedFiles} could not be removed
+						{/if}
+					</p>
+				{/if}
 
 				{#if confirmingClear}
 					<div class="border-negative/40 bg-negative/5 rounded border p-3">
@@ -192,6 +207,15 @@
 						refresh
 					</button>
 					<div class="flex gap-2">
+						<button
+							type="button"
+							disabled={busy}
+							class="border-subtle text-muted hover:bg-surface hover:text-text flex cursor-pointer items-center gap-1.5 rounded border px-3 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
+							onclick={() => run('cleanup', onCleanup)}
+						>
+							<RefreshCw size={12} class={action === 'cleanup' ? 'animate-spin' : ''} />
+							{action === 'cleanup' ? 'cleaning…' : 'clean up'}
+						</button>
 						<button
 							type="button"
 							disabled={busy}

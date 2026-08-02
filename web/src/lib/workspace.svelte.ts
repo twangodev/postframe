@@ -1,7 +1,11 @@
 import { acceptedPhotoTypes, normalizedRawExtensions } from './photo-source';
-import { type OriginalWrite, type ThumbnailWrite, LibraryService } from './library-service';
+import {
+	type CleanupResult,
+	type OriginalWrite,
+	type ThumbnailWrite,
+	LibraryService
+} from './library-service';
 import type {
-	LibraryManifest,
 	PhotoCollection,
 	StoredAsset,
 	StoredFrame,
@@ -166,6 +170,7 @@ export class WorkspaceState {
 	storageError = $state<string | null>(null);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageError = $state<string | null>(null);
+	storageCleanupResult = $state<CleanupResult | null>(null);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
 	// TODO(WASM_TODOS.adjustments): send changes to the render graph and refresh the preview.
@@ -251,7 +256,7 @@ export class WorkspaceState {
 	};
 
 	async save() {
-		await this.queuePersistence();
+		await this.persistence;
 	}
 
 	enterLibrary = () => {
@@ -302,6 +307,14 @@ export class WorkspaceState {
 			this.browserStorageError = storageErrorMessage(error);
 			throw error;
 		}
+	};
+
+	cleanupLocalData = async () => {
+		const store = this.libraryService;
+		if (!store) return;
+		await this.persistence;
+		this.storageCleanupResult = await store.cleanup();
+		await this.refreshBrowserStorage();
 	};
 
 	requestPersistentStorage = async () => {
@@ -384,21 +397,21 @@ export class WorkspaceState {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
 		photo.rating = photo.rating === rating ? 0 : rating;
-		void this.queuePersistence();
+		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
 	}
 
 	toggleFlag(photoId: string) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
 		photo.flagged = !photo.flagged;
-		void this.queuePersistence();
+		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
 	}
 
 	setColorLabel(photoId: string, colorLabel: ColorLabel) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
 		photo.colorLabel = colorLabel;
-		void this.queuePersistence();
+		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
 	}
 
 	toggleCollection(photoId: string, collectionId: string) {
@@ -408,10 +421,11 @@ export class WorkspaceState {
 			? collection.photoIds.filter((id) => id !== photoId)
 			: [...collection.photoIds, photoId];
 		collection.updatedAt = Date.now();
-		void this.queuePersistence();
+		void this.queueCatalogMutation((store) => store.saveCollection(collection));
 	}
 
 	createStack = () => {
+		const previousStackIds = new Map(this.photos.map((photo) => [photo.id, photo.stackId]));
 		const photoIds = this.selectedIds.filter((photoId) =>
 			this.photos.some((photo) => photo.id === photoId)
 		);
@@ -436,22 +450,23 @@ export class WorkspaceState {
 		for (const photo of this.photos) {
 			if (photoIds.includes(photo.id)) photo.stackId = stack.id;
 		}
-		void this.queuePersistence();
+		void this.persistStacks(previousStackIds);
 	};
 
 	ungroupStack(stackId: string) {
+		const previousStackIds = new Map(this.photos.map((photo) => [photo.id, photo.stackId]));
 		for (const photo of this.photos) {
 			if (photo.stackId === stackId) photo.stackId = null;
 		}
 		this.stacks = this.stacks.filter((stack) => stack.id !== stackId);
-		void this.queuePersistence();
+		void this.persistStacks(previousStackIds);
 	}
 
 	toggleStack(stackId: string) {
 		const stack = this.stacks.find((candidate) => candidate.id === stackId);
 		if (!stack) return;
 		stack.collapsed = !stack.collapsed;
-		void this.queuePersistence();
+		void this.queueCatalogMutation((store) => store.saveStacks(this.stacks, new Map()));
 	}
 
 	createMask(kind: MaskKind) {
@@ -895,6 +910,45 @@ export class WorkspaceState {
 		}
 	}
 
+	private persistStacks(previousStackIds: ReadonlyMap<string, string | null>) {
+		const changed = new Map<string, string | null>();
+		for (const photo of this.photos) {
+			if (previousStackIds.get(photo.id) !== photo.stackId) changed.set(photo.id, photo.stackId);
+		}
+		return this.queueCatalogMutation((store) => store.saveStacks(this.stacks, changed));
+	}
+
+	private async queueCatalogMutation(
+		operation: (store: LibraryService) => Promise<unknown>
+	): Promise<boolean> {
+		const store = this.libraryService;
+		if (!store) {
+			this.storageStatus = 'memory';
+			return true;
+		}
+
+		const revision = ++this.persistenceRevision;
+		this.storageStatus = 'saving';
+		this.storageError = null;
+		const mutation = this.persistence.then(() => operation(store));
+		this.persistence = mutation.then(
+			() => {
+				if (revision === this.persistenceRevision) this.storageStatus = 'saved';
+			},
+			(error: unknown) => {
+				if (revision !== this.persistenceRevision) return;
+				this.storageStatus = 'error';
+				this.storageError = error instanceof Error ? error.message : 'Unable to save changes';
+			}
+		);
+		try {
+			await mutation;
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	private discardImport({ photo }: PhotoImport) {
 		if (!photo.src) return;
 		URL.revokeObjectURL(photo.src);
@@ -933,21 +987,6 @@ export class WorkspaceState {
 		}
 	}
 
-	private libraryManifest(): LibraryManifest | null {
-		if (!this.libraryReady || this.libraryCreatedAt === 0) return null;
-		return {
-			version: 1,
-			createdAt: this.libraryCreatedAt,
-			updatedAt: Date.now(),
-			photos: this.photos.map((photo) => this.storedPhoto(photo)),
-			collections: this.collections.map((collection) => ({
-				...collection,
-				photoIds: [...collection.photoIds]
-			})),
-			stacks: this.stacks.map((stack) => ({ ...stack, photoIds: [...stack.photoIds] }))
-		};
-	}
-
 	private storedPhoto(photo: Photo): StoredPhoto {
 		return {
 			id: photo.id,
@@ -966,35 +1005,6 @@ export class WorkspaceState {
 			colorLabel: photo.colorLabel,
 			stackId: photo.stackId
 		};
-	}
-
-	private queuePersistence(
-		originals: readonly OriginalWrite[] = [],
-		thumbnails: readonly ThumbnailWrite[] = []
-	) {
-		const manifest = this.libraryManifest();
-		const store = this.libraryService;
-		if (!store || !manifest) {
-			this.storageStatus = 'memory';
-			return Promise.resolve();
-		}
-
-		const revision = ++this.persistenceRevision;
-		this.storageStatus = 'saving';
-		this.storageError = null;
-		const save = this.persistence.then(() => store.saveLibrary(manifest, originals, thumbnails));
-		this.persistence = save.then(
-			() => {
-				if (revision !== this.persistenceRevision) return;
-				this.storageStatus = 'saved';
-			},
-			(error: unknown) => {
-				if (revision !== this.persistenceRevision) return;
-				this.storageStatus = 'error';
-				this.storageError = error instanceof Error ? error.message : 'Unable to save the library';
-			}
-		);
-		return this.persistence;
 	}
 }
 

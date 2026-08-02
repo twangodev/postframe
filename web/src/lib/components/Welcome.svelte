@@ -6,6 +6,7 @@
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
+	import type { CleanupResult } from '$lib/library-service';
 
 	interface Props {
 		acceptedPhotos: string;
@@ -15,12 +16,14 @@
 		localStorageAvailable: boolean;
 		storageStatus: BrowserStorageStatus | null;
 		storageError: string | null;
+		cleanupResult: CleanupResult | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onEnterLibrary: () => void;
 		onClearLocalData: () => Promise<void>;
 		onRefreshStorage: () => Promise<void>;
 		onRequestPersistence: () => Promise<void>;
+		onCleanup: () => Promise<void>;
 	}
 
 	let {
@@ -31,12 +34,14 @@
 		localStorageAvailable,
 		storageStatus,
 		storageError,
+		cleanupResult,
 		onOpenPhoto,
 		onCreateCollection,
 		onEnterLibrary,
 		onClearLocalData,
 		onRefreshStorage,
-		onRequestPersistence
+		onRequestPersistence,
+		onCleanup
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
 	let storageOpen = $state(false);
@@ -248,7 +253,9 @@
 	bind:open={storageOpen}
 	status={storageStatus}
 	error={storageError}
+	{cleanupResult}
 	onRefresh={onRefreshStorage}
 	{onRequestPersistence}
+	{onCleanup}
 	{onClearLocalData}
 />

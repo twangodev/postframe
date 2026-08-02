@@ -43,7 +43,7 @@ interface CollectionPhotoRecord {
 	position: number;
 }
 
-type LibraryStack = LibraryManifest['stacks'][number];
+export type LibraryStack = LibraryManifest['stacks'][number];
 type StackRecord = Omit<LibraryStack, 'photoIds'>;
 
 interface StackPhotoRecord {
@@ -53,6 +53,7 @@ interface StackPhotoRecord {
 }
 
 export interface PendingDeleteRecord {
+	kind: 'original' | 'thumbnail';
 	storageName: string;
 	queuedAt: number;
 }
@@ -65,7 +66,7 @@ export class PostframeDatabase extends Dexie {
 	collectionPhotos!: Table<CollectionPhotoRecord, [string, string]>;
 	stacks!: Table<StackRecord, string>;
 	stackPhotos!: Table<StackPhotoRecord, [string, string]>;
-	pendingDeletes!: Table<PendingDeleteRecord, string>;
+	pendingDeletes!: Table<PendingDeleteRecord, [PendingDeleteRecord['kind'], string]>;
 
 	constructor(name = DATABASE_NAME) {
 		super(name);
@@ -90,6 +91,17 @@ export class PostframeDatabase extends Dexie {
 			stacks: '&id',
 			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
 			pendingDeletes: '&storageName, queuedAt'
+		});
+		this.version(3).stores({
+			library: '&id',
+			photos:
+				'&id, &fingerprint, importedAt, metadata.capturedAt, flagged, rejected, rating, stackId, [kind+importedAt]',
+			assets: '&id, &storageName, &contentHash, photoId, [photoId+frameIndex], role',
+			collections: '&id, &normalizedName, updatedAt',
+			collectionPhotos: '[collectionId+photoId], photoId, [collectionId+position]',
+			stacks: '&id',
+			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
+			pendingDeletes: '[kind+storageName], queuedAt'
 		});
 	}
 }
@@ -239,12 +251,184 @@ export class LibraryCatalog {
 		);
 	}
 
+	async updatePhotoState(photo: StoredPhoto) {
+		await this.database.transaction(
+			'rw',
+			[this.database.library, this.database.photos],
+			async () => {
+				const updated = await this.database.photos.update(photo.id, {
+					rating: photo.rating,
+					flagged: photo.flagged,
+					rejected: photo.rejected,
+					colorLabel: photo.colorLabel,
+					stackId: photo.stackId
+				});
+				if (updated === 0) throw new Error(`Photo ${photo.id} is missing from the catalog`);
+				await this.touchLibrary();
+			}
+		);
+	}
+
+	async saveCollection(collection: PhotoCollection) {
+		await this.database.transaction(
+			'rw',
+			[
+				this.database.library,
+				this.database.photos,
+				this.database.collections,
+				this.database.collectionPhotos
+			],
+			async () => {
+				const members = await this.database.photos.bulkGet(collection.photoIds);
+				const missingIndex = members.findIndex((photo) => photo === undefined);
+				if (missingIndex >= 0) {
+					throw new Error(`Photo ${collection.photoIds[missingIndex]} is missing from the catalog`);
+				}
+				await this.database.collections.put(collectionRecord(collection));
+				await this.database.collectionPhotos.where('collectionId').equals(collection.id).delete();
+				await bulkAdd(this.database.collectionPhotos, collectionPhotoRecords(collection));
+				await this.touchLibrary();
+			}
+		);
+	}
+
+	async deleteCollection(collectionId: string) {
+		await this.database.transaction(
+			'rw',
+			[this.database.library, this.database.collections, this.database.collectionPhotos],
+			async () => {
+				await this.database.collectionPhotos.where('collectionId').equals(collectionId).delete();
+				await this.database.collections.delete(collectionId);
+				await this.touchLibrary();
+			}
+		);
+	}
+
+	async saveStacks(
+		stacks: readonly LibraryStack[],
+		changedPhotos: ReadonlyMap<string, string | null>
+	) {
+		await this.database.transaction(
+			'rw',
+			[
+				this.database.library,
+				this.database.photos,
+				this.database.stacks,
+				this.database.stackPhotos
+			],
+			async () => {
+				await Promise.all([this.database.stacks.clear(), this.database.stackPhotos.clear()]);
+				await bulkAdd(
+					this.database.stacks,
+					stacks.map(({ photoIds: _, ...stack }) => stack)
+				);
+				await bulkAdd(
+					this.database.stackPhotos,
+					stacks.flatMap((stack) =>
+						stack.photoIds.map((photoId, position) => ({ stackId: stack.id, photoId, position }))
+					)
+				);
+				for (const [photoId, stackId] of changedPhotos) {
+					const updated = await this.database.photos.update(photoId, { stackId });
+					if (updated === 0) throw new Error(`Photo ${photoId} is missing from the catalog`);
+				}
+				await this.touchLibrary();
+			}
+		);
+	}
+
+	async deletePhoto(photoId: string) {
+		return this.database.transaction(
+			'rw',
+			[
+				this.database.library,
+				this.database.photos,
+				this.database.assets,
+				this.database.collectionPhotos,
+				this.database.stacks,
+				this.database.stackPhotos,
+				this.database.pendingDeletes
+			],
+			async () => {
+				const photo = await this.database.photos.get(photoId);
+				if (!photo) return [];
+				const assets = await this.database.assets.where('photoId').equals(photoId).toArray();
+				const now = Date.now();
+				const pending: PendingDeleteRecord[] = [
+					...assets.map(({ storageName }) => ({
+						kind: 'original' as const,
+						storageName,
+						queuedAt: now
+					})),
+					...(photo.thumbnailStorageName
+						? [
+								{
+									kind: 'thumbnail' as const,
+									storageName: photo.thumbnailStorageName,
+									queuedAt: now
+								}
+							]
+						: [])
+				];
+				await bulkPut(this.database.pendingDeletes, pending);
+				await Promise.all([
+					this.database.collectionPhotos.where('photoId').equals(photoId).delete(),
+					this.database.stackPhotos.where('photoId').equals(photoId).delete(),
+					this.database.assets.bulkDelete(assets.map(({ id }) => id)),
+					this.database.photos.delete(photoId)
+				]);
+				if (photo.stackId) await this.collapseSmallStack(photo.stackId);
+				await this.touchLibrary();
+				return pending;
+			}
+		);
+	}
+
+	pendingDeletions() {
+		return this.database.pendingDeletes.toArray();
+	}
+
+	async completeDeletions(deletions: readonly PendingDeleteRecord[]) {
+		if (deletions.length === 0) return;
+		await this.database.pendingDeletes.bulkDelete(
+			deletions.map(({ kind, storageName }) => [kind, storageName])
+		);
+	}
+
+	async storageReferences() {
+		const [assets, photos] = await Promise.all([
+			this.database.assets.toArray(),
+			this.database.photos.toArray()
+		]);
+		return {
+			originals: new Set(assets.map(({ storageName }) => storageName)),
+			thumbnails: new Set(
+				photos.flatMap((photo) => (photo.thumbnailStorageName ? [photo.thumbnailStorageName] : []))
+			)
+		};
+	}
+
 	async clear() {
 		await this.database.delete();
 	}
 
 	close() {
 		this.database.close();
+	}
+
+	private async touchLibrary() {
+		const library = await this.database.library.get(LIBRARY_ID);
+		if (library) await this.database.library.update(LIBRARY_ID, { updatedAt: Date.now() });
+	}
+
+	private async collapseSmallStack(stackId: string) {
+		const remaining = await this.database.stackPhotos.where('stackId').equals(stackId).toArray();
+		if (remaining.length >= 2) return;
+		await this.database.stackPhotos.where('stackId').equals(stackId).delete();
+		await this.database.stacks.delete(stackId);
+		for (const { photoId } of remaining) {
+			await this.database.photos.update(photoId, { stackId: null });
+		}
 	}
 }
 

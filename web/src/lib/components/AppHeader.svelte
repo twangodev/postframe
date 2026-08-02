@@ -205,7 +205,9 @@
 	bind:open={storageOpen}
 	status={workspace.browserStorageStatus}
 	error={workspace.browserStorageError}
+	cleanupResult={workspace.storageCleanupResult}
 	onRefresh={workspace.refreshBrowserStorage}
 	onRequestPersistence={workspace.requestPersistentStorage}
+	onCleanup={workspace.cleanupLocalData}
 	onClearLocalData={workspace.clearLocalData}
 />

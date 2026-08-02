@@ -129,6 +129,50 @@ test('deduplicates repeated content within one import batch', async () => {
 	}
 });
 
+test('updates photo and collection state without replacing the library', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const library = manifest();
+		await catalog.saveLibrary(library);
+		const photo = structuredClone(library.photos[0]!);
+		photo.rating = 4;
+		photo.flagged = true;
+		await catalog.updatePhotoState(photo);
+		await catalog.saveCollection({ ...library.collections[0]!, photoIds: [], updatedAt: 3 });
+
+		const updated = await catalog.loadLibrary();
+		assert.equal(updated?.photos[0]?.rating, 4);
+		assert.equal(updated?.photos[0]?.flagged, true);
+		assert.deepEqual(updated?.collections[0]?.photoIds, []);
+		assert.equal(await catalog.database.assets.count(), 1);
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('queues asset deletion with the photo catalog transaction', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		await catalog.saveLibrary(manifest());
+		const deletions = await catalog.deletePhoto('photo-one');
+
+		assert.deepEqual(
+			deletions.map(({ kind, storageName }) => ({ kind, storageName })),
+			[
+				{ kind: 'original', storageName: 'asset-one.dng' },
+				{ kind: 'thumbnail', storageName: 'photo-one.jpg' }
+			]
+		);
+		assert.equal((await catalog.loadLibrary())?.photos.length, 0);
+		assert.equal((await catalog.loadLibrary())?.collections[0]?.photoIds.length, 0);
+		assert.equal((await catalog.pendingDeletions()).length, 2);
+		await catalog.completeDeletions(deletions);
+		assert.equal((await catalog.pendingDeletions()).length, 0);
+	} finally {
+		await catalog.clear();
+	}
+});
+
 test('deletes the local catalog', async () => {
 	const name = `postframe-test-${crypto.randomUUID()}`;
 	const catalog = new LibraryCatalog(name);
