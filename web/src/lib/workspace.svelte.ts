@@ -141,6 +141,7 @@ export class WorkspaceState {
 	private persistence = Promise.resolve();
 	private persistenceRevision = 0;
 	private objectUrls = new Set<string>();
+	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
 	private removeProgressListener: (() => void) | null = null;
 
@@ -365,6 +366,22 @@ export class WorkspaceState {
 		return this.workerClient.renderTile(tile);
 	};
 
+	loadThumbnail = (photoId: string) => {
+		const photo = this.photos.find((candidate) => candidate.id === photoId);
+		if (!photo || photo.src) return Promise.resolve();
+		const pending = this.thumbnailLoads.get(photoId);
+		if (pending) return pending;
+
+		const load = this.restoreThumbnail(photo)
+			.catch((error: unknown) => {
+				this.storageStatus = 'error';
+				this.storageError = error instanceof Error ? error.message : `Unable to load ${photo.name}`;
+			})
+			.finally(() => this.thumbnailLoads.delete(photoId));
+		this.thumbnailLoads.set(photoId, load);
+		return load;
+	};
+
 	setRating(photoId: string, rating: number) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
@@ -499,11 +516,7 @@ export class WorkspaceState {
 		}
 		this.releaseEditPreview();
 
-		if (photo.kind === 'display') {
-			this.documentStatus = { kind: 'ready', photoId, boostStops: null };
-			return;
-		}
-		if (!this.workerClient) {
+		if (!this.workerClient && photo.kind !== 'display') {
 			this.documentStatus = { kind: 'error', photoId, message: 'RAW decoder is unavailable' };
 			return;
 		}
@@ -522,9 +535,13 @@ export class WorkspaceState {
 		try {
 			await this.persistence;
 			if (revision !== this.documentRevision) return;
+			if (photo.kind === 'display') {
+				await this.openDisplayDocument(photo, revision);
+				return;
+			}
 			const frames = await this.documentFrames(photo);
 			if (revision !== this.documentRevision) return;
-			const result = await this.workerClient.openDocument(frames, previewDimension());
+			const result = await this.workerClient!.openDocument(frames, previewDimension());
 			if (revision !== this.documentRevision) return;
 
 			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
@@ -536,9 +553,25 @@ export class WorkspaceState {
 			this.documentStatus = {
 				kind: 'error',
 				photoId,
-				message: error instanceof Error ? error.message : 'Unable to open RAW document'
+				message: error instanceof Error ? error.message : 'Unable to open document'
 			};
 		}
+	}
+
+	private async openDisplayDocument(photo: Photo, revision: number) {
+		const store = this.libraryService;
+		const display = primaryStoredFrame(photo).display;
+		if (!store || !display) throw new Error('Display original is unavailable');
+		const file = await store.readOriginal(display.storageName);
+		if (revision !== this.documentRevision) return;
+		const src = URL.createObjectURL(file);
+		this.objectUrls.add(src);
+		this.editPreview = {
+			src,
+			width: photo.width ?? 1,
+			height: photo.height ?? 1
+		};
+		this.documentStatus = { kind: 'ready', photoId: photo.id, boostStops: null };
 	}
 
 	private async documentFrames(photo: Photo): Promise<RawFrameHandleInput[]> {
@@ -575,6 +608,7 @@ export class WorkspaceState {
 	private clearFiles() {
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
+		this.thumbnailLoads.clear();
 		this.editPreview = null;
 	}
 
@@ -627,9 +661,14 @@ export class WorkspaceState {
 		let src: string | null = null;
 		let thumbnailStorageName: string | null = null;
 		const thumbnails: ThumbnailWrite[] = [];
+		let displayDimensions: { width: number; height: number } | null = null;
 
 		if (selectedFrame.displayFile) {
-			src = URL.createObjectURL(selectedFrame.displayFile);
+			const thumbnail = await createDisplayThumbnail(selectedFrame.displayFile);
+			src = URL.createObjectURL(thumbnail.blob);
+			displayDimensions = { width: thumbnail.width, height: thumbnail.height };
+			thumbnailStorageName = `${photoId}.jpg`;
+			thumbnails.push({ storageName: thumbnailStorageName, blob: thumbnail.blob });
 		} else if (inspection) {
 			const blob = new Blob([inspection.thumbnailJpeg], { type: 'image/jpeg' });
 			src = URL.createObjectURL(blob);
@@ -638,7 +677,7 @@ export class WorkspaceState {
 		}
 		if (src) this.objectUrls.add(src);
 
-		const dimensions = inspection?.metadata ?? (src ? await this.readDimensions(src) : null);
+		const dimensions = inspection?.metadata ?? displayDimensions;
 		// TODO(WASM_TODOS.metadata): inspect EXIF for display-only assets with a dedicated parser.
 		const metadata = inspection ? storedMetadata(inspection.metadata) : null;
 		const frameAssets = importedFrames.flatMap(({ frame }) =>
@@ -674,34 +713,8 @@ export class WorkspaceState {
 	}
 
 	private async restorePhoto(photo: StoredPhoto): Promise<Photo> {
-		const store = this.libraryService;
-		if (!store) throw new Error('Local library storage is unavailable');
-		let src: string | null = null;
-		let metadata = photo.metadata ? { ...photo.metadata } : null;
-		let width = photo.width;
-		let height = photo.height;
+		const metadata = photo.metadata ? { ...photo.metadata } : null;
 		const frame = primaryStoredFrame(photo);
-		const display = frame.display;
-
-		if (display) {
-			const file = await store.readOriginal(display.storageName);
-			if (!file) throw new Error(`Original ${display.name} is unavailable`);
-			src = URL.createObjectURL(file);
-		} else if (photo.thumbnailStorageName) {
-			const file = await store.readThumbnail(photo.thumbnailStorageName);
-			src = URL.createObjectURL(file);
-		} else if (frame.raw && this.workerClient) {
-			// TODO(WASM_TODOS.libraryStorage): persist thumbnails regenerated from migrated manifests.
-			const file = await store.readOriginal(frame.raw.storageName);
-			if (!file) throw new Error(`Original ${frame.raw.name} is unavailable`);
-			const inspection = await this.workerClient.inspectRaw(await file.arrayBuffer());
-			const blob = new Blob([inspection.thumbnailJpeg], { type: 'image/jpeg' });
-			src = URL.createObjectURL(blob);
-			metadata ??= storedMetadata(inspection.metadata);
-			width ??= inspection.metadata.width;
-			height ??= inspection.metadata.height;
-		}
-		if (src) this.objectUrls.add(src);
 
 		const selectedAsset = frame.display ?? frame.raw;
 		if (!selectedAsset) throw new Error(`Photo ${photo.name} has no source`);
@@ -710,7 +723,7 @@ export class WorkspaceState {
 			id: photo.id,
 			name: photo.name,
 			extension: groupLabel(photo.kind, frame, photo.frames.length),
-			src,
+			src: null,
 			kind: photo.kind,
 			frames: cloneFrames(photo.frames),
 			bracketDetection: photo.bracketDetection,
@@ -720,8 +733,8 @@ export class WorkspaceState {
 				.flatMap((candidate) => [candidate.raw, candidate.display])
 				.filter((asset): asset is StoredAsset => asset !== null)
 				.reduce((total, asset) => total + asset.source.size, 0),
-			width,
-			height,
+			width: photo.width,
+			height: photo.height,
 			captured: captureLabel(metadata?.capturedAt, selectedAsset.source.lastModified),
 			importedAt: photo.importedAt,
 			rating: photo.rating,
@@ -730,6 +743,24 @@ export class WorkspaceState {
 			colorLabel: photo.colorLabel,
 			stackId: photo.stackId
 		};
+	}
+
+	private async restoreThumbnail(photo: Photo) {
+		const store = this.libraryService;
+		if (!store) return;
+		await this.persistence;
+		let file: Blob;
+		if (photo.thumbnailStorageName) {
+			file = await store.readThumbnail(photo.thumbnailStorageName);
+		} else {
+			const display = primaryStoredFrame(photo).display;
+			if (!display) return;
+			file = await store.readOriginal(display.storageName);
+		}
+		if (photo.src || !this.photos.some((candidate) => candidate.id === photo.id)) return;
+		const src = URL.createObjectURL(file);
+		this.objectUrls.add(src);
+		photo.src = src;
 	}
 
 	private importFrame(
@@ -896,15 +927,6 @@ export class WorkspaceState {
 		);
 		return this.persistence;
 	}
-
-	private readDimensions(src: string): Promise<{ width: number; height: number } | null> {
-		return new Promise((resolve) => {
-			const image = new Image();
-			image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-			image.onerror = () => resolve(null);
-			image.src = src;
-		});
-	}
 }
 
 function groupedFrames(group: PhotoGroup) {
@@ -997,6 +1019,30 @@ function cloneFrames(frames: StoredFrame[]) {
 
 function cloneAsset(asset: StoredAsset) {
 	return { ...asset, source: { ...asset.source } };
+}
+
+async function createDisplayThumbnail(file: File) {
+	const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+	try {
+		const longestSide = Math.max(bitmap.width, bitmap.height);
+		const scale = Math.min(1, 640 / longestSide);
+		const canvas = document.createElement('canvas');
+		canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+		canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+		const context = canvas.getContext('2d');
+		if (!context) throw new Error('Unable to create thumbnail canvas');
+		context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+		const blob = await new Promise<Blob>((resolve, reject) =>
+			canvas.toBlob(
+				(value) => (value ? resolve(value) : reject(new Error('Unable to encode thumbnail'))),
+				'image/jpeg',
+				0.84
+			)
+		);
+		return { blob, width: bitmap.width, height: bitmap.height };
+	} finally {
+		bitmap.close();
+	}
 }
 
 function previewDimension() {

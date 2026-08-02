@@ -799,7 +799,7 @@
 							class="motion-viewport-photo absolute top-0 left-0 overflow-hidden bg-black shadow-2xl will-change-transform"
 							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 						>
-							<PhotoVisual photo={active} contain />
+							<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
 							<PhotoTileLayer
 								photoId={active.id}
 								enabled={workspace.documentStatus.kind === 'ready' &&
@@ -852,12 +852,12 @@
 									<div
 										class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
 									>
-										<PhotoVisual photo={active} contain />
+										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
 									</div>
 									<div
 										class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
 									>
-										<PhotoVisual photo={active} contain />
+										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
 									</div>
 									<div class="develop-dither pointer-events-none absolute inset-0"></div>
 									<div class="develop-glimmer pointer-events-none absolute"></div>
@@ -1353,7 +1353,7 @@
 						<div class="border-subtle flex h-11 items-center gap-2 rounded border px-2">
 							<Eye size={12} class="text-muted shrink-0" />
 							<div class="bg-canvas size-7 shrink-0 overflow-hidden rounded-sm">
-								{#if active}<PhotoVisual photo={active} />{/if}
+								{#if active}<PhotoVisual photo={active} onRequest={workspace.loadThumbnail} />{/if}
 							</div>
 							<span class="min-w-0 flex-1 truncate font-mono text-[10px]">
 								{active?.name ?? 'photograph'}
@@ -1407,7 +1407,7 @@
 					style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
 					onclick={() => workspace.selectPhoto(photo.id)}
 				>
-					<PhotoVisual {photo} />
+					<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
 					<span
 						class="absolute top-1 left-1 rounded-sm bg-black/65 px-1 font-mono text-[10px] text-white"
 						>{index + 1}</span

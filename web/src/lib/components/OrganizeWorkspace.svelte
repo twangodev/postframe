@@ -349,7 +349,7 @@
 									? 'bg-surface relative aspect-[4/3] overflow-hidden rounded-sm'
 									: 'bg-surface relative h-11 overflow-hidden rounded-sm'}
 							>
-								<PhotoVisual {photo} />
+								<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
 								{#if stack}
 									<button
 										type="button"
@@ -434,7 +434,7 @@
 		{#if active}
 			{#key active.id}
 				<div class="motion-photo border-subtle bg-canvas aspect-[4/3] overflow-hidden border-b">
-					<PhotoVisual photo={active} />
+					<PhotoVisual photo={active} onRequest={workspace.loadThumbnail} />
 				</div>
 			{/key}
 			<div class="border-subtle border-b p-3">
