@@ -114,7 +114,7 @@ select:focus-visible {
 }
 
 .motion-panel-up {
-	animation: enter-up 360ms var(--ease-out) both;
+	animation: enter-up 360ms var(--ease-out) backwards;
 }
 
 .motion-card {

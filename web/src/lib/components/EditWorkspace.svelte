@@ -777,7 +777,7 @@
 				bind:this={viewportElement}
 				role="application"
 				aria-label="Photo viewport"
-				class="relative min-h-0 flex-1 touch-none overflow-hidden {panning
+				class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {panning
 					? 'cursor-grabbing'
 					: activeTool === 'hand' || spaceHeld
 						? 'cursor-grab'

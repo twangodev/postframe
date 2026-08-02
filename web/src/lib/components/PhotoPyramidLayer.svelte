@@ -44,6 +44,8 @@
 	let opened = $state(false);
 	let debug = $state(false);
 	let diagnostics = $state<Diagnostics>(emptyDiagnostics());
+	let resizedViewport: Size | null = null;
+	let imageSmoothingEnabled: boolean | null = null;
 	const tilePhases = new Map<string, PyramidTilePhase>();
 
 	onMount(() => {
@@ -74,6 +76,8 @@
 				debugMode: debug
 			});
 			viewer.addHandler('open', () => {
+				resizedViewport = null;
+				imageSmoothingEnabled = null;
 				opened = true;
 			});
 			viewer.addHandler('fully-loaded-change', (event) => {
@@ -114,9 +118,22 @@
 
 	$effect(() => {
 		if (!viewer || !openSeadragon || !opened) return;
+		const nextViewport = { width: viewport.width, height: viewport.height };
+		if (
+			resizedViewport?.width === nextViewport.width &&
+			resizedViewport.height === nextViewport.height
+		) {
+			return;
+		}
+
+		viewer.viewport.resize(new openSeadragon.Point(nextViewport.width, nextViewport.height), true);
+		resizedViewport = nextViewport;
+	});
+
+	$effect(() => {
+		if (!viewer || !openSeadragon || !opened) return;
 		const offset = surfaceTransform(viewport, image, transform);
 		const sourceWidth = Math.max(1, image.width);
-		viewer.viewport.resize(new openSeadragon.Point(viewport.width, viewport.height), true);
 		viewer.viewport.fitBounds(
 			new openSeadragon.Rect(
 				-offset.x / transform.scale / sourceWidth,
@@ -126,8 +143,12 @@
 			),
 			true
 		);
-		viewer.drawer.setImageSmoothingEnabled(transform.scale < PIXEL_GRID_START_SCALE);
-		viewer.forceRedraw();
+
+		const nextImageSmoothingEnabled = transform.scale < PIXEL_GRID_START_SCALE;
+		if (imageSmoothingEnabled !== nextImageSmoothingEnabled) {
+			viewer.drawer.setImageSmoothingEnabled(nextImageSmoothingEnabled);
+			imageSmoothingEnabled = nextImageSmoothingEnabled;
+		}
 	});
 
 	function handleTileEvent(event: PyramidTileEvent) {
