@@ -10,6 +10,7 @@ import {
 	panBy,
 	pixelGridOpacity,
 	screenToImage,
+	visibleImageRect,
 	wheelNavigation,
 	zoomAt
 } from '../src/lib/photo-viewport.ts';
@@ -34,6 +35,21 @@ test('keeps the source pixel beneath the cursor fixed while zooming', () => {
 	const screenAfter = imageToScreen(sourceAfter, viewport, image, zoomed);
 	assert.ok(Math.abs(screenAfter.x - anchor.x) < 1e-9);
 	assert.ok(Math.abs(screenAfter.y - anchor.y) < 1e-9);
+});
+
+test('clips the visible source rectangle at the document edges', () => {
+	assert.deepEqual(visibleImageRect(viewport, image, fittedTransform(viewport, image)), {
+		x: 0,
+		y: 0,
+		width: 6000,
+		height: 4000
+	});
+	assert.deepEqual(visibleImageRect(viewport, image, { scale: 1, pan: { x: 2448, y: 0 } }), {
+		x: 0,
+		y: 1600,
+		width: 1152,
+		height: 800
+	});
 });
 
 test('clamps panning while retaining a small overscroll allowance', () => {

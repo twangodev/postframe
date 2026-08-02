@@ -26,7 +26,7 @@
 		UserRound
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
-	import PhotoTileLayer from './PhotoTileLayer.svelte';
+	import PhotoPyramidLayer from './PhotoPyramidLayer.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
@@ -47,13 +47,13 @@
 		panBy,
 		pixelGridOpacity,
 		surfaceTransform,
+		visibleImageRect,
 		wheelNavigation,
 		zoomAt,
 		type Point,
 		type Size,
 		type ViewportTransform
 	} from '$lib/photo-viewport';
-	import { visibleImageRect } from '$lib/photo-tiles';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -799,20 +799,42 @@
 					{#key `${active.id}:${active.src}`}
 						<div
 							class:viewport-pixelated={pixelGridStrength > 0}
-							class="motion-viewport-photo absolute top-0 left-0 overflow-hidden bg-black shadow-2xl will-change-transform"
+							class="motion-viewport-photo absolute top-0 left-0 z-0 overflow-hidden bg-black shadow-2xl will-change-transform"
 							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 						>
 							<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-							<PhotoTileLayer
-								photoId={active.id}
-								enabled={workspace.documentStatus.kind === 'ready' &&
-									workspace.documentStatus.photoId === active.id &&
-									active.kind !== 'display'}
-								viewport={viewportSize}
-								image={imageSize}
-								transform={viewportTransform}
-								renderTile={workspace.renderTile}
-							/>
+							{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
+								<div class="absolute inset-0 z-20 overflow-hidden text-white">
+									<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
+									<div
+										class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
+									>
+										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
+									</div>
+									<div
+										class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
+									>
+										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
+									</div>
+									<div class="develop-dither pointer-events-none absolute inset-0"></div>
+									<div class="develop-glimmer pointer-events-none absolute"></div>
+								</div>
+							{/if}
+						</div>
+						<PhotoPyramidLayer
+							photoId={active.id}
+							enabled={workspace.documentStatus.kind === 'ready' &&
+								workspace.documentStatus.photoId === active.id &&
+								active.kind !== 'display'}
+							viewport={viewportSize}
+							image={imageSize}
+							transform={viewportTransform}
+							renderTile={workspace.renderTile}
+						/>
+						<div
+							class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
+							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
+						>
 							{#if pixelGridStrength > 0}
 								<div
 									data-pixel-grid
@@ -855,23 +877,6 @@
 													? 'bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(22,123,255,0.85)_72%)]'
 													: 'bg-[radial-gradient(circle_at_58%_46%,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.55)_12%,transparent_28%)]'}"
 								></div>
-							{/if}
-							{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
-								<div class="absolute inset-0 z-20 overflow-hidden text-white">
-									<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
-									<div
-										class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
-									>
-										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-									</div>
-									<div
-										class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
-									>
-										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-									</div>
-									<div class="develop-dither pointer-events-none absolute inset-0"></div>
-									<div class="develop-glimmer pointer-events-none absolute"></div>
-								</div>
 							{/if}
 						</div>
 					{/key}

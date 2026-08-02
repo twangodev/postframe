@@ -13,6 +13,11 @@ export interface ViewportTransform {
 	pan: Point;
 }
 
+export interface ImageRect extends Size {
+	x: number;
+	y: number;
+}
+
 export interface WheelModifiers {
 	altKey: boolean;
 	ctrlKey: boolean;
@@ -123,6 +128,20 @@ export function screenToImage(
 		x: (point.x - viewport.width / 2 - transform.pan.x) / transform.scale + image.width / 2,
 		y: (point.y - viewport.height / 2 - transform.pan.y) / transform.scale + image.height / 2
 	};
+}
+
+export function visibleImageRect(
+	viewport: Size,
+	image: Size,
+	transform: ViewportTransform
+): ImageRect {
+	const start = screenToImage({ x: 0, y: 0 }, viewport, image, transform);
+	const end = screenToImage({ x: viewport.width, y: viewport.height }, viewport, image, transform);
+	const x = clamp(start.x, 0, image.width);
+	const y = clamp(start.y, 0, image.height);
+	const right = clamp(end.x, 0, image.width);
+	const bottom = clamp(end.y, 0, image.height);
+	return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
 }
 
 export function imageToScreen(
