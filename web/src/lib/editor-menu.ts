@@ -7,7 +7,9 @@ export type EditorMenuAction =
 	| 'save-library'
 	| 'export'
 	| 'close-library'
-	| 'open-github';
+	| 'open-github'
+	| 'undo'
+	| 'redo';
 
 interface MenuAction {
 	kind: 'action';
@@ -66,8 +68,8 @@ export const EDITOR_MENUS: EditorMenu[] = [
 		id: 'edit',
 		label: 'edit',
 		items: [
-			{ kind: 'todo', label: 'undo', todo: 'layersAndHistory', shortcut: '⌘Z' },
-			{ kind: 'todo', label: 'redo', todo: 'layersAndHistory', shortcut: '⇧⌘Z' },
+			{ kind: 'action', label: 'undo', action: 'undo', shortcut: '⌘Z' },
+			{ kind: 'action', label: 'redo', action: 'redo', shortcut: '⇧⌘Z' },
 			separator(),
 			{ kind: 'todo', label: 'cut', todo: 'layersAndHistory', shortcut: '⌘X' },
 			{ kind: 'todo', label: 'copy', todo: 'layersAndHistory', shortcut: '⌘C' },

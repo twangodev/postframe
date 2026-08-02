@@ -5,9 +5,11 @@
 
 	interface Props {
 		onAction: (action: EditorMenuAction) => void;
+		canUndo: boolean;
+		canRedo: boolean;
 	}
 
-	let { onAction }: Props = $props();
+	let { onAction, canUndo, canRedo }: Props = $props();
 
 	const itemClass =
 		'data-[highlighted]:bg-elevated data-[highlighted]:text-text data-[disabled]:text-muted/45 flex h-7 min-w-52 items-center gap-2 rounded-sm px-2 text-[11px] outline-none data-[disabled]:cursor-default';
@@ -16,6 +18,14 @@
 
 	function select(entry: EditorMenuEntry) {
 		if (entry.kind === 'action') onAction(entry.action);
+	}
+
+	function disabled(entry: EditorMenuEntry) {
+		if (entry.kind === 'todo') return true;
+		if (entry.kind !== 'action') return false;
+		if (entry.action === 'undo') return !canUndo;
+		if (entry.action === 'redo') return !canRedo;
+		return false;
 	}
 </script>
 
@@ -50,7 +60,7 @@
 													<Menubar.Separator class="bg-subtle my-1 h-px" />
 												{:else}
 													<Menubar.Item
-														disabled={child.kind === 'todo'}
+														disabled={disabled(child)}
 														data-todo={child.kind === 'todo' ? child.todo : undefined}
 														class={itemClass}
 														onSelect={() => select(child)}
@@ -72,7 +82,7 @@
 								</Menubar.Sub>
 							{:else}
 								<Menubar.Item
-									disabled={entry.kind === 'todo'}
+									disabled={disabled(entry)}
 									data-todo={entry.kind === 'todo' ? entry.todo : undefined}
 									class={itemClass}
 									onSelect={() => select(entry)}

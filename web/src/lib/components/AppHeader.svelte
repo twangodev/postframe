@@ -50,6 +50,12 @@
 				break;
 			case 'open-github':
 				window.open('https://github.com/twangodev/postframe', '_blank', 'noopener,noreferrer');
+				break;
+			case 'undo':
+				workspace.undo();
+				break;
+			case 'redo':
+				workspace.redo();
 		}
 	}
 
@@ -65,13 +71,33 @@
 		};
 	}
 
+	function editShortcut(action: 'undo' | 'redo') {
+		return (event: KeyboardEvent) => {
+			if (workspace.mode !== 'edit' || editableTarget(event.target)) return;
+			event.preventDefault();
+			runMenuAction(action);
+		};
+	}
+
+	function editableTarget(target: EventTarget | null) {
+		return (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		);
+	}
+
 	onMount(() =>
 		tinykeys(window, {
 			'$mod+n': shortcut('new-collection'),
 			'$mod+o': shortcut('import-photos'),
 			'$mod+s': shortcut('save-library'),
 			'$mod+Shift+e': shortcut('export'),
-			'$mod+w': shortcut('close-library')
+			'$mod+w': shortcut('close-library'),
+			'$mod+z': editShortcut('undo'),
+			'$mod+Shift+z': editShortcut('redo'),
+			'$mod+y': editShortcut('redo')
 		})
 	);
 </script>
@@ -197,7 +223,11 @@
 	</div>
 
 	{#if workspace.mode === 'edit'}
-		<EditorMenuBar onAction={runMenuAction} />
+		<EditorMenuBar
+			onAction={runMenuAction}
+			canUndo={workspace.canUndo}
+			canRedo={workspace.canRedo}
+		/>
 	{/if}
 </header>
 

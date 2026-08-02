@@ -568,7 +568,14 @@
 
 <div class="bg-canvas flex min-h-0 flex-1 flex-col">
 	<div class="flex min-h-0 flex-1">
-		<ToolRail {activeTool} onSelect={chooseTool} />
+		<ToolRail
+			{activeTool}
+			onSelect={chooseTool}
+			canUndo={workspace.canUndo}
+			canRedo={workspace.canRedo}
+			onUndo={workspace.undo}
+			onRedo={workspace.redo}
+		/>
 
 		<section class="motion-panel-up flex min-w-0 flex-1 flex-col">
 			<div class="border-subtle bg-bg flex h-9 shrink-0 items-center justify-between border-b px-3">

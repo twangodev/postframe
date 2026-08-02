@@ -32,6 +32,7 @@ import {
 	type BrowserStorageStatus
 } from './browser-storage';
 import { defaultDevelopSettings, type DevelopSettings } from './develop-settings';
+import { DevelopHistory } from './develop-history';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -150,6 +151,8 @@ export class WorkspaceState {
 	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
 	private exposureRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	private exposureGestureStart: DevelopSettings | null = null;
+	private readonly developHistory = new DevelopHistory();
 	private removeProgressListener: (() => void) | null = null;
 
 	mode = $state<WorkspaceMode>('welcome');
@@ -181,6 +184,8 @@ export class WorkspaceState {
 	renderSettings = $state({ exposure: 0, revision: 0 });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
 	history = $state<string[]>(['imported']);
+	canUndo = $state(false);
+	canRedo = $state(false);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
@@ -377,20 +382,39 @@ export class WorkspaceState {
 	};
 
 	previewExposure = (exposure: number) => {
-		if (!this.canAdjustExposure) return;
+		if (!this.canAdjustExposure || !this.selectedPhoto) return;
+		this.exposureGestureStart ??= { ...this.selectedPhoto.develop };
 		this.adjustments.exposure = exposure;
 		this.scheduleExposureRender(exposure);
 	};
 
 	commitExposure = (exposure: number) => {
 		if (!this.canAdjustExposure || !this.selectedPhoto) return;
-		this.adjustments.exposure = exposure;
-		this.applyExposureRender(exposure);
-		if (this.selectedPhoto.develop.exposure === exposure) return;
-		this.selectedPhoto.develop = { ...this.selectedPhoto.develop, exposure };
-		const photoId = this.selectedPhoto.id;
-		const settings = { ...this.selectedPhoto.develop };
-		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
+		const before = this.exposureGestureStart ?? { ...this.selectedPhoto.develop };
+		const after = { ...this.selectedPhoto.develop, exposure };
+		this.exposureGestureStart = null;
+		if (!this.developHistory.commit({ label: exposureLabel(exposure), before, after })) {
+			this.applyExposureRender(exposure);
+			return;
+		}
+		this.applyDevelopSettings(after);
+		this.syncHistory();
+	};
+
+	undo = () => {
+		const settings = this.developHistory.undo();
+		if (!settings) return;
+		this.exposureGestureStart = null;
+		this.applyDevelopSettings(settings);
+		this.syncHistory();
+	};
+
+	redo = () => {
+		const settings = this.developHistory.redo();
+		if (!settings) return;
+		this.exposureGestureStart = null;
+		this.applyDevelopSettings(settings);
+		this.syncHistory();
 	};
 
 	renderTile = async (photoId: string, tile: RenderTileRequest) => {
@@ -510,7 +534,6 @@ export class WorkspaceState {
 		const mask = { id: id('mask'), name: labels[kind], kind, visible: true };
 		this.masks.push(mask);
 		this.selectedMaskId = mask.id;
-		this.history.push(`Created ${labels[kind].toLowerCase()} mask`);
 	}
 
 	toggleMask(maskId: string) {
@@ -543,6 +566,8 @@ export class WorkspaceState {
 
 	private resetEditState(develop = defaultDevelopSettings()) {
 		this.clearExposureRender();
+		this.exposureGestureStart = null;
+		this.developHistory.reset();
 		this.masks = [];
 		this.selectedMaskId = null;
 		this.adjustments = { ...defaultAdjustments, exposure: develop.exposure };
@@ -550,7 +575,7 @@ export class WorkspaceState {
 			exposure: develop.exposure,
 			revision: this.renderSettings.revision + 1
 		};
-		this.history = ['imported'];
+		this.syncHistory();
 	}
 
 	private async openDocument(photoId: string) {
@@ -670,6 +695,21 @@ export class WorkspaceState {
 		this.clearExposureRender();
 		if (this.renderSettings.exposure === exposure) return;
 		this.renderSettings = { exposure, revision: this.renderSettings.revision + 1 };
+	}
+
+	private applyDevelopSettings(settings: DevelopSettings) {
+		if (!this.selectedPhoto) return;
+		this.adjustments.exposure = settings.exposure;
+		this.applyExposureRender(settings.exposure);
+		this.selectedPhoto.develop = { ...settings };
+		const photoId = this.selectedPhoto.id;
+		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
+	}
+
+	private syncHistory() {
+		this.history = ['imported', ...this.developHistory.labels];
+		this.canUndo = this.developHistory.canUndo;
+		this.canRedo = this.developHistory.canRedo;
 	}
 
 	private clearExposureRender() {
@@ -1229,4 +1269,8 @@ function developProgress(progress: DevelopProgress) {
 export function formatBytes(bytes: number) {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function exposureLabel(exposure: number) {
+	return `exposure ${exposure > 0 ? '+' : ''}${exposure.toFixed(2)} EV`;
 }

@@ -65,9 +65,13 @@
 	interface Props {
 		activeTool: string;
 		onSelect: (id: string, label: string) => void;
+		canUndo: boolean;
+		canRedo: boolean;
+		onUndo: () => void;
+		onRedo: () => void;
 	}
 
-	let { activeTool, onSelect }: Props = $props();
+	let { activeTool, onSelect, canUndo, canRedo, onUndo, onRedo }: Props = $props();
 	let openGroup = $state<string | null>(null);
 
 	const groups: ToolGroup[] = [
@@ -276,18 +280,21 @@
 	{/each}
 
 	<div class="bg-subtle my-1 h-px w-5"></div>
-	<!-- TODO(WASM_TODOS.layersAndHistory): wire undo and redo to Wasm document history. -->
 	<button
 		type="button"
 		aria-label="Undo"
-		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded"
+		disabled={!canUndo}
+		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
+		onclick={onUndo}
 	>
 		<Undo2 size={14} strokeWidth={1.4} />
 	</button>
 	<button
 		type="button"
 		aria-label="Redo"
-		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded"
+		disabled={!canRedo}
+		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
+		onclick={onRedo}
 	>
 		<Redo2 size={14} strokeWidth={1.4} />
 	</button>
