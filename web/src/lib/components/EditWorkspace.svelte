@@ -502,6 +502,17 @@
 								{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
 									<div class="absolute inset-0 z-20 overflow-hidden text-white">
 										{#if workspace.documentStatus.phase !== 'reading'}
+											<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
+											<div
+												class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
+											>
+												<PhotoVisual photo={active} contain />
+											</div>
+											<div
+												class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
+											>
+												<PhotoVisual photo={active} contain />
+											</div>
 											<div class="develop-dither pointer-events-none absolute inset-0"></div>
 											<div class="develop-glimmer pointer-events-none absolute"></div>
 										{/if}

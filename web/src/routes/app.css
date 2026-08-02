@@ -175,6 +175,26 @@ select:focus-visible {
 	animation: menu-in 120ms var(--ease-out) both;
 }
 
+.develop-soft-focus {
+	background: rgb(0 0 0 / 1%);
+	backdrop-filter: blur(1.35px) saturate(0.96);
+}
+
+.develop-pixel-shift {
+	opacity: 0.2;
+	filter: blur(0.45px) contrast(1.04);
+}
+
+.develop-pixel-shift-a {
+	clip-path: inset(17% 0 71% 0);
+	animation: develop-pixel-shift-a 900ms steps(3) infinite;
+}
+
+.develop-pixel-shift-b {
+	clip-path: inset(58% 0 31% 0);
+	animation: develop-pixel-shift-b 1.1s steps(4) infinite;
+}
+
 .develop-dither {
 	background-image:
 		radial-gradient(rgb(255 255 255 / 22%) 0.6px, transparent 0.7px),
@@ -184,7 +204,7 @@ select:focus-visible {
 		1.5px 1.5px;
 	background-size: 3px 3px;
 	mix-blend-mode: soft-light;
-	opacity: 0.3;
+	opacity: 0.2;
 	animation: develop-dither 420ms steps(2) infinite;
 }
 
@@ -353,6 +373,32 @@ select:focus-visible {
 		background-position:
 			1.5px 0,
 			0 1.5px;
+	}
+}
+
+@keyframes develop-pixel-shift-a {
+	0%,
+	100% {
+		transform: translateX(-1px);
+	}
+	35% {
+		transform: translateX(3px);
+	}
+	70% {
+		transform: translateX(-2px);
+	}
+}
+
+@keyframes develop-pixel-shift-b {
+	0%,
+	100% {
+		transform: translateX(2px);
+	}
+	45% {
+		transform: translateX(-3px);
+	}
+	75% {
+		transform: translateX(1px);
 	}
 }
 
