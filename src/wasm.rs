@@ -1,4 +1,3 @@
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use image::DynamicImage;
@@ -10,11 +9,12 @@ use rawler::rawsource::RawSource;
 use wasm_bindgen::prelude::*;
 
 use crate::bracket::{self, Frame, FrameData};
-use crate::preview::PreparedRegion;
+use crate::preview::{MipPyramid, PreparedRegion};
 use crate::{ImageScope, LightSettings, LightTransform, Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
-const TILE_CACHE_CAPACITY: usize = 16;
+const MAX_PYRAMID_BIN: usize = 64;
+const TILE_CACHE_BUDGET: usize = 96 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TileRegion {
@@ -23,6 +23,49 @@ struct TileRegion {
     width: usize,
     height: usize,
     bin: usize,
+}
+
+struct TileCache {
+    entries: LruCache<TileRegion, PreparedRegion>,
+    bytes: usize,
+    budget: usize,
+}
+
+impl TileCache {
+    fn new(budget: usize) -> Self {
+        Self {
+            entries: LruCache::unbounded(),
+            bytes: 0,
+            budget,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.bytes = 0;
+    }
+
+    fn insert(&mut self, region: TileRegion, prepared: PreparedRegion) {
+        let bytes = prepared.byte_len();
+        while self.bytes + bytes > self.budget {
+            let Some((_, evicted)) = self.entries.pop_lru() else {
+                break;
+            };
+            self.bytes -= evicted.byte_len();
+        }
+        if let Some(replaced) = self.entries.put(region, prepared) {
+            self.bytes -= replaced.byte_len();
+        }
+        self.bytes += bytes;
+    }
+
+    fn contains(&self, region: &TileRegion) -> bool {
+        self.entries.peek(region).is_some()
+    }
+
+    fn get(&mut self, region: &TileRegion) -> Option<&PreparedRegion> {
+        self.entries.get(region)
+    }
 }
 
 fn err(error: crate::Error) -> JsError {
@@ -322,7 +365,8 @@ pub struct Session {
     frames: Vec<Frame>,
     merged: Option<Merged>,
     thumb: Option<(Merged, Preview)>,
-    tiles: LruCache<TileRegion, PreparedRegion>,
+    pyramid: Option<MipPyramid>,
+    tiles: TileCache,
     light: Option<LightTransform>,
 }
 
@@ -359,7 +403,8 @@ impl Session {
             frames: Vec::new(),
             merged: None,
             thumb: None,
-            tiles: LruCache::new(NonZeroUsize::new(TILE_CACHE_CAPACITY).unwrap()),
+            pyramid: None,
+            tiles: TileCache::new(TILE_CACHE_BUDGET),
             light: None,
         }
     }
@@ -379,10 +424,12 @@ impl Session {
 
     pub fn merge(&mut self, preview_dimension: usize) -> Result<(), JsError> {
         let merged = bracket::merge(std::mem::take(&mut self.frames)).map_err(err)?;
-        let thumb = merged.thumbnail(preview_dimension.max(256));
+        let pyramid = MipPyramid::new(&merged, MAX_PYRAMID_BIN);
+        let thumb = pyramid.thumbnail(&merged, preview_dimension.max(256));
         let lut = Preview::new(&thumb);
         self.tiles.clear();
         self.thumb = Some((thumb, lut));
+        self.pyramid = Some(pyramid);
         self.merged = Some(merged);
         Ok(())
     }
@@ -495,6 +542,9 @@ impl Session {
         if bin == 0 || !bin.is_power_of_two() {
             return Err(JsError::new("tile bin must be a non-zero power of two"));
         }
+        if x % bin != 0 || y % bin != 0 {
+            return Err(JsError::new("tile origin must align to its bin"));
+        }
         if x >= merged.radiance.width || y >= merged.radiance.height || width == 0 || height == 0 {
             return Err(JsError::new("tile is outside the image"));
         }
@@ -508,11 +558,13 @@ impl Session {
             height,
             bin,
         };
-        if self.tiles.peek(&region).is_none() {
-            self.tiles.put(
-                region,
-                PreparedRegion::new(merged, (x, y), (width, height), bin),
-            );
+        if !self.tiles.contains(&region) {
+            let prepared = self
+                .pyramid
+                .as_ref()
+                .ok_or(JsError::new("merge first"))?
+                .prepare(merged, (x, y), (width, height), bin);
+            self.tiles.insert(region, prepared);
         }
         let prepared = self
             .tiles

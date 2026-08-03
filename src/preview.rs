@@ -1,4 +1,5 @@
 use crate::color;
+use crate::decode::linear::Linear;
 use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
 
 const SAMPLES: usize = 4096;
@@ -17,6 +18,17 @@ pub(crate) struct PreparedRegion {
     width: usize,
     height: usize,
     rgb: Vec<[f32; 3]>,
+}
+
+pub(crate) struct MipPyramid {
+    source_width: usize,
+    source_height: usize,
+    levels: Vec<MipLevel>,
+}
+
+struct MipLevel {
+    bin: usize,
+    image: Linear,
 }
 
 impl PreparedRegion {
@@ -60,6 +72,160 @@ impl PreparedRegion {
             width: out_width,
             height: out_height,
             rgb,
+        }
+    }
+
+    fn from_level(level: &MipLevel, origin: (usize, usize), size: (usize, usize)) -> Self {
+        let x = origin.0 / level.bin;
+        let y = origin.1 / level.bin;
+        let width = size.0.div_ceil(level.bin).min(level.image.width - x);
+        let height = size.1.div_ceil(level.bin).min(level.image.height - y);
+        let mut rgb = Vec::with_capacity(width * height);
+        for row in y..y + height {
+            let start = row * level.image.width + x;
+            rgb.extend_from_slice(&level.image.rgb[start..start + width]);
+        }
+        Self { width, height, rgb }
+    }
+
+    pub(crate) fn byte_len(&self) -> usize {
+        self.rgb.len() * std::mem::size_of::<[f32; 3]>()
+    }
+}
+
+impl MipPyramid {
+    pub(crate) fn new(merged: &Merged, max_bin: usize) -> Self {
+        let source_width = merged.radiance.width;
+        let source_height = merged.radiance.height;
+        let mut levels = Vec::new();
+        let mut level = MipLevel::from_source(&merged.radiance, 2);
+        loop {
+            let bin = level.bin;
+            levels.push(level);
+            if bin >= max_bin
+                || (source_width.div_ceil(bin) == 1 && source_height.div_ceil(bin) == 1)
+            {
+                break;
+            }
+            level = MipLevel::downsample(levels.last().unwrap(), source_width, source_height);
+        }
+        Self {
+            source_width,
+            source_height,
+            levels,
+        }
+    }
+
+    pub(crate) fn prepare(
+        &self,
+        merged: &Merged,
+        origin: (usize, usize),
+        size: (usize, usize),
+        bin: usize,
+    ) -> PreparedRegion {
+        self.levels
+            .iter()
+            .find(|level| level.bin == bin)
+            .map(|level| PreparedRegion::from_level(level, origin, size))
+            .unwrap_or_else(|| PreparedRegion::new(merged, origin, size, bin))
+    }
+
+    pub(crate) fn thumbnail(&self, merged: &Merged, max_dimension: usize) -> Merged {
+        let Some(level) = self
+            .levels
+            .iter()
+            .find(|level| level.image.width.max(level.image.height) <= max_dimension)
+            .or_else(|| self.levels.last())
+        else {
+            return merged.thumbnail(max_dimension);
+        };
+        if self.source_width.max(self.source_height) <= max_dimension {
+            return merged.thumbnail(max_dimension);
+        }
+        Merged {
+            radiance: level.image.clone(),
+            transfer: merged.transfer.clone(),
+            space: merged.space,
+            report: merged.report.clone(),
+        }
+    }
+}
+
+impl MipLevel {
+    fn from_source(source: &Linear, bin: usize) -> Self {
+        let width = source.width.div_ceil(bin);
+        let height = source.height.div_ceil(bin);
+        let mut rgb = Vec::with_capacity(width * height);
+        let mut clipped = Vec::with_capacity(width * height);
+        for output_y in 0..height {
+            let start_y = output_y * bin;
+            let end_y = (start_y + bin).min(source.height);
+            for output_x in 0..width {
+                let start_x = output_x * bin;
+                let end_x = (start_x + bin).min(source.width);
+                let mut sum = [0.0; 3];
+                let mut any_clipped = false;
+                for source_y in start_y..end_y {
+                    for source_x in start_x..end_x {
+                        let index = source_y * source.width + source_x;
+                        for (total, value) in sum.iter_mut().zip(source.rgb[index]) {
+                            *total += value;
+                        }
+                        any_clipped |= source.clipped[index];
+                    }
+                }
+                let samples = ((end_x - start_x) * (end_y - start_y)) as f32;
+                rgb.push(sum.map(|value| value / samples));
+                clipped.push(any_clipped);
+            }
+        }
+        Self {
+            bin,
+            image: Linear {
+                width,
+                height,
+                rgb,
+                clipped,
+            },
+        }
+    }
+
+    fn downsample(previous: &Self, source_width: usize, source_height: usize) -> Self {
+        let bin = previous.bin * 2;
+        let width = source_width.div_ceil(bin);
+        let height = source_height.div_ceil(bin);
+        let mut rgb = Vec::with_capacity(width * height);
+        let mut clipped = Vec::with_capacity(width * height);
+        for output_y in 0..height {
+            for output_x in 0..width {
+                let mut sum = [0.0; 3];
+                let mut samples = 0usize;
+                let mut any_clipped = false;
+                for child_y in output_y * 2..(output_y * 2 + 2).min(previous.image.height) {
+                    for child_x in output_x * 2..(output_x * 2 + 2).min(previous.image.width) {
+                        let child_width = previous.bin.min(source_width - child_x * previous.bin);
+                        let child_height = previous.bin.min(source_height - child_y * previous.bin);
+                        let weight = child_width * child_height;
+                        let index = child_y * previous.image.width + child_x;
+                        for (total, value) in sum.iter_mut().zip(previous.image.rgb[index]) {
+                            *total += value * weight as f32;
+                        }
+                        samples += weight;
+                        any_clipped |= previous.image.clipped[index];
+                    }
+                }
+                rgb.push(sum.map(|value| value / samples as f32));
+                clipped.push(any_clipped);
+            }
+        }
+        Self {
+            bin,
+            image: Linear {
+                width,
+                height,
+                rgb,
+                clipped,
+            },
         }
     }
 }
@@ -260,5 +426,33 @@ mod tests {
             .render_region(&merged, (0, 0), (8, 8), 4, 0.0, true)
             .unwrap();
         assert_eq!((binned.width, binned.height, binned.rgb8.len()), (2, 2, 12));
+
+        let odd = Merged {
+            radiance: Linear {
+                width: 7,
+                height: 5,
+                clipped: (0..35).map(|index| index == 34).collect(),
+                rgb: (0..35)
+                    .map(|index| {
+                        let value = index as f32 / 35.0;
+                        [value, value * 2.0, value * 3.0]
+                    })
+                    .collect(),
+            },
+            transfer: merged.transfer.clone(),
+            space: merged.space,
+            report: merged.report.clone(),
+        };
+        let pyramid = MipPyramid::new(&odd, 8);
+        for bin in [2, 4, 8] {
+            let direct = PreparedRegion::new(&odd, (0, 0), (7, 5), bin);
+            let cached = pyramid.prepare(&odd, (0, 0), (7, 5), bin);
+            assert_eq!((cached.width, cached.height), (direct.width, direct.height));
+            for (actual, expected) in cached.rgb.iter().zip(direct.rgb) {
+                for (actual, expected) in actual.iter().zip(expected) {
+                    assert!((actual - expected).abs() < 1e-6);
+                }
+            }
+        }
     }
 }
