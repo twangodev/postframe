@@ -158,13 +158,13 @@
 		class="relative flex h-4 w-full touch-none items-center"
 	>
 		{#snippet children({ thumbItems })}
-			<span class="bg-muted/35 absolute inset-x-0 h-px"></span>
-			<Slider.Range class="bg-text/70 absolute h-px" />
+			<span class="bg-control-track absolute inset-x-0 h-px"></span>
+			<Slider.Range class="bg-control-active absolute h-px" />
 			{#each thumbItems as thumb (thumb.index)}
 				<Slider.Thumb
 					index={thumb.index}
 					aria-label={label}
-					class="border-text/70 bg-surface focus-visible:outline-accent block size-2.5 rounded-full border shadow-sm transition-transform hover:scale-125 focus-visible:outline-2"
+					class="border-control-active bg-surface focus-visible:outline-accent block size-2.5 rounded-full border transition-transform hover:scale-125 focus-visible:outline-2"
 				/>
 			{/each}
 		{/snippet}
@@ -182,6 +182,6 @@
 		onblur={commitDraft}
 		onkeydown={handleKeydown}
 		onwheel={handleWheel}
-		class="border-subtle/0 hover:border-subtle focus:border-muted focus:bg-surface text-muted h-5 w-full rounded border bg-transparent px-1 text-right font-mono text-[10px] tabular-nums transition-colors outline-none disabled:cursor-default"
+		class="hover:border-control-track focus:border-control-edge focus:bg-surface text-muted h-5 w-full rounded border border-transparent bg-transparent px-1 text-right font-mono text-[10px] tabular-nums transition-colors outline-none disabled:cursor-default"
 	/>
 </div>
