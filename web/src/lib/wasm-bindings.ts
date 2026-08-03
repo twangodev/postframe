@@ -35,7 +35,7 @@ export const WASM_BINDINGS = {
 	height: { rust: 'Session::height', worker: 'open-raw' },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: null },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'preview' },
-	render_tile_png: { rust: 'Session::render_tile_png', worker: 'tile' },
+	render_tile: { rust: 'Session::render_tile', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
 } as const satisfies Record<
@@ -88,7 +88,7 @@ export const WASM_TODOS = {
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
-		bindings: ['preview_frame', 'render_tile_png', 'preview_ultra'],
+		bindings: ['preview_frame', 'render_tile', 'preview_ultra'],
 		planned: ['GPU display transform']
 	},
 	colorManagement: {
@@ -103,7 +103,7 @@ export const WASM_TODOS = {
 			'display_free',
 			'apply_display_rgba',
 			'preview_frame',
-			'render_tile_png'
+			'render_tile'
 		],
 		planned: ['Session::set_mask_adjustments', 'color and presence controls']
 	},
@@ -153,7 +153,7 @@ export const WASM_TODOS = {
 			'add_frame',
 			'merge',
 			'preview_frame',
-			'render_tile_png',
+			'render_tile',
 			'preview_ultra',
 			'export_ultra'
 		],

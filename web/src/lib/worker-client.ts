@@ -103,7 +103,7 @@ export class PostframeWorkerClient {
 	async renderTile(tile: RenderTileRequest) {
 		const request = { ...tile, settings: { ...tile.settings } };
 		const response = await this.send((id) => ({ id, type: 'tile', ...request }), 'tile');
-		return response.png;
+		return response.bitmap;
 	}
 
 	preview(settings: LightSettings, tone: boolean) {

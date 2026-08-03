@@ -152,8 +152,9 @@ test('requests a lossless source tile at the selected bin', async () => {
 	const tile = client.renderTile(request);
 
 	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'tile', ...request }]);
-	workers[0]?.respond({ id: 1, type: 'tile', png: new ArrayBuffer(24) });
-	assert.deepEqual(await tile, new ArrayBuffer(24));
+	const bitmap = { width: 512, height: 512 } as ImageBitmap;
+	workers[0]?.respond({ id: 1, type: 'tile', bitmap });
+	assert.equal(await tile, bitmap);
 	client.destroy();
 });
 

@@ -1,8 +1,7 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use image::codecs::png::PngEncoder;
-use image::{DynamicImage, ExtendedColorType, ImageEncoder};
+use image::DynamicImage;
 use lru::LruCache;
 use rawler::decoders::{Orientation, RawDecodeParams, RawMetadata};
 use rawler::formats::tiff::Rational;
@@ -328,6 +327,31 @@ pub struct Session {
 }
 
 #[wasm_bindgen]
+pub struct RenderedTile {
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
+#[wasm_bindgen]
+impl RenderedTile {
+    #[wasm_bindgen(getter)]
+    pub fn rgba(&self) -> Vec<u8> {
+        self.rgba.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+#[wasm_bindgen]
 impl Session {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Session {
@@ -441,7 +465,7 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn render_tile_png(
+    pub fn render_tile(
         &mut self,
         x: u32,
         y: u32,
@@ -455,7 +479,7 @@ impl Session {
         whites: f32,
         blacks: f32,
         tone: bool,
-    ) -> Result<Vec<u8>, JsError> {
+    ) -> Result<RenderedTile, JsError> {
         self.prepare_light(light_settings(
             exposure, contrast, highlights, shadows, whites, blacks,
         ))?;
@@ -499,7 +523,15 @@ impl Session {
             .as_ref()
             .ok_or(JsError::new("missing light transform"))?;
         let rendered = lut.render_prepared_adjusted(merged, prepared, light, tone);
-        encode_png(&rendered.rgb8, rendered.width, rendered.height)
+        let mut rgba = Vec::with_capacity(rendered.width * rendered.height * 4);
+        for pixel in rendered.rgb8.chunks_exact(3) {
+            rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], u8::MAX]);
+        }
+        Ok(RenderedTile {
+            rgba,
+            width: rendered.width as u32,
+            height: rendered.height as u32,
+        })
     }
 
     /// Ultra HDR JPEG at the thumbnail size, for HDR-capable display.
@@ -539,14 +571,6 @@ fn encode_jpeg(rgb8: &[u8], width: usize, height: usize) -> Result<Vec<u8>, JsEr
             jpeg_encoder::ColorType::Rgb,
         )
         .map_err(|e| JsError::new(&e.to_string()))?;
-    Ok(bytes)
-}
-
-fn encode_png(rgb8: &[u8], width: usize, height: usize) -> Result<Vec<u8>, JsError> {
-    let mut bytes = Vec::new();
-    PngEncoder::new(&mut bytes)
-        .write_image(rgb8, width as u32, height as u32, ExtendedColorType::Rgb8)
-        .map_err(|error| JsError::new(&error.to_string()))?;
     Ok(bytes)
 }
 

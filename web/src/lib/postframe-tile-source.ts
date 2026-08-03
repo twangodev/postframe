@@ -34,7 +34,7 @@ interface TileSourceOptions {
 	photoId: string;
 	revision: number;
 	image: Size;
-	renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ArrayBuffer>;
+	renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ImageBitmap>;
 	settings: LightSettings;
 	tone: boolean;
 	onTileEvent?: (event: PyramidTileEvent) => void;
@@ -47,13 +47,12 @@ export function pyramidTileUrl(
 	column: number,
 	row: number
 ) {
-	return `postframe://${encodeURIComponent(photoId)}/${revision}/${level}/${column}/${row}.png`;
+	return `postframe://${encodeURIComponent(photoId)}/${revision}/${level}/${column}/${row}.bitmap`;
 }
 
 interface TileJobState {
 	cancelled: boolean;
-	image?: HTMLImageElement;
-	objectUrl?: string;
+	bitmap?: ImageBitmap;
 }
 
 export function pyramidLevels(image: Size): PyramidLevels {
@@ -139,11 +138,14 @@ export function createPostframeTileSource(
 				settings: options.settings,
 				tone: options.tone
 			})
-			.then((png) => decodeTile(png, state))
-			.then((image) => {
-				if (!image || state.cancelled) return;
+			.then((bitmap) => {
+				state.bitmap = bitmap;
+				if (state.cancelled) {
+					bitmap.close();
+					return;
+				}
 				options.onTileEvent?.({ key, phase: 'decoded' });
-				job.finish(image, null, 'image');
+				job.finish(bitmap, null, 'imageBitmap');
 			})
 			.catch((error: unknown) => {
 				if (state.cancelled) return;
@@ -151,32 +153,17 @@ export function createPostframeTileSource(
 				options.onTileEvent?.({ key, phase: 'failed', message });
 				job.fail(message, null);
 			})
-			.finally(() => releaseTileUrl(state));
+			.finally(() => {
+				state.bitmap = undefined;
+			});
 	};
 	source.downloadTileAbort = (job) => {
 		const state = job.userData.postframe as TileJobState | undefined;
 		if (!state) return;
 		state.cancelled = true;
-		if (state.image) state.image.src = '';
-		releaseTileUrl(state);
+		state.bitmap?.close();
+		state.bitmap = undefined;
 	};
 
 	return source;
-}
-
-async function decodeTile(png: ArrayBuffer, state: TileJobState) {
-	if (state.cancelled) return null;
-	const image = new Image();
-	const objectUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
-	state.image = image;
-	state.objectUrl = objectUrl;
-	image.src = objectUrl;
-	await image.decode();
-	return state.cancelled ? null : image;
-}
-
-function releaseTileUrl(state: TileJobState) {
-	if (!state.objectUrl) return;
-	URL.revokeObjectURL(state.objectUrl);
-	state.objectUrl = undefined;
 }

@@ -62,5 +62,5 @@ test('rejects levels outside the supported render pyramid', () => {
 });
 
 test('keys tile caches by photo and render revision', () => {
-	assert.equal(pyramidTileUrl('photo one', 7, 13, 2, 4), 'postframe://photo%20one/7/13/2/4.png');
+	assert.equal(pyramidTileUrl('photo one', 7, 13, 2, 4), 'postframe://photo%20one/7/13/2/4.bitmap');
 });

@@ -103,7 +103,7 @@ export type Response =
 			width: number;
 			height: number;
 	  }
-	| { id: number; type: 'tile'; png: ArrayBuffer }
+	| { id: number; type: 'tile'; bitmap: ImageBitmap }
 	| {
 			id: number;
 			type: 'preview';
@@ -160,8 +160,8 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				await openDisplayDocument(message);
 				break;
 			case 'tile': {
-				const png = await measureAsync('tile', () => renderTile(activeDocument(), message));
-				post({ id: message.id, type: 'tile', png }, [png]);
+				const bitmap = await measureAsync('tile', () => renderTile(activeDocument(), message));
+				post({ id: message.id, type: 'tile', bitmap }, [bitmap]);
 				break;
 			}
 			case 'preview': {
@@ -433,7 +433,7 @@ async function renderDisplayPreview(active: DisplayDocument, settings: LightSett
 
 async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 	if (active.kind === 'raw') {
-		return active.session.render_tile_png(
+		const tile = active.session.render_tile(
 			request.x,
 			request.y,
 			request.width,
@@ -441,7 +441,14 @@ async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 			request.bin,
 			...lightArguments(request.settings),
 			request.tone
-		).buffer as ArrayBuffer;
+		);
+		try {
+			const context = canvasContext(tile.width, tile.height, false);
+			context.putImageData(imageData(tile.rgba, tile.width, tile.height), 0, 0);
+			return context.canvas.transferToImageBitmap();
+		} finally {
+			tile.free();
+		}
 	}
 
 	const width = Math.ceil(request.width / request.bin);
@@ -465,7 +472,7 @@ async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 		new Uint8Array(pixels.data)
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
-	return (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
+	return context.canvas.transferToImageBitmap();
 }
 
 async function renderDisplayPixels(pixels: Uint8Array, width: number, height: number) {
@@ -497,9 +504,9 @@ function transferableScope(scope: ImageScopeData) {
 	};
 }
 
-function canvasContext(width: number, height: number) {
+function canvasContext(width: number, height: number, willReadFrequently = true) {
 	const canvas = new OffscreenCanvas(width, height);
-	const context = canvas.getContext('2d', { willReadFrequently: true });
+	const context = canvas.getContext('2d', { willReadFrequently });
 	if (!context) throw new Error('Unable to create an image canvas');
 	return context;
 }
