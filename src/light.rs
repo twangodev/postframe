@@ -2,7 +2,13 @@ use crate::{Error, Result};
 use std::sync::OnceLock;
 
 const CURVE_SAMPLES: usize = 4096;
-const ANCHOR_INPUTS: [f32; 7] = [0.0, 0.08, 0.25, 0.5, 0.75, 0.92, 1.0];
+pub const MIDDLE_GRAY: f32 = 0.18;
+pub const MAX_ZONE_COMPENSATION_STOPS: f32 = 1.5;
+pub const MAX_WHITE_POINT_SHIFT_STOPS: f32 = 0.5;
+pub const BLACK_POINT_STOPS_BELOW_MIDDLE_GRAY: f32 = 5.0;
+pub const MIN_CONTRAST_SLOPE: f32 = 0.5;
+pub const MAX_CONTRAST_SLOPE: f32 = 2.0;
+const SHADOW_ZONE_STOPS: f32 = BLACK_POINT_STOPS_BELOW_MIDDLE_GRAY;
 static SRGB_TO_LINEAR: OnceLock<[f32; 256]> = OnceLock::new();
 static LINEAR_TO_SRGB: OnceLock<[u8; CURVE_SAMPLES]> = OnceLock::new();
 
@@ -156,66 +162,118 @@ fn luminance_curve(settings: LightSettings) -> [f32; CURVE_SAMPLES] {
         return std::array::from_fn(|index| index as f32 / (CURVE_SAMPLES - 1) as f32);
     }
 
-    let contrast = settings.contrast / 100.0;
-    let highlights = settings.highlights / 100.0;
-    let shadows = settings.shadows / 100.0;
-    let whites = settings.whites / 100.0;
-    let blacks = settings.blacks / 100.0;
-    let mut outputs = [
-        blacks.max(0.0) * 0.05,
-        0.08 - contrast * 0.03 + shadows * 0.04 + blacks * 0.1,
-        0.25 - contrast * 0.07 + shadows * 0.16 + blacks * 0.025,
-        0.5,
-        0.75 + contrast * 0.07 + highlights * 0.16 + whites * 0.025,
-        0.92 + contrast * 0.03 + highlights * 0.04 + whites * 0.1,
-        1.0 + whites.min(0.0) * 0.05,
-    ];
-    outputs[0] = outputs[0].clamp(0.0, 1.0);
-    for index in 1..outputs.len() {
-        outputs[index] = outputs[index].clamp(outputs[index - 1], 1.0);
-    }
-
-    let tangents = monotone_tangents(&ANCHOR_INPUTS, &outputs);
     std::array::from_fn(|index| {
-        let input = index as f32 / (CURVE_SAMPLES - 1) as f32;
-        monotone_sample(input, &ANCHOR_INPUTS, &outputs, &tangents).clamp(0.0, 1.0)
+        let input = index as f64 / (CURVE_SAMPLES - 1) as f64;
+        let zoned = apply_zone_compensation(input, settings.shadows, settings.highlights);
+        let contrasted = apply_contrast(zoned, settings.contrast);
+        remap_endpoints(contrasted, settings.blacks, settings.whites) as f32
     })
 }
 
-fn monotone_tangents(inputs: &[f32; 7], outputs: &[f32; 7]) -> [f32; 7] {
-    let slopes: [f32; 6] = std::array::from_fn(|index| {
-        (outputs[index + 1] - outputs[index]) / (inputs[index + 1] - inputs[index])
-    });
-    let mut tangents = [0.0; 7];
-    tangents[0] = slopes[0];
-    tangents[6] = slopes[5];
-    for index in 1..6 {
-        if slopes[index - 1] == 0.0 || slopes[index] == 0.0 {
-            continue;
-        }
-        let before = inputs[index] - inputs[index - 1];
-        let after = inputs[index + 1] - inputs[index];
-        let left_weight = 2.0 * after + before;
-        let right_weight = after + 2.0 * before;
-        tangents[index] = (left_weight + right_weight)
-            / (left_weight / slopes[index - 1] + right_weight / slopes[index]);
+fn apply_zone_compensation(luminance: f64, shadows: f32, highlights: f32) -> f64 {
+    if luminance <= 0.0 {
+        return 0.0;
     }
-    tangents
+    let middle_gray = f64::from(MIDDLE_GRAY);
+    let relative_ev = (luminance / middle_gray).log2();
+    let shadow_weight = 1.0 - smoothstep(-f64::from(SHADOW_ZONE_STOPS), 0.0, relative_ev);
+    let highlight_weight = smoothstep(0.0, -middle_gray.log2(), relative_ev);
+    let compensation = f64::from(MAX_ZONE_COMPENSATION_STOPS)
+        * (f64::from(shadows) / 100.0 * shadow_weight
+            + f64::from(highlights) / 100.0 * highlight_weight);
+    (luminance * 2.0f64.powf(compensation)).clamp(0.0, 1.0)
 }
 
-fn monotone_sample(input: f32, inputs: &[f32; 7], outputs: &[f32; 7], tangents: &[f32; 7]) -> f32 {
-    let segment = inputs
-        .windows(2)
-        .position(|range| input <= range[1])
-        .unwrap_or(inputs.len() - 2);
-    let width = inputs[segment + 1] - inputs[segment];
-    let t = (input - inputs[segment]) / width;
+fn apply_contrast(luminance: f64, contrast: f32) -> f64 {
+    if luminance <= 0.0 || luminance >= 1.0 || contrast == 0.0 {
+        return luminance;
+    }
+    let slope = 2.0f64.powf(f64::from(contrast) / 100.0);
+    let pivot = logit(f64::from(MIDDLE_GRAY));
+    logistic(pivot + slope * (logit(luminance) - pivot))
+}
+
+fn remap_endpoints(luminance: f64, blacks: f32, whites: f32) -> f64 {
+    let middle_gray = f64::from(MIDDLE_GRAY);
+    let black_reference =
+        middle_gray * 2.0f64.powf(-f64::from(BLACK_POINT_STOPS_BELOW_MIDDLE_GRAY));
+    let black = f64::from(blacks) / 100.0;
+    let white = f64::from(whites) / 100.0;
+    let input_black = black.min(0.0).abs() * black_reference;
+    let output_black = black.max(0.0) * black_reference;
+    let white_point_shift = f64::from(MAX_WHITE_POINT_SHIFT_STOPS);
+    let input_white = 2.0f64.powf(-white.max(0.0) * white_point_shift);
+    let output_white = 2.0f64.powf(white.min(0.0) * white_point_shift);
+    let pivot = CurvePoint::new(middle_gray, middle_gray, 1.0);
+
+    if luminance <= input_black {
+        return output_black;
+    }
+    if luminance >= input_white {
+        return output_white;
+    }
+    if luminance <= middle_gray {
+        return hermite_segment(
+            luminance,
+            CurvePoint::new(
+                input_black,
+                output_black,
+                if blacks == 0.0 { 1.0 } else { 0.0 },
+            ),
+            pivot,
+        );
+    }
+    hermite_segment(
+        luminance,
+        pivot,
+        CurvePoint::new(
+            input_white,
+            output_white,
+            if whites == 0.0 { 1.0 } else { 0.0 },
+        ),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct CurvePoint {
+    input: f64,
+    output: f64,
+    slope: f64,
+}
+
+impl CurvePoint {
+    const fn new(input: f64, output: f64, slope: f64) -> Self {
+        Self {
+            input,
+            output,
+            slope,
+        }
+    }
+}
+
+fn hermite_segment(input: f64, start: CurvePoint, end: CurvePoint) -> f64 {
+    let width = end.input - start.input;
+    let t = (input - start.input) / width;
     let t2 = t * t;
     let t3 = t2 * t;
-    (2.0 * t3 - 3.0 * t2 + 1.0) * outputs[segment]
-        + (t3 - 2.0 * t2 + t) * width * tangents[segment]
-        + (-2.0 * t3 + 3.0 * t2) * outputs[segment + 1]
-        + (t3 - t2) * width * tangents[segment + 1]
+    ((2.0 * t3 - 3.0 * t2 + 1.0) * start.output
+        + (t3 - 2.0 * t2 + t) * width * start.slope
+        + (-2.0 * t3 + 3.0 * t2) * end.output
+        + (t3 - t2) * width * end.slope)
+        .clamp(0.0, 1.0)
+}
+
+fn smoothstep(start: f64, end: f64, value: f64) -> f64 {
+    let position = ((value - start) / (end - start)).clamp(0.0, 1.0);
+    position * position * (3.0 - 2.0 * position)
+}
+
+fn logit(value: f64) -> f64 {
+    (value / (1.0 - value)).ln()
+}
+
+fn logistic(value: f64) -> f64 {
+    1.0 / (1.0 + (-value).exp())
 }
 
 fn srgb_to_linear(channel: u8) -> f32 {
@@ -267,6 +325,13 @@ mod tests {
         transform.apply_display_rgb8(&[value; 3]).unwrap()[0]
     }
 
+    fn assert_approximately_eq(actual: f32, expected: f32, tolerance: f32) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "expected {expected}, got {actual}"
+        );
+    }
+
     #[test]
     fn neutral_transform_is_exact_for_rgb_and_rgba() {
         let transform = LightTransform::new(LightSettings::NEUTRAL).unwrap();
@@ -313,21 +378,97 @@ mod tests {
             delta(&highlights, 210),
             delta(&highlights, 80)
         );
-        assert!(delta(&blacks, 30) > delta(&blacks, 128));
+        assert!(delta(&blacks, 8) > delta(&blacks, 128));
         assert!(delta(&whites, 235) > delta(&whites, 128));
     }
 
     #[test]
-    fn every_extreme_curve_remains_monotonic() {
-        for name in ["contrast", "highlights", "shadows", "whites", "blacks"] {
-            for value in [-100.0, 100.0] {
-                let transform = LightTransform::new(settings(name, value)).unwrap();
-                assert!(
-                    transform
-                        .luminance
-                        .windows(2)
-                        .all(|samples| samples[0] <= samples[1])
-                );
+    fn contrast_uses_a_measurable_middle_gray_slope() {
+        for (value, expected_slope) in [(-100.0, MIN_CONTRAST_SLOPE), (100.0, MAX_CONTRAST_SLOPE)] {
+            let transform = LightTransform::new(settings("contrast", value)).unwrap();
+            let interval = 0.001;
+            let measured_slope = (transform.lookup(MIDDLE_GRAY + interval)
+                - transform.lookup(MIDDLE_GRAY - interval))
+                / (2.0 * interval);
+
+            assert_approximately_eq(transform.lookup(MIDDLE_GRAY), MIDDLE_GRAY, 0.000_01);
+            assert_approximately_eq(measured_slope, expected_slope, 0.01);
+        }
+    }
+
+    #[test]
+    fn zone_controls_apply_bounded_exposure_compensation() {
+        let shadow_reference = MIDDLE_GRAY * 2.0f32.powf(-SHADOW_ZONE_STOPS);
+        for value in [-100.0, 100.0] {
+            let transform = LightTransform::new(settings("shadows", value)).unwrap();
+            let expected =
+                shadow_reference * 2.0f32.powf(value.signum() * MAX_ZONE_COMPENSATION_STOPS);
+            assert_approximately_eq(transform.lookup(shadow_reference), expected, 0.000_02);
+        }
+
+        let transform = LightTransform::new(settings("highlights", -100.0)).unwrap();
+        assert_approximately_eq(
+            transform.lookup(1.0),
+            2.0f32.powf(-MAX_ZONE_COMPENSATION_STOPS),
+            0.000_01,
+        );
+    }
+
+    #[test]
+    fn endpoint_controls_move_documented_black_and_white_points() {
+        let black_reference = MIDDLE_GRAY * 2.0f32.powf(-BLACK_POINT_STOPS_BELOW_MIDDLE_GRAY);
+        let shifted_white = 2.0f32.powf(-MAX_WHITE_POINT_SHIFT_STOPS);
+
+        let crushed_blacks = LightTransform::new(settings("blacks", -100.0)).unwrap();
+        let lifted_blacks = LightTransform::new(settings("blacks", 100.0)).unwrap();
+        let expanded_whites = LightTransform::new(settings("whites", 100.0)).unwrap();
+        let lowered_whites = LightTransform::new(settings("whites", -100.0)).unwrap();
+
+        assert_approximately_eq(crushed_blacks.lookup(black_reference), 0.0, 0.000_01);
+        assert_approximately_eq(lifted_blacks.lookup(0.0), black_reference, 0.000_01);
+        assert_approximately_eq(expanded_whites.lookup(shifted_white), 1.0, 0.000_2);
+        assert_approximately_eq(lowered_whites.lookup(1.0), shifted_white, 0.000_01);
+
+        for transform in [
+            crushed_blacks,
+            lifted_blacks,
+            expanded_whites,
+            lowered_whites,
+        ] {
+            assert_approximately_eq(transform.lookup(MIDDLE_GRAY), MIDDLE_GRAY, 0.000_01);
+        }
+    }
+
+    #[test]
+    fn every_extreme_curve_combination_remains_monotonic() {
+        for contrast in [-100.0, 0.0, 100.0] {
+            for highlights in [-100.0, 0.0, 100.0] {
+                for shadows in [-100.0, 0.0, 100.0] {
+                    for whites in [-100.0, 0.0, 100.0] {
+                        for blacks in [-100.0, 0.0, 100.0] {
+                            let settings = LightSettings {
+                                contrast,
+                                highlights,
+                                shadows,
+                                whites,
+                                blacks,
+                                ..LightSettings::NEUTRAL
+                            };
+                            let transform = LightTransform::new(settings).unwrap();
+                            if let Some((index, samples)) = transform
+                                .luminance
+                                .windows(2)
+                                .enumerate()
+                                .find(|(_, samples)| samples[0] > samples[1])
+                            {
+                                panic!(
+                                    "non-monotonic curve at sample {index} for {settings:?}: {} > {}",
+                                    samples[0], samples[1]
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
