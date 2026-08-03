@@ -28,6 +28,9 @@ pub use light::{LightSettings, LightTransform};
 pub use preview::Preview;
 pub use scope::ImageScope;
 
+#[cfg(all(feature = "wasm-threads", target_arch = "wasm32"))]
+pub use wasm_bindgen_rayon::init_thread_pool;
+
 pub fn measure(data: &FrameData) -> Result<(Transfer, Report)> {
     let mut frame = bracket::load(data)?;
     let matrix = bracket::to_working(&frame, frame.sooc.space)?;

@@ -1,6 +1,9 @@
 use crate::{Error, Result};
 use std::sync::OnceLock;
 
+#[cfg(feature = "wasm-threads")]
+use rayon::prelude::*;
+
 const CURVE_SAMPLES: usize = 4096;
 pub const MIDDLE_GRAY: f32 = 0.18;
 pub const MAX_ZONE_COMPENSATION_STOPS: f32 = 1.5;
@@ -97,10 +100,18 @@ impl LightTransform {
         if !rgb8.len().is_multiple_of(3) {
             return Err(Error::Unsupported("RGB buffer size mismatch"));
         }
+        #[cfg(feature = "wasm-threads")]
+        return Ok(rgb8
+            .par_chunks_exact(3)
+            .flat_map_iter(|pixel| self.display_pixel([pixel[0], pixel[1], pixel[2]]))
+            .collect());
+        #[cfg(not(feature = "wasm-threads"))]
         let mut adjusted = Vec::with_capacity(rgb8.len());
+        #[cfg(not(feature = "wasm-threads"))]
         for pixel in rgb8.chunks_exact(3) {
             adjusted.extend(self.display_pixel([pixel[0], pixel[1], pixel[2]]));
         }
+        #[cfg(not(feature = "wasm-threads"))]
         Ok(adjusted)
     }
 
@@ -108,11 +119,22 @@ impl LightTransform {
         if !rgba8.len().is_multiple_of(4) {
             return Err(Error::Unsupported("RGBA buffer size mismatch"));
         }
+        #[cfg(feature = "wasm-threads")]
+        return Ok(rgba8
+            .par_chunks_exact(4)
+            .flat_map_iter(|pixel| {
+                let adjusted = self.display_pixel([pixel[0], pixel[1], pixel[2]]);
+                [adjusted[0], adjusted[1], adjusted[2], pixel[3]]
+            })
+            .collect());
+        #[cfg(not(feature = "wasm-threads"))]
         let mut adjusted = Vec::with_capacity(rgba8.len());
+        #[cfg(not(feature = "wasm-threads"))]
         for pixel in rgba8.chunks_exact(4) {
             adjusted.extend(self.display_pixel([pixel[0], pixel[1], pixel[2]]));
             adjusted.push(pixel[3]);
         }
+        #[cfg(not(feature = "wasm-threads"))]
         Ok(adjusted)
     }
 

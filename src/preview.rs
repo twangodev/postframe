@@ -2,6 +2,9 @@ use crate::color;
 use crate::decode::linear::Linear;
 use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
 
+#[cfg(feature = "wasm-threads")]
+use rayon::prelude::*;
+
 const LOOKUP_LOW_BITS: u32 = 0x3680_0000;
 const LOOKUP_HIGH_BITS: u32 = 0x4280_0000;
 const LOOKUP_SHIFT: u32 = 13;
@@ -93,11 +96,20 @@ impl PreparedRegion {
     }
 
     pub(crate) fn rgba32(&self) -> Vec<f32> {
-        let mut rgba = Vec::with_capacity(self.rgb.len() * 4);
-        for pixel in &self.rgb {
-            rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 1.0]);
+        #[cfg(feature = "wasm-threads")]
+        return self
+            .rgb
+            .par_iter()
+            .flat_map_iter(|pixel| [pixel[0], pixel[1], pixel[2], 1.0])
+            .collect();
+        #[cfg(not(feature = "wasm-threads"))]
+        {
+            let mut rgba = Vec::with_capacity(self.rgb.len() * 4);
+            for pixel in &self.rgb {
+                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 1.0]);
+            }
+            rgba
         }
-        rgba
     }
 }
 
@@ -300,10 +312,20 @@ impl Preview {
     pub fn render_adjusted(&self, merged: &Merged, light: &LightTransform, tone: bool) -> Vec<u8> {
         let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
+        #[cfg(feature = "wasm-threads")]
+        return merged
+            .radiance
+            .rgb
+            .par_iter()
+            .flat_map_iter(|pixel| self.render_pixel(*pixel, gain, white, tone, light))
+            .collect();
+        #[cfg(not(feature = "wasm-threads"))]
         let mut rgb8 = Vec::with_capacity(merged.radiance.rgb.len() * 3);
+        #[cfg(not(feature = "wasm-threads"))]
         for pixel in &merged.radiance.rgb {
             rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
         }
+        #[cfg(not(feature = "wasm-threads"))]
         rgb8
     }
 
@@ -333,7 +355,15 @@ impl Preview {
     ) -> Rendered {
         let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
+        #[cfg(feature = "wasm-threads")]
+        let rgb8 = region
+            .rgb
+            .par_iter()
+            .flat_map_iter(|pixel| self.render_pixel(*pixel, gain, white, tone, light))
+            .collect();
+        #[cfg(not(feature = "wasm-threads"))]
         let mut rgb8 = Vec::with_capacity(region.rgb.len() * 3);
+        #[cfg(not(feature = "wasm-threads"))]
         for pixel in &region.rgb {
             rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
         }
