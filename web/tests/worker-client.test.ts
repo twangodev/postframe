@@ -121,6 +121,23 @@ test('reports worker performance measurements without consuming pending requests
 	assert.deepEqual(measurements, [
 		{ stage: 'raw-decode', durationMs: 14.5, detail: 'portrait.raf' }
 	]);
+	assert.deepEqual(client.performanceReport(), {
+		runtime: { threaded: true, threadCount: 4 },
+		sampleCapacity: 256,
+		totalSamples: 1,
+		series: [
+			{
+				stage: 'raw-decode',
+				detail: 'portrait.raf',
+				samples: 1,
+				minMs: 14.5,
+				medianMs: 14.5,
+				p95Ms: 14.5,
+				meanMs: 14.5,
+				maxMs: 14.5
+			}
+		]
+	});
 	client.destroy();
 });
 

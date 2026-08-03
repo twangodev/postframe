@@ -23,7 +23,7 @@ test('renders and persists every light control for a display photo', async ({ pa
 		if (/tile .*failed|could not be cloned/i.test(message.text()))
 			tileFailures.push(message.text());
 	});
-	await page.goto('/');
+	await page.goto('/?perf');
 	const dataUrl = await page.evaluate(() => {
 		const canvas = document.createElement('canvas');
 		canvas.width = 32;
@@ -122,6 +122,13 @@ test('renders and persists every light control for a display photo', async ({ pa
 	await expect
 		.poll(() => storedMasks(page))
 		.toMatchObject([{ name: 'brush', kind: 'brush', visible: true }]);
+	const performanceReport = await page.evaluate(() => window.__postframePerformance?.snapshot());
+	expect(performanceReport).toMatchObject({
+		sampleCapacity: 256,
+		runtime: { threaded: true }
+	});
+	expect(performanceReport?.totalSamples).toBeGreaterThan(0);
+	expect(performanceReport?.series.some(({ stage }) => stage === 'display-decode')).toBe(true);
 	await expect.poll(() => tileFailures).toEqual([]);
 });
 

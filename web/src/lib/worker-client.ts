@@ -7,6 +7,11 @@ import type {
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
 import type { LightSettings } from './develop-settings.ts';
+import {
+	RenderPerformanceRecorder,
+	type RenderPerformanceControls,
+	type RenderRuntimeSummary
+} from './render-performance.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
@@ -47,6 +52,9 @@ export class PostframeWorkerClient {
 	private readonly pending = new Map<number, PendingRequest>();
 	private readonly progressListeners = new Set<ProgressListener>();
 	private readonly performanceListeners = new Set<PerformanceListener>();
+	private readonly performanceRecorder = new RenderPerformanceRecorder();
+	private performanceControls: RenderPerformanceControls | null = null;
+	private renderRuntime: RenderRuntimeSummary | null = null;
 	private nextRequestId = 1;
 	private destroyed = false;
 	private previewInFlight = false;
@@ -56,10 +64,11 @@ export class PostframeWorkerClient {
 		this.workerFactory = workerFactory;
 		this.worker = this.workerFactory();
 		this.attachWorker();
+		this.installPerformanceControls();
 	}
 
 	async capabilities() {
-		return this.send(
+		const response = await this.send(
 			(id) => ({
 				id,
 				type: 'capabilities',
@@ -67,6 +76,8 @@ export class PostframeWorkerClient {
 			}),
 			'capabilities'
 		);
+		this.renderRuntime = { threaded: response.threaded, threadCount: response.threadCount };
+		return response;
 	}
 
 	async validateRaw(raw: ArrayBuffer) {
@@ -163,6 +174,10 @@ export class PostframeWorkerClient {
 		return () => this.performanceListeners.delete(listener);
 	}
 
+	performanceReport = () => this.performanceRecorder.snapshot(this.renderRuntime);
+
+	clearPerformanceReport = () => this.performanceRecorder.clear();
+
 	restart(reason = 'Postframe worker restarted') {
 		if (this.destroyed) return;
 		this.detachWorker();
@@ -182,6 +197,14 @@ export class PostframeWorkerClient {
 		this.rejectQueuedPreview(new Error('Postframe worker closed'));
 		this.progressListeners.clear();
 		this.performanceListeners.clear();
+		if (
+			this.performanceControls &&
+			typeof window !== 'undefined' &&
+			window.__postframePerformance === this.performanceControls
+		) {
+			delete window.__postframePerformance;
+		}
+		this.performanceControls = null;
 	}
 
 	private send<Type extends CompletionType>(
@@ -260,6 +283,7 @@ export class PostframeWorkerClient {
 	};
 
 	private recordPerformance(measurement: RenderPerformanceMeasurement) {
+		this.performanceRecorder.record(measurement);
 		if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return;
 		performance.measure(`postframe:${measurement.stage}`, {
 			start: Math.max(0, performance.now() - measurement.durationMs),
@@ -275,6 +299,15 @@ export class PostframeWorkerClient {
 	private attachWorker() {
 		this.worker.addEventListener('message', this.handleMessage);
 		this.worker.addEventListener('error', this.handleWorkerError);
+	}
+
+	private installPerformanceControls() {
+		if (!performanceRequested() || typeof window === 'undefined') return;
+		this.performanceControls = {
+			snapshot: this.performanceReport,
+			clear: this.clearPerformanceReport
+		};
+		window.__postframePerformance = this.performanceControls;
 	}
 
 	private detachWorker() {
