@@ -34,7 +34,6 @@ interface QueuedPreview {
 interface RenderedPreview {
 	image: ArrayBuffer;
 	mediaType: 'image/jpeg' | 'image/png';
-	scope: ReturnType<typeof imageScopeFromTransfer>;
 }
 
 export type ProgressListener = (progress: ProgressResponse) => void;
@@ -124,6 +123,14 @@ export class PostframeWorkerClient {
 		});
 	}
 
+	async scope(settings: LightSettings, tone: boolean, sampleTarget: number) {
+		const response = await this.send(
+			(id) => ({ id, type: 'scope', settings: { ...settings }, tone, sampleTarget }),
+			'scope'
+		);
+		return imageScopeFromTransfer(response.scope);
+	}
+
 	async ultraPreview() {
 		const response = await this.send((id) => ({ id, type: 'ultra' }), 'ultra');
 		return response.jpeg;
@@ -203,8 +210,7 @@ export class PostframeWorkerClient {
 			.then((response) => {
 				const rendered = {
 					image: response.image,
-					mediaType: response.mediaType,
-					scope: imageScopeFromTransfer(response.scope)
+					mediaType: response.mediaType
 				};
 				for (const waiter of preview.waiters) waiter.resolve(rendered);
 			})

@@ -6,7 +6,7 @@ pub const WAVEFORM_CHANNELS: usize = 3;
 pub const WAVEFORM_WIDTH: usize = 512;
 pub const WAVEFORM_HEIGHT: usize = 256;
 
-const SAMPLE_TARGET: usize = 750_000;
+pub const FULL_SAMPLE_TARGET: usize = 750_000;
 
 #[derive(Clone, Debug)]
 pub struct ImageScope {
@@ -17,6 +17,15 @@ pub struct ImageScope {
 
 impl ImageScope {
     pub fn analyze(rgb8: &[u8], width: usize, height: usize) -> Result<Self> {
+        Self::analyze_sampled(rgb8, width, height, FULL_SAMPLE_TARGET)
+    }
+
+    pub fn analyze_sampled(
+        rgb8: &[u8],
+        width: usize,
+        height: usize,
+        sample_target: usize,
+    ) -> Result<Self> {
         let pixel_count = width
             .checked_mul(height)
             .ok_or(Error::Unsupported("scope dimensions overflow"))?;
@@ -27,7 +36,8 @@ impl ImageScope {
             return Err(Error::Unsupported("scope buffer size mismatch"));
         }
 
-        let stride = ((pixel_count as f64 / SAMPLE_TARGET as f64).sqrt().ceil() as usize).max(1);
+        let sample_target = sample_target.max(1);
+        let stride = ((pixel_count as f64 / sample_target as f64).sqrt().ceil() as usize).max(1);
         let mut histogram = vec![0; HISTOGRAM_CHANNELS * HISTOGRAM_BINS];
         let mut waveform = vec![0u16; WAVEFORM_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT];
         let mut sample_count = 0;

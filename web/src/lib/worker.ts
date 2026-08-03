@@ -83,6 +83,13 @@ export type Request =
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| { id: number; type: 'preview'; settings: LightSettings; tone: boolean }
+	| {
+			id: number;
+			type: 'scope';
+			settings: LightSettings;
+			tone: boolean;
+			sampleTarget: number;
+	  }
 	| { id: number; type: 'ultra' }
 	| { id: number; type: 'export' }
 	| { id: number; type: 'close' };
@@ -109,8 +116,8 @@ export type Response =
 			type: 'preview';
 			image: ArrayBuffer;
 			mediaType: 'image/jpeg' | 'image/png';
-			scope: ImageScopeTransfer;
 	  }
+	| { id: number; type: 'scope'; scope: ImageScopeTransfer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }
@@ -127,6 +134,7 @@ interface DisplayDocument {
 	preview: ImageData;
 	settings: LightSettings;
 	light: DisplayTransform;
+	adjusted: Uint8Array | null;
 }
 
 type ActiveDocument = RawDocument | DisplayDocument;
@@ -165,17 +173,26 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				break;
 			}
 			case 'preview': {
-				const preview = await renderPreview(activeDocument(), message.settings, message.tone);
+				const preview = await renderPreviewImage(activeDocument(), message.settings, message.tone);
 				post(
 					{
 						id: message.id,
 						type: 'preview',
 						image: preview.image,
-						mediaType: preview.mediaType,
-						scope: preview.scope
+						mediaType: preview.mediaType
 					},
 					preview.transfer
 				);
+				break;
+			}
+			case 'scope': {
+				const scope = renderScope(
+					activeDocument(),
+					message.settings,
+					message.tone,
+					message.sampleTarget
+				);
+				post({ id: message.id, type: 'scope', scope: scope.data }, scope.transfer);
 				break;
 			}
 			case 'ultra': {
@@ -338,7 +355,8 @@ async function openDisplayDocument(message: Extract<Request, { type: 'open-displ
 			bitmap,
 			preview,
 			settings: { ...message.settings },
-			light
+			light,
+			adjusted: null
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);
@@ -395,10 +413,10 @@ function displayPreview(bitmap: ImageBitmap, maxDimension: number) {
 	return context.getImageData(0, 0, width, height);
 }
 
-async function renderPreview(active: ActiveDocument, settings: LightSettings, tone: boolean) {
+async function renderPreviewImage(active: ActiveDocument, settings: LightSettings, tone: boolean) {
 	return active.kind === 'raw'
-		? renderRawPreview(active.session, settings, tone)
-		: renderDisplayPreview(active, settings);
+		? renderRawPreviewImage(active.session, settings, tone)
+		: renderDisplayImage(active, settings);
 }
 
 function renderRawPreview(session: Session, settings: LightSettings, tone: boolean) {
@@ -425,10 +443,85 @@ function renderRawPreview(session: Session, settings: LightSettings, tone: boole
 	}
 }
 
+function renderRawPreviewImage(session: Session, settings: LightSettings, tone: boolean) {
+	const image = session.preview_jpeg(...lightArguments(settings), tone).buffer as ArrayBuffer;
+	return {
+		image,
+		mediaType: 'image/jpeg' as const,
+		transfer: [image]
+	};
+}
+
+function renderScope(
+	active: ActiveDocument,
+	settings: LightSettings,
+	tone: boolean,
+	sampleTarget: number
+) {
+	return active.kind === 'raw'
+		? renderRawScope(active.session, settings, tone, sampleTarget)
+		: renderDisplayScope(active, settings, sampleTarget);
+}
+
+function renderRawScope(
+	session: Session,
+	settings: LightSettings,
+	tone: boolean,
+	sampleTarget: number
+) {
+	const frame = session.preview_scope(
+		...lightArguments(settings),
+		tone,
+		Math.max(1, Math.floor(sampleTarget))
+	);
+	try {
+		return transferableScope({
+			histogram: frame.histogram,
+			waveform: frame.waveform,
+			waveformWidth: frame.waveform_width,
+			waveformHeight: frame.waveform_height,
+			sampleCount: frame.sample_count
+		});
+	} finally {
+		frame.free();
+	}
+}
+
 async function renderDisplayPreview(active: DisplayDocument, settings: LightSettings) {
-	const light = displayTransform(active, settings);
-	const adjusted = light.apply_rgba(new Uint8Array(active.preview.data));
-	return renderDisplayPixels(adjusted, active.preview.width, active.preview.height);
+	const image = await renderDisplayImage(active, settings);
+	const scope = renderDisplayScope(active, settings);
+	return {
+		...image,
+		scope: scope.data,
+		transfer: [...image.transfer, ...scope.transfer]
+	};
+}
+
+async function renderDisplayImage(active: DisplayDocument, settings: LightSettings) {
+	const rgba = new Uint8ClampedArray(displayAdjusted(active, settings));
+	const context = canvasContext(active.preview.width, active.preview.height, false);
+	context.putImageData(new ImageData(rgba, active.preview.width, active.preview.height), 0, 0);
+	const image = await (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
+	return {
+		image,
+		mediaType: 'image/png' as const,
+		transfer: [image]
+	};
+}
+
+function renderDisplayScope(
+	active: DisplayDocument,
+	settings: LightSettings,
+	sampleTarget?: number
+) {
+	return transferableScope(
+		imageScopeFromRgba(
+			new Uint8ClampedArray(displayAdjusted(active, settings)),
+			active.preview.width,
+			active.preview.height,
+			sampleTarget
+		)
+	);
 }
 
 async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
@@ -475,20 +568,6 @@ async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 	return context.canvas.transferToImageBitmap();
 }
 
-async function renderDisplayPixels(pixels: Uint8Array, width: number, height: number) {
-	const rgba = new Uint8ClampedArray(pixels);
-	const scope = transferableScope(imageScopeFromRgba(rgba, width, height));
-	const context = canvasContext(width, height);
-	context.putImageData(new ImageData(rgba, width, height), 0, 0);
-	const image = await (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
-	return {
-		image,
-		mediaType: 'image/png' as const,
-		scope: scope.data,
-		transfer: [image, ...scope.transfer]
-	};
-}
-
 function transferableScope(scope: ImageScopeData) {
 	const histogram = scope.histogram.buffer as ArrayBuffer;
 	const waveform = scope.waveform.buffer as ArrayBuffer;
@@ -531,7 +610,14 @@ function displayTransform(active: DisplayDocument, settings: LightSettings) {
 	active.light.free();
 	active.settings = { ...settings };
 	active.light = new DisplayTransform(...lightArguments(settings));
+	active.adjusted = null;
 	return active.light;
+}
+
+function displayAdjusted(active: DisplayDocument, settings: LightSettings) {
+	const light = displayTransform(active, settings);
+	active.adjusted ??= light.apply_rgba(new Uint8Array(active.preview.data));
+	return active.adjusted;
 }
 
 function sameLightSettings(left: LightSettings, right: LightSettings) {

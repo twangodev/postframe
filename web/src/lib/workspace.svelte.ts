@@ -36,7 +36,8 @@ import {
 	LIGHT_CONTROL_NAMES,
 	lightSettings,
 	type DevelopSettings,
-	type LightControlName
+	type LightControlName,
+	type LightSettings
 } from './develop-settings';
 import { DevelopHistory } from './develop-history';
 import type { ImageScopeData } from './image-scope';
@@ -130,6 +131,10 @@ const defaultAdjustments = {
 	noiseReduction: 10
 };
 
+const INTERACTIVE_SCOPE_SAMPLE_TARGET = 150_000;
+const COMMITTED_SCOPE_SAMPLE_TARGET = 750_000;
+const INTERACTIVE_SCOPE_INTERVAL_MS = 125;
+
 function id(prefix: string) {
 	return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -159,6 +164,9 @@ export class WorkspaceState {
 	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
 	private developPreviewTimer: ReturnType<typeof setTimeout> | null = null;
+	private developScopeTimer: ReturnType<typeof setTimeout> | null = null;
+	private developScopeRevision = 0;
+	private lastDevelopScopeAt = 0;
 	private developPreviewRevision = 0;
 	private developPreviewUrl: string | null = null;
 	private refinementRevision: number | null = null;
@@ -745,8 +753,8 @@ export class WorkspaceState {
 				if (revision !== this.developPreviewRevision || this.selectedPhoto?.id !== photoId) return;
 				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
 				this.replaceDevelopPreviewUrl(src);
-				this.imageScope = preview.scope;
 				this.developPreview = { photoId, src, phase: this.developPreview?.phase ?? phase };
+				this.scheduleDevelopScope(lightSettings(settings), photoId, phase === 'refining');
 			})
 			.catch(() => {
 				if (revision === this.developPreviewRevision && this.refinementRevision === null) {
@@ -775,7 +783,9 @@ export class WorkspaceState {
 
 	private releaseDevelopPreview() {
 		this.clearDevelopPreviewTimer();
+		this.clearDevelopScopeTimer();
 		this.developPreviewRevision += 1;
+		this.developScopeRevision += 1;
 		this.refinementRevision = null;
 		if (this.developPreviewUrl) {
 			URL.revokeObjectURL(this.developPreviewUrl);
@@ -789,6 +799,34 @@ export class WorkspaceState {
 		if (this.developPreviewTimer === null) return;
 		clearTimeout(this.developPreviewTimer);
 		this.developPreviewTimer = null;
+	}
+
+	private scheduleDevelopScope(settings: LightSettings, photoId: string, committed: boolean) {
+		this.clearDevelopScopeTimer();
+		const revision = ++this.developScopeRevision;
+		const elapsed = Date.now() - this.lastDevelopScopeAt;
+		const delay = committed ? 0 : Math.max(0, INTERACTIVE_SCOPE_INTERVAL_MS - elapsed);
+		this.developScopeTimer = setTimeout(() => {
+			this.developScopeTimer = null;
+			this.lastDevelopScopeAt = Date.now();
+			void this.workerClient
+				?.scope(
+					settings,
+					true,
+					committed ? COMMITTED_SCOPE_SAMPLE_TARGET : INTERACTIVE_SCOPE_SAMPLE_TARGET
+				)
+				.then((scope) => {
+					if (revision !== this.developScopeRevision || this.selectedPhoto?.id !== photoId) return;
+					this.imageScope = scope;
+				})
+				.catch(() => {});
+		}, delay);
+	}
+
+	private clearDevelopScopeTimer() {
+		if (this.developScopeTimer === null) return;
+		clearTimeout(this.developScopeTimer);
+		this.developScopeTimer = null;
 	}
 
 	private applyDevelopSettings(settings: DevelopSettings) {

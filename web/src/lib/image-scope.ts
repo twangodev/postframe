@@ -46,12 +46,17 @@ export function imageScopeFromTransfer(scope: ImageScopeTransfer): ImageScopeDat
 	};
 }
 
-export function imageScopeFromRgba(rgba: Uint8ClampedArray, width: number, height: number) {
+export function imageScopeFromRgba(
+	rgba: Uint8ClampedArray,
+	width: number,
+	height: number,
+	sampleTarget = SAMPLE_TARGET
+) {
 	if (width <= 0 || height <= 0 || rgba.length !== width * height * 4) {
 		throw new Error('Scope pixel buffer has an unexpected size');
 	}
 	const pixelCount = width * height;
-	const stride = Math.max(1, Math.ceil(Math.sqrt(pixelCount / SAMPLE_TARGET)));
+	const stride = Math.max(1, Math.ceil(Math.sqrt(pixelCount / Math.max(1, sampleTarget))));
 	const histogram = new Uint32Array(HISTOGRAM_CHANNELS * HISTOGRAM_BINS);
 	const waveform = new Uint16Array(WAVEFORM_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT);
 	let sampleCount = 0;

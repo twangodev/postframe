@@ -33,8 +33,9 @@ export const WASM_BINDINGS = {
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
 	width: { rust: 'Session::width', worker: 'open-raw' },
 	height: { rust: 'Session::height', worker: 'open-raw' },
-	preview_jpeg: { rust: 'Session::preview_jpeg', worker: null },
-	preview_frame: { rust: 'Session::preview_frame', worker: 'preview' },
+	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
+	preview_frame: { rust: 'Session::preview_frame', worker: 'open-raw' },
+	preview_scope: { rust: 'Session::preview_scope', worker: 'scope' },
 	render_tile: { rust: 'Session::render_tile', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
@@ -88,12 +89,12 @@ export const WASM_TODOS = {
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
-		bindings: ['preview_frame', 'render_tile', 'preview_ultra'],
+		bindings: ['preview_jpeg', 'preview_frame', 'preview_scope', 'render_tile', 'preview_ultra'],
 		planned: ['GPU display transform']
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
-		bindings: ['preview_frame', 'preview_ultra', 'export_ultra'],
+		bindings: ['preview_jpeg', 'preview_frame', 'preview_scope', 'preview_ultra', 'export_ultra'],
 		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
 	},
 	adjustments: {
@@ -102,7 +103,9 @@ export const WASM_TODOS = {
 			'display_transform',
 			'display_free',
 			'apply_display_rgba',
+			'preview_jpeg',
 			'preview_frame',
+			'preview_scope',
 			'render_tile'
 		],
 		planned: ['Session::set_mask_adjustments', 'color and presence controls']
@@ -139,7 +142,7 @@ export const WASM_TODOS = {
 	},
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
-		bindings: ['inspect_raw', 'add_frame', 'width', 'height', 'preview_frame'],
+		bindings: ['inspect_raw', 'add_frame', 'width', 'height', 'preview_frame', 'preview_scope'],
 		planned: ['display EXIF parser']
 	},
 	generative: {
@@ -152,7 +155,9 @@ export const WASM_TODOS = {
 		bindings: [
 			'add_frame',
 			'merge',
+			'preview_jpeg',
 			'preview_frame',
+			'preview_scope',
 			'render_tile',
 			'preview_ultra',
 			'export_ultra'

@@ -328,6 +328,49 @@ pub struct PreviewFrame {
 }
 
 #[wasm_bindgen]
+pub struct ScopeFrame {
+    histogram: Vec<u32>,
+    waveform: Vec<u16>,
+    waveform_width: u32,
+    waveform_height: u32,
+    sample_count: u32,
+}
+
+#[wasm_bindgen]
+impl ScopeFrame {
+    #[wasm_bindgen(getter)]
+    pub fn histogram(&self) -> Vec<u32> {
+        self.histogram.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform(&self) -> Vec<u16> {
+        self.waveform.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform_width(&self) -> u32 {
+        self.waveform_width
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform_height(&self) -> u32 {
+        self.waveform_height
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn sample_count(&self) -> u32 {
+        self.sample_count
+    }
+}
+
+struct CachedPreview {
+    settings: LightSettings,
+    tone: bool,
+    rgb8: Vec<u8>,
+}
+
+#[wasm_bindgen]
 impl PreviewFrame {
     #[wasm_bindgen(getter)]
     pub fn jpeg(&self) -> Vec<u8> {
@@ -368,6 +411,7 @@ pub struct Session {
     pyramid: Option<MipPyramid>,
     tiles: TileCache,
     light: Option<LightTransform>,
+    preview: Option<CachedPreview>,
 }
 
 #[wasm_bindgen]
@@ -406,6 +450,7 @@ impl Session {
             pyramid: None,
             tiles: TileCache::new(TILE_CACHE_BUDGET),
             light: None,
+            preview: None,
         }
     }
 
@@ -428,6 +473,7 @@ impl Session {
         let thumb = pyramid.thumbnail(&merged, preview_dimension.max(256));
         let lut = Preview::new(&thumb);
         self.tiles.clear();
+        self.preview = None;
         self.thumb = Some((thumb, lut));
         self.pyramid = Some(pyramid);
         self.merged = Some(merged);
@@ -467,16 +513,14 @@ impl Session {
         blacks: f32,
         tone: bool,
     ) -> Result<Vec<u8>, JsError> {
-        self.prepare_light(light_settings(
-            exposure, contrast, highlights, shadows, whites, blacks,
-        ))?;
-        let light = self
-            .light
+        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
+        self.prepare_preview(settings, tone)?;
+        let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let preview = self
+            .preview
             .as_ref()
-            .ok_or(JsError::new("missing light transform"))?;
-        let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
-        let rgb8 = lut.render_adjusted(thumb, light, tone);
-        encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)
+            .ok_or(JsError::new("missing preview"))?;
+        encode_jpeg(&preview.rgb8, thumb.radiance.width, thumb.radiance.height)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -490,19 +534,52 @@ impl Session {
         blacks: f32,
         tone: bool,
     ) -> Result<PreviewFrame, JsError> {
-        self.prepare_light(light_settings(
-            exposure, contrast, highlights, shadows, whites, blacks,
-        ))?;
-        let light = self
-            .light
+        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
+        self.prepare_preview(settings, tone)?;
+        let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let preview = self
+            .preview
             .as_ref()
-            .ok_or(JsError::new("missing light transform"))?;
-        let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
-        let rgb8 = lut.render_adjusted(thumb, light, tone);
-        let scope =
-            ImageScope::analyze(&rgb8, thumb.radiance.width, thumb.radiance.height).map_err(err)?;
+            .ok_or(JsError::new("missing preview"))?;
+        let scope = ImageScope::analyze(&preview.rgb8, thumb.radiance.width, thumb.radiance.height)
+            .map_err(err)?;
         Ok(PreviewFrame {
-            jpeg: encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)?,
+            jpeg: encode_jpeg(&preview.rgb8, thumb.radiance.width, thumb.radiance.height)?,
+            histogram: scope.histogram().to_vec(),
+            waveform: scope.waveform().to_vec(),
+            waveform_width: crate::scope::WAVEFORM_WIDTH as u32,
+            waveform_height: crate::scope::WAVEFORM_HEIGHT as u32,
+            sample_count: scope.sample_count() as u32,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn preview_scope(
+        &mut self,
+        exposure: f32,
+        contrast: f32,
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
+        tone: bool,
+        sample_target: u32,
+    ) -> Result<ScopeFrame, JsError> {
+        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
+        self.prepare_preview(settings, tone)?;
+        let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let preview = self
+            .preview
+            .as_ref()
+            .ok_or(JsError::new("missing preview"))?;
+        let scope = ImageScope::analyze_sampled(
+            &preview.rgb8,
+            thumb.radiance.width,
+            thumb.radiance.height,
+            sample_target as usize,
+        )
+        .map_err(err)?;
+        Ok(ScopeFrame {
             histogram: scope.histogram().to_vec(),
             waveform: scope.waveform().to_vec(),
             waveform_width: crate::scope::WAVEFORM_WIDTH as u32,
@@ -603,6 +680,28 @@ impl Session {
         if self.light.as_ref().map(LightTransform::settings) != Some(settings) {
             self.light = Some(LightTransform::new(settings).map_err(err)?);
         }
+        Ok(())
+    }
+
+    fn prepare_preview(&mut self, settings: LightSettings, tone: bool) -> Result<(), JsError> {
+        if self
+            .preview
+            .as_ref()
+            .is_some_and(|preview| preview.settings == settings && preview.tone == tone)
+        {
+            return Ok(());
+        }
+        self.prepare_light(settings)?;
+        let light = self
+            .light
+            .as_ref()
+            .ok_or(JsError::new("missing light transform"))?;
+        let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        self.preview = Some(CachedPreview {
+            settings,
+            tone,
+            rgb8: lut.render_adjusted(thumb, light, tone),
+        });
         Ok(())
     }
 }

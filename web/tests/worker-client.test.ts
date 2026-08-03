@@ -199,8 +199,7 @@ test('keeps one preview in flight and coalesces queued settings to the latest', 
 		id: 1,
 		type: 'preview',
 		image: new ArrayBuffer(10),
-		mediaType: 'image/jpeg',
-		scope: scopeTransfer()
+		mediaType: 'image/jpeg'
 	});
 	await first;
 	await new Promise((resolve) => queueMicrotask(resolve));
@@ -215,11 +214,23 @@ test('keeps one preview in flight and coalesces queued settings to the latest', 
 		id: 2,
 		type: 'preview',
 		image: new ArrayBuffer(20),
-		mediaType: 'image/jpeg',
-		scope: scopeTransfer()
+		mediaType: 'image/jpeg'
 	});
 	assert.equal((await second).image.byteLength, 20);
 	assert.equal((await latest).image.byteLength, 20);
+	client.destroy();
+});
+
+test('requests scopes independently from interactive preview images', async () => {
+	const { client, workers } = setup();
+	const scope = client.scope(neutral, true, 150_000);
+
+	assert.deepEqual(workers[0]?.messages, [
+		{ id: 1, type: 'scope', settings: neutral, tone: true, sampleTarget: 150_000 }
+	]);
+	workers[0]?.respond({ id: 1, type: 'scope', scope: scopeTransfer() });
+
+	assert.equal((await scope).sampleCount, 512);
 	client.destroy();
 });
 
