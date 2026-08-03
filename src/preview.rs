@@ -407,8 +407,7 @@ mod tests {
     use crate::decode::linear::Linear;
     use crate::fit::pair::{Pairing, Sample};
 
-    #[test]
-    fn lut_render_matches_direct_evaluation() {
+    fn merged_fixture() -> Merged {
         let samples: Vec<Sample> = (0..6_000)
             .map(|i| {
                 let x = (2.0f32).powf(-12.0 + 12.5 * (i as f32 / 6_000.0));
@@ -428,7 +427,7 @@ mod tests {
         )
         .unwrap();
         let radiance: Vec<[f32; 3]> = (0..64).map(|i| [0.001 + i as f32 * 0.05; 3]).collect();
-        let merged = Merged {
+        Merged {
             radiance: Linear {
                 width: 8,
                 height: 8,
@@ -443,16 +442,49 @@ mod tests {
                 shifts: vec![(0, 0)],
                 radiance_max: 4.0,
             },
-        };
+        }
+    }
+
+    fn exact_render(merged: &Merged, light: &LightTransform, tone: bool) -> Vec<u8> {
+        let gain = 2.0f32.powf(light.settings().exposure);
+        let white = (merged.report.radiance_max * gain).max(1.0);
+        merged
+            .radiance
+            .rgb
+            .iter()
+            .flat_map(|pixel| {
+                let exposed = pixel.map(|channel| channel * gain);
+                let compress = if tone {
+                    let brightest = exposed.into_iter().fold(0.0f32, f32::max);
+                    (1.0 + brightest / (white * white)) / (1.0 + brightest)
+                } else {
+                    1.0
+                };
+                let coded = merged
+                    .transfer
+                    .eval(exposed.map(|channel| channel * compress))
+                    .map(|value| value.round().clamp(0.0, 255.0) as u8);
+                light.apply_encoded_pixel(coded)
+            })
+            .collect()
+    }
+
+    fn worst_code_error(actual: &[u8], expected: &[u8]) -> i16 {
+        actual
+            .iter()
+            .zip(expected)
+            .map(|(&actual, &expected)| (actual as i16 - expected as i16).abs())
+            .max()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn lut_render_matches_direct_evaluation() {
+        let merged = merged_fixture();
 
         let fast = Preview::new(&merged).render(&merged, 0.5, false).unwrap();
         let exact = merged.render(0.5);
-        let worst = fast
-            .iter()
-            .zip(&exact.rgb8)
-            .map(|(&a, &b)| (a as i16 - b as i16).abs())
-            .max()
-            .unwrap();
+        let worst = worst_code_error(&fast, &exact.rgb8);
         assert!(
             worst <= 1,
             "lut render drifted {worst} codes from direct eval"
@@ -516,6 +548,58 @@ mod tests {
                 for (actual, expected) in actual.iter().zip(expected) {
                     assert!((actual - expected).abs() < 1e-6);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn optimized_preview_stays_within_one_code_across_light_controls() {
+        let mut merged = merged_fixture();
+        merged.radiance.rgb = (0..64)
+            .map(|index| {
+                let value = 0.001 + index as f32 * 0.05;
+                [value * 0.55, value * 1.35, value * 0.82]
+            })
+            .collect();
+        let preview = Preview::new(&merged);
+        let settings = [
+            LightSettings::NEUTRAL,
+            LightSettings {
+                exposure: -4.0,
+                contrast: -100.0,
+                highlights: -100.0,
+                shadows: -100.0,
+                whites: -100.0,
+                blacks: -100.0,
+            },
+            LightSettings {
+                exposure: 4.0,
+                contrast: 100.0,
+                highlights: 100.0,
+                shadows: 100.0,
+                whites: 100.0,
+                blacks: 100.0,
+            },
+            LightSettings {
+                exposure: 1.75,
+                contrast: 63.0,
+                highlights: -82.0,
+                shadows: 47.0,
+                whites: 91.0,
+                blacks: -58.0,
+            },
+        ];
+
+        for settings in settings {
+            let light = LightTransform::new(settings).unwrap();
+            for tone in [false, true] {
+                let fast = preview.render_adjusted(&merged, &light, tone);
+                let exact = exact_render(&merged, &light, tone);
+                let worst = worst_code_error(&fast, &exact);
+                assert!(
+                    worst <= 1,
+                    "optimized preview drifted {worst} codes for {settings:?} with tone {tone}"
+                );
             }
         }
     }
