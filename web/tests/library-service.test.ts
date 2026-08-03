@@ -13,6 +13,7 @@ import { LibraryCatalog } from '../src/lib/library-catalog.ts';
 import { LibraryService } from '../src/lib/library-service.ts';
 import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts';
 import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
+import { createEditMask, defaultEditDocument } from '../src/lib/edit-document.ts';
 
 class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
@@ -92,16 +93,29 @@ class MemoryAssetStore {
 	}
 }
 
-test('round-trips versioned develop settings', async () => {
+test('round-trips versioned edit documents and migrates legacy develop settings', async () => {
 	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
 	const assets = new MemoryAssetStore();
 	const service = new LibraryService(catalog, assets as unknown as AssetStore);
 	try {
-		const neutral = defaultDevelopSettings();
-		assert.deepEqual(await service.loadDevelopSettings('photo-one'), neutral);
-		const adjusted = { ...neutral, exposure: 1.25, highlights: -35, blacks: 12 };
-		await service.saveDevelopSettings('photo-one', adjusted);
-		assert.deepEqual(await service.loadDevelopSettings('photo-one'), adjusted);
+		const neutral = defaultEditDocument('photo-one');
+		assert.deepEqual(await service.loadEditDocument('photo-one'), neutral);
+		const adjusted = defaultEditDocument('photo-one', {
+			...neutral.adjustments.light,
+			exposure: 1.25,
+			highlights: -35,
+			blacks: 12
+		});
+		adjusted.geometry.rotation = 1.5;
+		adjusted.masks.push(createEditMask('mask-one', 'brush'));
+		await service.saveEditDocument('photo-one', adjusted);
+		assert.deepEqual(await service.loadEditDocument('photo-one'), adjusted);
+
+		const legacy = { ...defaultDevelopSettings(), contrast: 25 };
+		assets.edits.set('photo-two.json', new Blob([JSON.stringify(legacy)]));
+		const migrated = await service.loadEditDocument('photo-two');
+		assert.equal(migrated.version, 2);
+		assert.equal(migrated.adjustments.light.contrast, 25);
 	} finally {
 		await service.clearAll();
 	}

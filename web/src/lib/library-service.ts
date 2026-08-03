@@ -16,10 +16,16 @@ import {
 } from './library-schema.ts';
 import {
 	defaultDevelopSettings,
-	developSettingsSchema,
 	developStorageName,
+	lightSettings,
 	type DevelopSettings
 } from './develop-settings.ts';
+import {
+	defaultEditDocument,
+	editDocumentSchema,
+	parseEditDocument,
+	type EditDocument
+} from './edit-document.ts';
 import { renderCacheStorageName } from './render-cache.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
@@ -70,19 +76,31 @@ export class LibraryService {
 		return this.assets.readThumbnail(storageName);
 	}
 
-	async loadDevelopSettings(photoId: string) {
+	async loadEditDocument(photoId: string) {
 		const file = await this.assets.readEdit(developStorageName(photoId));
-		if (!file) return defaultDevelopSettings();
-		return developSettingsSchema.parse(JSON.parse(await file.text()));
+		if (!file) return defaultEditDocument(photoId);
+		return parseEditDocument(JSON.parse(await file.text()), photoId);
+	}
+
+	async saveEditDocument(photoId: string, value: EditDocument) {
+		const document = editDocumentSchema.parse(value);
+		if (document.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
+		const write: EditWrite = {
+			storageName: developStorageName(photoId),
+			blob: new Blob([JSON.stringify(document)], { type: 'application/json' })
+		};
+		await this.assets.writeEdits([write]);
+	}
+
+	async loadDevelopSettings(photoId: string) {
+		const document = await this.loadEditDocument(photoId);
+		return { ...defaultDevelopSettings(), ...document.adjustments.light };
 	}
 
 	async saveDevelopSettings(photoId: string, value: DevelopSettings) {
-		const settings = developSettingsSchema.parse(value);
-		const write: EditWrite = {
-			storageName: developStorageName(photoId),
-			blob: new Blob([JSON.stringify(settings)], { type: 'application/json' })
-		};
-		await this.assets.writeEdits([write]);
+		const document = await this.loadEditDocument(photoId);
+		document.adjustments.light = lightSettings(value);
+		await this.saveEditDocument(photoId, document);
 	}
 
 	async saveLibrary(
