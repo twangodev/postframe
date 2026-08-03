@@ -13,6 +13,7 @@ pub mod error;
 pub mod fit;
 pub mod hdr;
 pub mod preview;
+pub mod scope;
 #[cfg(feature = "wasm")]
 mod wasm;
 
@@ -22,6 +23,7 @@ pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use hdr::UltraHdr;
 pub use preview::Preview;
+pub use scope::ImageScope;
 
 pub fn measure(data: &FrameData) -> Result<(Transfer, Report)> {
     let mut frame = bracket::load(data)?;

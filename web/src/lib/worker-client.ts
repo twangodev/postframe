@@ -1,4 +1,5 @@
 import type { RawFrameHandleInput, RenderTileRequest, Request, Response } from './worker';
+import { imageScopeFromTransfer } from './image-scope.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
@@ -57,6 +58,7 @@ export class PostframeWorkerClient {
 		);
 		return {
 			jpeg: response.jpeg,
+			scope: imageScopeFromTransfer(response.scope),
 			boostStops: response.boostStops,
 			width: response.width,
 			height: response.height
@@ -70,7 +72,7 @@ export class PostframeWorkerClient {
 
 	async preview(ev: number, tone: boolean) {
 		const response = await this.send((id) => ({ id, type: 'preview', ev, tone }), 'preview');
-		return response.jpeg;
+		return { jpeg: response.jpeg, scope: imageScopeFromTransfer(response.scope) };
 	}
 
 	async ultraPreview() {

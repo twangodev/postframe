@@ -33,6 +33,7 @@ import {
 } from './browser-storage';
 import { defaultDevelopSettings, type DevelopSettings } from './develop-settings';
 import { DevelopHistory } from './develop-history';
+import type { ImageScopeData } from './image-scope';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -188,6 +189,7 @@ export class WorkspaceState {
 		src: string | null;
 		phase: ExposurePreviewPhase;
 	} | null>(null);
+	imageScope = $state<ImageScopeData | null>(null);
 	// TODO(WASM_TODOS.adjustments): route the remaining controls through render settings.
 	adjustments = $state({ ...defaultAdjustments });
 	renderSettings = $state({ exposure: 0, revision: 0 });
@@ -581,6 +583,7 @@ export class WorkspaceState {
 
 	private resetEditState(develop = defaultDevelopSettings()) {
 		this.releaseExposurePreview();
+		this.imageScope = null;
 		this.exposureGestureStart = null;
 		this.developHistory.reset();
 		this.masks = [];
@@ -639,6 +642,7 @@ export class WorkspaceState {
 			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
 			this.objectUrls.add(src);
 			this.editPreview = { src, width: result.width, height: result.height };
+			this.imageScope = result.scope;
 			this.documentStatus = { kind: 'ready', photoId, boostStops: result.boostStops };
 		} catch (error) {
 			if (revision !== this.documentRevision) return;
@@ -687,6 +691,7 @@ export class WorkspaceState {
 		this.releaseExposurePreview();
 		const hadDocument = this.documentStatus.kind !== 'idle';
 		this.releaseEditPreview();
+		this.imageScope = null;
 		this.documentStatus = { kind: 'idle' };
 		if (hadDocument) this.workerClient?.restart('Document closed');
 	}
@@ -720,10 +725,11 @@ export class WorkspaceState {
 		this.showExposurePreview(phase);
 		void this.workerClient
 			.preview(exposure, true)
-			.then((jpeg) => {
+			.then((preview) => {
 				if (revision !== this.exposurePreviewRevision || this.selectedPhoto?.id !== photoId) return;
-				const src = URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' }));
+				const src = URL.createObjectURL(new Blob([preview.jpeg], { type: 'image/jpeg' }));
 				this.replaceExposurePreviewUrl(src);
+				this.imageScope = preview.scope;
 				this.exposurePreview = { photoId, src, phase: this.exposurePreview?.phase ?? phase };
 			})
 			.catch(() => {

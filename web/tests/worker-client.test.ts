@@ -4,6 +4,16 @@ import test from 'node:test';
 import { PostframeWorkerClient } from '../src/lib/worker-client.ts';
 import type { Request, Response } from '../src/lib/worker.ts';
 
+function scopeTransfer() {
+	return {
+		histogram: new Uint32Array(4 * 256).buffer,
+		waveform: new Uint16Array(4 * 256 * 128).buffer,
+		waveformWidth: 256,
+		waveformHeight: 128,
+		sampleCount: 512
+	};
+}
+
 class FakeWorker extends EventTarget {
 	readonly messages: Request[] = [];
 	readonly transfers: Transferable[][] = [];
@@ -57,18 +67,21 @@ test('reports document progress before resolving the developed preview', async (
 		id: 1,
 		type: 'opened',
 		jpeg: new ArrayBuffer(12),
+		scope: scopeTransfer(),
 		boostStops: 1.5,
 		width: 6240,
 		height: 4160
 	});
 
 	assert.equal(progress.length, 1);
-	assert.deepEqual(await opened, {
-		jpeg: new ArrayBuffer(12),
-		boostStops: 1.5,
-		width: 6240,
-		height: 4160
-	});
+	const result = await opened;
+	assert.equal(result.jpeg.byteLength, 12);
+	assert.equal(result.scope.histogram.length, 4 * 256);
+	assert.equal(result.scope.waveform.length, 4 * 256 * 128);
+	assert.equal(result.scope.sampleCount, 512);
+	assert.equal(result.boostStops, 1.5);
+	assert.equal(result.width, 6240);
+	assert.equal(result.height, 4160);
 	client.destroy();
 });
 

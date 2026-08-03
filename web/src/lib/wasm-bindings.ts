@@ -21,7 +21,8 @@ export const WASM_BINDINGS = {
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open' },
 	width: { rust: 'Session::width', worker: 'open' },
 	height: { rust: 'Session::height', worker: 'open' },
-	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
+	preview_jpeg: { rust: 'Session::preview_jpeg', worker: null },
+	preview_frame: { rust: 'Session::preview_frame', worker: 'preview' },
 	render_tile_png: { rust: 'Session::render_tile_png', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
@@ -68,17 +69,17 @@ export const WASM_TODOS = {
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
-		bindings: ['preview_jpeg', 'render_tile_png', 'preview_ultra'],
+		bindings: ['preview_frame', 'render_tile_png', 'preview_ultra'],
 		planned: ['GPU display transform', 'tile invalidation after edits']
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
-		bindings: ['preview_jpeg', 'preview_ultra', 'export_ultra'],
+		bindings: ['preview_frame', 'preview_ultra', 'export_ultra'],
 		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
 	},
 	adjustments: {
 		scope: 'Apply global and masked adjustments to the render graph.',
-		bindings: ['preview_jpeg', 'render_tile_png'],
+		bindings: ['preview_frame', 'render_tile_png'],
 		planned: ['Session::set_adjustments', 'Session::set_mask_adjustments']
 	},
 	documentGeometry: {
@@ -113,8 +114,8 @@ export const WASM_TODOS = {
 	},
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
-		bindings: ['inspect_raw', 'add_frame', 'width', 'height'],
-		planned: ['display EXIF parser', 'Session::histogram']
+		bindings: ['inspect_raw', 'add_frame', 'width', 'height', 'preview_frame'],
+		planned: ['display EXIF parser', 'display image scope']
 	},
 	generative: {
 		scope: 'Run a model-backed edit and composite its result into the active document.',
@@ -126,7 +127,7 @@ export const WASM_TODOS = {
 		bindings: [
 			'add_frame',
 			'merge',
-			'preview_jpeg',
+			'preview_frame',
 			'render_tile_png',
 			'preview_ultra',
 			'export_ultra'

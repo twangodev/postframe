@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::PreparedRegion;
-use crate::{Merged, Preview};
+use crate::{ImageScope, Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const TILE_CACHE_CAPACITY: usize = 16;
@@ -246,6 +246,49 @@ fn rawler_err(error: rawler::RawlerError) -> JsError {
 }
 
 #[wasm_bindgen]
+pub struct PreviewFrame {
+    jpeg: Vec<u8>,
+    histogram: Vec<u32>,
+    waveform: Vec<u16>,
+    waveform_width: u32,
+    waveform_height: u32,
+    sample_count: u32,
+}
+
+#[wasm_bindgen]
+impl PreviewFrame {
+    #[wasm_bindgen(getter)]
+    pub fn jpeg(&self) -> Vec<u8> {
+        self.jpeg.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn histogram(&self) -> Vec<u32> {
+        self.histogram.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform(&self) -> Vec<u16> {
+        self.waveform.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform_width(&self) -> u32 {
+        self.waveform_width
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn waveform_height(&self) -> u32 {
+        self.waveform_height
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn sample_count(&self) -> u32 {
+        self.sample_count
+    }
+}
+
+#[wasm_bindgen]
 pub struct Session {
     frames: Vec<Frame>,
     merged: Option<Merged>,
@@ -314,6 +357,21 @@ impl Session {
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let rgb8 = lut.render(thumb, ev, tone);
         encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)
+    }
+
+    pub fn preview_frame(&self, ev: f32, tone: bool) -> Result<PreviewFrame, JsError> {
+        let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let rgb8 = lut.render(thumb, ev, tone);
+        let scope =
+            ImageScope::analyze(&rgb8, thumb.radiance.width, thumb.radiance.height).map_err(err)?;
+        Ok(PreviewFrame {
+            jpeg: encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)?,
+            histogram: scope.histogram().to_vec(),
+            waveform: scope.waveform().to_vec(),
+            waveform_width: crate::scope::WAVEFORM_WIDTH as u32,
+            waveform_height: crate::scope::WAVEFORM_HEIGHT as u32,
+            sample_count: scope.sample_count() as u32,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]

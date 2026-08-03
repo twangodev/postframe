@@ -5,6 +5,7 @@ import init, {
 	validate_raw
 } from './pf/postframe.js';
 import wasmUrl from './pf/postframe_bg.wasm?url';
+import type { ImageScopeTransfer } from './image-scope';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -80,12 +81,13 @@ export type Response =
 			id: number;
 			type: 'opened';
 			jpeg: ArrayBuffer;
+			scope: ImageScopeTransfer;
 			boostStops: number;
 			width: number;
 			height: number;
 	  }
 	| { id: number; type: 'tile'; png: ArrayBuffer }
-	| { id: number; type: 'preview'; jpeg: ArrayBuffer }
+	| { id: number; type: 'preview'; jpeg: ArrayBuffer; scope: ImageScopeTransfer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }
@@ -158,8 +160,11 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				break;
 			}
 			case 'preview': {
-				const jpeg = activeSession().preview_jpeg(message.ev, message.tone).buffer as ArrayBuffer;
-				post({ id: message.id, type: 'preview', jpeg }, [jpeg]);
+				const preview = renderPreview(activeSession(), message.ev, message.tone);
+				post(
+					{ id: message.id, type: 'preview', jpeg: preview.jpeg, scope: preview.scope },
+					preview.transfer
+				);
 				break;
 			}
 			case 'ultra': {
@@ -234,15 +239,45 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 		progress('merging', message.frames.length);
 		next.merge(message.maxDimension);
 		progress('rendering', message.frames.length);
-		const jpeg = next.preview_jpeg(message.ev, true).buffer as ArrayBuffer;
+		const preview = renderPreview(next, message.ev, true);
 		const boostStops = next.boost_stops();
 		const width = next.width();
 		const height = next.height();
 		session = next;
-		post({ id: message.id, type: 'opened', jpeg, boostStops, width, height }, [jpeg]);
+		post(
+			{
+				id: message.id,
+				type: 'opened',
+				jpeg: preview.jpeg,
+				scope: preview.scope,
+				boostStops,
+				width,
+				height
+			},
+			preview.transfer
+		);
 	} catch (error) {
 		next.free();
 		throw error;
+	}
+}
+
+function renderPreview(active: Session, ev: number, tone: boolean) {
+	const frame = active.preview_frame(ev, tone);
+	try {
+		const jpeg = frame.jpeg.buffer as ArrayBuffer;
+		const histogram = frame.histogram.buffer as ArrayBuffer;
+		const waveform = frame.waveform.buffer as ArrayBuffer;
+		const scope = {
+			histogram,
+			waveform,
+			waveformWidth: frame.waveform_width,
+			waveformHeight: frame.waveform_height,
+			sampleCount: frame.sample_count
+		} satisfies ImageScopeTransfer;
+		return { jpeg, scope, transfer: [jpeg, histogram, waveform] };
+	} finally {
+		frame.free();
 	}
 }
 
