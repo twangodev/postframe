@@ -29,6 +29,7 @@
 	import PhotoPyramidLayer from './PhotoPyramidLayer.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import {
@@ -1057,20 +1058,11 @@
 				<Tabs.Content value="adjust" class="motion-tab">
 					<!-- TODO(WASM_TODOS.adjustments): connect the remaining sliders to the renderer. -->
 					<div class="border-subtle border-b p-3">
-						<!-- TODO(WASM_TODOS.metadata): replace the placeholder histogram with Session data. -->
-						<div
-							class="bg-surface flex h-20 items-end gap-px overflow-hidden rounded-sm px-2 pt-3 pb-2"
-							aria-label="Histogram preview"
-						>
-							{#each [18, 25, 31, 38, 52, 67, 79, 63, 86, 94, 71, 59, 47, 73, 61, 44, 34, 28, 20, 13] as height}
-								<span class="bg-text/65 flex-1 rounded-t-[1px]" style:height={`${height}%`}></span>
-							{/each}
-						</div>
-						<div class="text-muted mt-2 flex justify-between text-[10px]">
-							<span class="font-mono">0</span><span>histogram</span><span class="font-mono"
-								>255</span
-							>
-						</div>
+						<!-- TODO(WASM_TODOS.metadata): analyze rendered-only photos through the display image scope path. -->
+						<ImageScope
+							data={workspace.imageScope}
+							loading={workspace.documentStatus.kind === 'loading'}
+						/>
 					</div>
 
 					<Panel title="Profile" meta="Camera look">

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('edits and resets adjustment values', async ({ page }) => {
+test('switches scope modes and edits adjustment values', async ({ page }) => {
 	await page.goto('/');
 	const dataUrl = await page.evaluate(() => {
 		const canvas = document.createElement('canvas');
@@ -16,6 +16,9 @@ test('edits and resets adjustment values', async ({ page }) => {
 			mimeType: 'image/png',
 			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
 		});
+	await expect(page.getByRole('img', { name: 'RGB waveform scope' })).toBeVisible();
+	await page.getByRole('radio', { name: 'Histogram scope' }).click();
+	await expect(page.getByRole('img', { name: 'RGB histogram scope' })).toBeVisible();
 
 	const value = page.getByRole('textbox', { name: 'Contrast value' });
 	await value.fill('37');
