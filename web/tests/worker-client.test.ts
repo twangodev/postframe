@@ -109,7 +109,13 @@ test('reports worker performance measurements without consuming pending requests
 		type: 'performance',
 		measurement: { stage: 'raw-decode', durationMs: 14.5, detail: 'portrait.raf' }
 	});
-	workers[0]?.respond({ id: 1, type: 'capabilities', rawExtensions: ['raf'] });
+	workers[0]?.respond({
+		id: 1,
+		type: 'capabilities',
+		rawExtensions: ['raf'],
+		threaded: true,
+		threadCount: 4
+	});
 
 	assert.equal((await capabilities).rawExtensions[0], 'raf');
 	assert.deepEqual(measurements, [
@@ -130,11 +136,19 @@ test('restarting cancels stale work and accepts requests on a fresh worker', asy
 	assert.equal(workers.length, 2);
 
 	const capabilities = client.capabilities();
-	workers[1]?.respond({ id: 2, type: 'capabilities', rawExtensions: ['dng', 'raf'] });
+	workers[1]?.respond({
+		id: 2,
+		type: 'capabilities',
+		rawExtensions: ['dng', 'raf'],
+		threaded: false,
+		threadCount: 1
+	});
 	assert.deepEqual(await capabilities, {
 		id: 2,
 		type: 'capabilities',
-		rawExtensions: ['dng', 'raf']
+		rawExtensions: ['dng', 'raf'],
+		threaded: false,
+		threadCount: 1
 	});
 	client.destroy();
 });

@@ -59,7 +59,14 @@ export class PostframeWorkerClient {
 	}
 
 	async capabilities() {
-		return this.send((id) => ({ id, type: 'capabilities' }), 'capabilities');
+		return this.send(
+			(id) => ({
+				id,
+				type: 'capabilities',
+				...(performanceRequested() ? { performance: true } : {})
+			}),
+			'capabilities'
+		);
 	}
 
 	async validateRaw(raw: ArrayBuffer) {
@@ -288,15 +295,11 @@ export class PostframeWorkerClient {
 }
 
 function createWorker() {
-	const url = new URL('./worker.ts', import.meta.url);
-	if (
-		import.meta.env.DEV &&
-		typeof location !== 'undefined' &&
-		new URLSearchParams(location.search).has('perf')
-	) {
-		url.searchParams.set('perf', '');
-	}
-	return new Worker(url, { type: 'module' });
+	return new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+}
+
+function performanceRequested() {
+	return typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf');
 }
 
 function openedDocument(response: Extract<Response, { type: 'opened' }>) {

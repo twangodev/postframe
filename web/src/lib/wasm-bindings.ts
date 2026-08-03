@@ -11,6 +11,7 @@ interface WasmBinding {
 
 export const WASM_BINDINGS = {
 	supported_raw_extensions: { rust: 'supported_raw_extensions', worker: 'capabilities' },
+	init_thread_pool: { rust: 'wasm_bindgen_rayon::init_thread_pool', worker: 'capabilities' },
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
 	display_transform: {
@@ -51,6 +52,7 @@ export const WASM_BINDINGS = {
 	| SessionMethod
 	| 'constructor'
 	| 'supported_raw_extensions'
+	| 'init_thread_pool'
 	| 'validate_raw'
 	| 'inspect_raw'
 	| 'display_transform'

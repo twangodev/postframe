@@ -1,13 +1,11 @@
-import init, {
-	DisplayTransform,
-	Session,
-	inspect_raw,
-	supported_raw_extensions,
-	validate_raw
-} from './pf/postframe.js';
-import wasmUrl from './pf/postframe_bg.wasm?url';
 import type { LightSettings } from './develop-settings';
 import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
+import {
+	loadWasmRuntime,
+	type WasmDisplayTransform,
+	type WasmModule,
+	type WasmSession
+} from './wasm-runtime';
 import {
 	RawWebGpuRenderer,
 	type LinearTileSource,
@@ -77,7 +75,7 @@ export interface RenderTileRequest {
 }
 
 export type Request =
-	| { id: number; type: 'capabilities' }
+	| { id: number; type: 'capabilities'; performance?: boolean }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
 	| { id: number; type: 'inspect'; raw: ArrayBuffer; maxDimension: number }
 	| {
@@ -111,7 +109,13 @@ export type Request =
 export type Response =
 	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
 	| ({ id: number; type: 'progress' } & DevelopProgress)
-	| { id: number; type: 'capabilities'; rawExtensions: string[] }
+	| {
+			id: number;
+			type: 'capabilities';
+			rawExtensions: string[];
+			threaded: boolean;
+			threadCount: number;
+	  }
 	| { id: number; type: 'validated' }
 	| { id: number; type: 'inspected'; inspection: RawInspection }
 	| {
@@ -139,7 +143,7 @@ export type Response =
 
 interface RawDocument {
 	kind: 'raw';
-	session: Session;
+	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
 	lightLut: { key: string; values: Float32Array } | null;
 }
@@ -149,16 +153,23 @@ interface DisplayDocument {
 	bitmap: ImageBitmap;
 	preview: ImageData;
 	settings: LightSettings;
-	light: DisplayTransform;
+	light: WasmDisplayTransform;
 	adjusted: Uint8Array | null;
 }
 
 type ActiveDocument = RawDocument | DisplayDocument;
 
-const ready = init({ module_or_path: wasmUrl });
+let wasm: WasmModule;
+let threaded = false;
+let threadCount = 1;
+const ready = loadWasmRuntime().then((runtime) => {
+	wasm = runtime.module;
+	threaded = runtime.threaded;
+	threadCount = runtime.threadCount;
+});
 let document: ActiveDocument | null = null;
 let cacheWriteTimer: ReturnType<typeof setTimeout> | null = null;
-const performanceEnabled = new URL(self.location.href).searchParams.has('perf');
+let performanceEnabled = false;
 
 const post = (message: Response, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);
@@ -169,10 +180,17 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 		await ready;
 		switch (message.type) {
 			case 'capabilities':
-				post({ id: message.id, type: 'capabilities', rawExtensions: supported_raw_extensions() });
+				performanceEnabled = message.performance === true;
+				post({
+					id: message.id,
+					type: 'capabilities',
+					rawExtensions: wasm.supported_raw_extensions(),
+					threaded,
+					threadCount
+				});
 				break;
 			case 'validate':
-				measure('raw-decode', () => validate_raw(new Uint8Array(message.raw)), 'validation');
+				measure('raw-decode', () => wasm.validate_raw(new Uint8Array(message.raw)), 'validation');
 				post({ id: message.id, type: 'validated' });
 				break;
 			case 'inspect':
@@ -235,7 +253,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 	const result = measure(
 		'raw-decode',
-		() => inspect_raw(new Uint8Array(message.raw), message.maxDimension),
+		() => wasm.inspect_raw(new Uint8Array(message.raw), message.maxDimension),
 		'inspection'
 	);
 	try {
@@ -270,7 +288,7 @@ function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 
 async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) {
 	closeDocument();
-	const session = new Session();
+	const session = new wasm.Session();
 
 	try {
 		if (await restoreRawCache(session, message)) {
@@ -345,7 +363,10 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 	}
 }
 
-async function restoreRawCache(session: Session, message: Extract<Request, { type: 'open-raw' }>) {
+async function restoreRawCache(
+	session: WasmSession,
+	message: Extract<Request, { type: 'open-raw' }>
+) {
 	const file = await message.cache.getFile();
 	if (file.size === 0) return false;
 	post({
@@ -374,7 +395,7 @@ async function restoreRawCache(session: Session, message: Extract<Request, { typ
 
 async function publishRawDocument(
 	message: Extract<Request, { type: 'open-raw' }>,
-	session: Session
+	session: WasmSession
 ) {
 	document = {
 		kind: 'raw',
@@ -398,7 +419,7 @@ async function publishRawDocument(
 	);
 }
 
-function scheduleRawCacheWrite(session: Session, cache: FileSystemFileHandle) {
+function scheduleRawCacheWrite(session: WasmSession, cache: FileSystemFileHandle) {
 	if (cacheWriteTimer !== null) clearTimeout(cacheWriteTimer);
 	cacheWriteTimer = setTimeout(() => {
 		cacheWriteTimer = null;
@@ -417,7 +438,7 @@ async function openDisplayDocument(message: Extract<Request, { type: 'open-displ
 		() => createImageBitmap(source, { imageOrientation: 'from-image' }),
 		source.name
 	);
-	const light = new DisplayTransform(...lightArguments(message.settings));
+	const light = new wasm.DisplayTransform(...lightArguments(message.settings));
 	try {
 		postDisplayProgress(message, 'decoding', source.size, source.size);
 		const preview = displayPreview(bitmap, message.maxDimension);
@@ -490,7 +511,7 @@ async function renderPreviewImage(active: ActiveDocument, settings: LightSetting
 		: renderDisplayImage(active, settings);
 }
 
-function renderRawPreview(session: Session, settings: LightSettings, tone: boolean) {
+function renderRawPreview(session: WasmSession, settings: LightSettings, tone: boolean) {
 	const frame = session.preview_frame(...lightArguments(settings), tone);
 	try {
 		const image = frame.jpeg.buffer as ArrayBuffer;
@@ -514,7 +535,7 @@ function renderRawPreview(session: Session, settings: LightSettings, tone: boole
 	}
 }
 
-function renderRawPreviewImage(session: Session, settings: LightSettings, tone: boolean) {
+function renderRawPreviewImage(session: WasmSession, settings: LightSettings, tone: boolean) {
 	const image = session.preview_jpeg(...lightArguments(settings), tone).buffer as ArrayBuffer;
 	return {
 		image,
@@ -535,7 +556,7 @@ function renderScope(
 }
 
 function renderRawScope(
-	session: Session,
+	session: WasmSession,
 	settings: LightSettings,
 	tone: boolean,
 	sampleTarget: number
@@ -599,7 +620,7 @@ async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 	if (active.kind === 'raw') {
 		if (active.renderer) {
 			const key = rawTileKey(request);
-			let tile: ReturnType<Session['render_tile_linear']> | null = null;
+			let tile: ReturnType<WasmSession['render_tile_linear']> | null = null;
 			try {
 				let source: LinearTileSource | null = null;
 				if (!active.renderer.hasSource(key)) {
@@ -709,7 +730,7 @@ function displayTransform(active: DisplayDocument, settings: LightSettings) {
 	if (sameLightSettings(active.settings, settings)) return active.light;
 	active.light.free();
 	active.settings = { ...settings };
-	active.light = new DisplayTransform(...lightArguments(settings));
+	active.light = new wasm.DisplayTransform(...lightArguments(settings));
 	active.adjusted = null;
 	return active.light;
 }
@@ -813,7 +834,7 @@ function closeDocument() {
 	document = null;
 }
 
-async function createRawRenderer(session: Session) {
+async function createRawRenderer(session: WasmSession) {
 	const profile = session.render_profile();
 	try {
 		return await RawWebGpuRenderer.create({
@@ -844,7 +865,7 @@ function rawLightLut(active: RawDocument, settings: LightSettings) {
 		settings.blacks
 	].join(':');
 	if (active.lightLut?.key === key) return active.lightLut.values;
-	const transform = new DisplayTransform(
+	const transform = new wasm.DisplayTransform(
 		0,
 		settings.contrast,
 		settings.highlights,

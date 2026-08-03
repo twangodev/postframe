@@ -44,6 +44,7 @@
 		"dexie": "^4.4.4",
 		"openseadragon": "^6.0.2",
 		"tinykeys": "^4.0.0",
+		"wasm-feature-detect": "^1.8.0",
 		"zod": "^4.4.3"
 	}
 }
