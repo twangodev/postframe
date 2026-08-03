@@ -1,7 +1,9 @@
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use image::codecs::png::PngEncoder;
 use image::{DynamicImage, ExtendedColorType, ImageEncoder};
+use lru::LruCache;
 use rawler::decoders::{Orientation, RawDecodeParams, RawMetadata};
 use rawler::formats::tiff::Rational;
 use rawler::imgop::develop::RawDevelop;
@@ -9,9 +11,20 @@ use rawler::rawsource::RawSource;
 use wasm_bindgen::prelude::*;
 
 use crate::bracket::{self, Frame, FrameData};
+use crate::preview::PreparedRegion;
 use crate::{Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
+const TILE_CACHE_CAPACITY: usize = 16;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct TileRegion {
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+    bin: usize,
+}
 
 fn err(error: crate::Error) -> JsError {
     JsError::new(&error.to_string())
@@ -237,6 +250,7 @@ pub struct Session {
     frames: Vec<Frame>,
     merged: Option<Merged>,
     thumb: Option<(Merged, Preview)>,
+    tiles: LruCache<TileRegion, PreparedRegion>,
 }
 
 #[wasm_bindgen]
@@ -247,6 +261,7 @@ impl Session {
             frames: Vec::new(),
             merged: None,
             thumb: None,
+            tiles: LruCache::new(NonZeroUsize::new(TILE_CACHE_CAPACITY).unwrap()),
         }
     }
 
@@ -267,6 +282,7 @@ impl Session {
         let merged = bracket::merge(std::mem::take(&mut self.frames)).map_err(err)?;
         let thumb = merged.thumbnail(preview_dimension.max(256));
         let lut = Preview::new(&thumb);
+        self.tiles.clear();
         self.thumb = Some((thumb, lut));
         self.merged = Some(merged);
         Ok(())
@@ -302,7 +318,7 @@ impl Session {
 
     #[allow(clippy::too_many_arguments)]
     pub fn render_tile_png(
-        &self,
+        &mut self,
         x: u32,
         y: u32,
         width: u32,
@@ -329,7 +345,24 @@ impl Session {
         if width.div_ceil(bin) > MAX_TILE_DIMENSION || height.div_ceil(bin) > MAX_TILE_DIMENSION {
             return Err(JsError::new("tile output exceeds the maximum dimension"));
         }
-        let rendered = lut.render_region(merged, (x, y), (width, height), bin, ev, tone);
+        let region = TileRegion {
+            x,
+            y,
+            width,
+            height,
+            bin,
+        };
+        if self.tiles.peek(&region).is_none() {
+            self.tiles.put(
+                region,
+                PreparedRegion::new(merged, (x, y), (width, height), bin),
+            );
+        }
+        let prepared = self
+            .tiles
+            .get(&region)
+            .ok_or(JsError::new("unable to prepare tile"))?;
+        let rendered = lut.render_prepared(merged, prepared, ev, tone);
         encode_png(&rendered.rgb8, rendered.width, rendered.height)
     }
 
