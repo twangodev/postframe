@@ -839,7 +839,39 @@
 							renderTile={workspace.renderTile}
 							renderRevision={workspace.renderSettings.revision}
 							ev={workspace.renderSettings.exposure}
+							onRenderSettled={workspace.settleExposureRender}
 						/>
+						{#if workspace.exposurePreview?.photoId === active.id}
+							<div
+								class="motion-viewport-photo pointer-events-none absolute top-0 left-0 z-[15] overflow-hidden will-change-transform"
+								class:bg-black={workspace.exposurePreview.src !== null}
+								style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
+							>
+								{#if workspace.exposurePreview.src}
+									<img
+										src={workspace.exposurePreview.src}
+										alt=""
+										draggable="false"
+										class="size-full object-fill"
+									/>
+								{/if}
+								<div class="develop-soft-focus absolute inset-0"></div>
+								<div class="develop-dither absolute inset-0"></div>
+								<div class="develop-glimmer absolute"></div>
+							</div>
+							<div
+								class="border-subtle bg-bg/90 text-muted pointer-events-none absolute bottom-3 left-1/2 z-30 w-36 -translate-x-1/2 overflow-hidden rounded border px-2 py-1.5 text-[9px] shadow-lg backdrop-blur"
+							>
+								<span>
+									{workspace.exposurePreview.phase === 'refining'
+										? 'refining tiles'
+										: 'applying exposure'}
+								</span>
+								<div class="bg-subtle mt-1 h-px overflow-hidden">
+									<div class="develop-progress-sweep bg-text h-full w-1/3"></div>
+								</div>
+							</div>
+						{/if}
 						<div
 							class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
 							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}

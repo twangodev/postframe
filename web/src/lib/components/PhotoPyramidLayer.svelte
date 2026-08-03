@@ -18,6 +18,7 @@
 		transform: ViewportTransform;
 		renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ArrayBuffer>;
 		renderRevision: number;
+		onRenderSettled?: (revision: number) => void;
 		ev?: number;
 		tone?: boolean;
 	}
@@ -37,6 +38,7 @@
 		transform,
 		renderTile,
 		renderRevision,
+		onRenderSettled = () => {},
 		ev = 0,
 		tone = true
 	}: Props = $props();
@@ -213,12 +215,16 @@
 					return;
 				}
 				pendingItem = item;
-				item.whenFullyLoaded(() => publishReplacement(item, nextGeneration));
+				item.whenFullyLoaded(() => publishReplacement(item, nextGeneration, revision));
 			}
 		});
 	}
 
-	function publishReplacement(item: OpenSeadragon.TiledImage, itemGeneration: number) {
+	function publishReplacement(
+		item: OpenSeadragon.TiledImage,
+		itemGeneration: number,
+		revision: number
+	) {
 		if (!viewer || itemGeneration !== generation || viewer.world.getIndexOfItem(item) < 0) return;
 		const previous = activeItem;
 		item.setOpacity(1);
@@ -227,6 +233,7 @@
 		requestAnimationFrame(() => {
 			if (!viewer || !previous || previous === activeItem) return;
 			if (viewer.world.getIndexOfItem(previous) >= 0) viewer.world.removeItem(previous);
+			onRenderSettled(revision);
 		});
 	}
 

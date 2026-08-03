@@ -38,6 +38,7 @@ export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
+export type ExposurePreviewPhase = 'applying' | 'refining';
 export type DocumentStatus =
 	| { kind: 'idle' }
 	| {
@@ -150,7 +151,10 @@ export class WorkspaceState {
 	private objectUrls = new Set<string>();
 	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
-	private exposureRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	private exposurePreviewTimer: ReturnType<typeof setTimeout> | null = null;
+	private exposurePreviewRevision = 0;
+	private exposurePreviewUrl: string | null = null;
+	private refinementRevision: number | null = null;
 	private exposureGestureStart: DevelopSettings | null = null;
 	private readonly developHistory = new DevelopHistory();
 	private removeProgressListener: (() => void) | null = null;
@@ -179,6 +183,11 @@ export class WorkspaceState {
 	storageCleanupResult = $state<CleanupResult | null>(null);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
+	exposurePreview = $state<{
+		photoId: string;
+		src: string | null;
+		phase: ExposurePreviewPhase;
+	} | null>(null);
 	// TODO(WASM_TODOS.adjustments): route the remaining controls through render settings.
 	adjustments = $state({ ...defaultAdjustments });
 	renderSettings = $state({ exposure: 0, revision: 0 });
@@ -385,7 +394,7 @@ export class WorkspaceState {
 		if (!this.canAdjustExposure || !this.selectedPhoto) return;
 		this.exposureGestureStart ??= { ...this.selectedPhoto.develop };
 		this.adjustments.exposure = exposure;
-		this.scheduleExposureRender(exposure);
+		this.scheduleExposurePreview(exposure);
 	};
 
 	commitExposure = (exposure: number) => {
@@ -394,10 +403,10 @@ export class WorkspaceState {
 		const after = { ...this.selectedPhoto.develop, exposure };
 		this.exposureGestureStart = null;
 		if (!this.developHistory.commit({ label: exposureLabel(exposure), before, after })) {
-			this.applyExposureRender(exposure);
+			this.releaseExposurePreview();
 			return;
 		}
-		this.applyDevelopSettings(after);
+		this.refineDevelopSettings(after);
 		this.syncHistory();
 	};
 
@@ -405,7 +414,7 @@ export class WorkspaceState {
 		const settings = this.developHistory.undo();
 		if (!settings) return;
 		this.exposureGestureStart = null;
-		this.applyDevelopSettings(settings);
+		this.refineDevelopSettings(settings);
 		this.syncHistory();
 	};
 
@@ -413,8 +422,14 @@ export class WorkspaceState {
 		const settings = this.developHistory.redo();
 		if (!settings) return;
 		this.exposureGestureStart = null;
-		this.applyDevelopSettings(settings);
+		this.refineDevelopSettings(settings);
 		this.syncHistory();
+	};
+
+	settleExposureRender = (revision: number) => {
+		if (this.refinementRevision !== revision) return;
+		this.refinementRevision = null;
+		this.releaseExposurePreview();
 	};
 
 	renderTile = async (photoId: string, tile: RenderTileRequest) => {
@@ -556,7 +571,7 @@ export class WorkspaceState {
 
 	destroy = () => {
 		this.documentRevision += 1;
-		this.clearExposureRender();
+		this.releaseExposurePreview();
 		this.removeProgressListener?.();
 		this.removeProgressListener = null;
 		this.clearFiles();
@@ -565,7 +580,7 @@ export class WorkspaceState {
 	};
 
 	private resetEditState(develop = defaultDevelopSettings()) {
-		this.clearExposureRender();
+		this.releaseExposurePreview();
 		this.exposureGestureStart = null;
 		this.developHistory.reset();
 		this.masks = [];
@@ -669,7 +684,7 @@ export class WorkspaceState {
 
 	private closeDocument() {
 		this.documentRevision += 1;
-		this.clearExposureRender();
+		this.releaseExposurePreview();
 		const hadDocument = this.documentStatus.kind !== 'idle';
 		this.releaseEditPreview();
 		this.documentStatus = { kind: 'idle' };
@@ -683,18 +698,75 @@ export class WorkspaceState {
 		this.editPreview = null;
 	}
 
-	private scheduleExposureRender(exposure: number) {
-		this.clearExposureRender();
-		this.exposureRenderTimer = setTimeout(() => {
-			this.exposureRenderTimer = null;
-			this.applyExposureRender(exposure);
-		}, 75);
+	private scheduleExposurePreview(exposure: number) {
+		this.clearExposurePreviewTimer();
+		this.showExposurePreview('applying');
+		this.exposurePreviewTimer = setTimeout(() => {
+			this.exposurePreviewTimer = null;
+			this.requestExposurePreview(exposure, 'applying');
+		}, 40);
 	}
 
 	private applyExposureRender(exposure: number) {
-		this.clearExposureRender();
 		if (this.renderSettings.exposure === exposure) return;
 		this.renderSettings = { exposure, revision: this.renderSettings.revision + 1 };
+	}
+
+	private requestExposurePreview(exposure: number, phase: ExposurePreviewPhase) {
+		this.clearExposurePreviewTimer();
+		if (!this.workerClient || !this.selectedPhoto || !this.canAdjustExposure) return;
+		const photoId = this.selectedPhoto.id;
+		const revision = ++this.exposurePreviewRevision;
+		this.showExposurePreview(phase);
+		void this.workerClient
+			.preview(exposure, true)
+			.then((jpeg) => {
+				if (revision !== this.exposurePreviewRevision || this.selectedPhoto?.id !== photoId) return;
+				const src = URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' }));
+				this.replaceExposurePreviewUrl(src);
+				this.exposurePreview = { photoId, src, phase: this.exposurePreview?.phase ?? phase };
+			})
+			.catch(() => {
+				if (revision === this.exposurePreviewRevision && this.refinementRevision === null) {
+					this.releaseExposurePreview();
+				}
+			});
+	}
+
+	private showExposurePreview(phase: ExposurePreviewPhase) {
+		if (!this.selectedPhoto) return;
+		this.exposurePreview = {
+			photoId: this.selectedPhoto.id,
+			src: this.exposurePreviewUrl,
+			phase
+		};
+	}
+
+	private replaceExposurePreviewUrl(src: string) {
+		if (this.exposurePreviewUrl) {
+			URL.revokeObjectURL(this.exposurePreviewUrl);
+			this.objectUrls.delete(this.exposurePreviewUrl);
+		}
+		this.exposurePreviewUrl = src;
+		this.objectUrls.add(src);
+	}
+
+	private releaseExposurePreview() {
+		this.clearExposurePreviewTimer();
+		this.exposurePreviewRevision += 1;
+		this.refinementRevision = null;
+		if (this.exposurePreviewUrl) {
+			URL.revokeObjectURL(this.exposurePreviewUrl);
+			this.objectUrls.delete(this.exposurePreviewUrl);
+		}
+		this.exposurePreviewUrl = null;
+		this.exposurePreview = null;
+	}
+
+	private clearExposurePreviewTimer() {
+		if (this.exposurePreviewTimer === null) return;
+		clearTimeout(this.exposurePreviewTimer);
+		this.exposurePreviewTimer = null;
 	}
 
 	private applyDevelopSettings(settings: DevelopSettings) {
@@ -706,19 +778,20 @@ export class WorkspaceState {
 		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
 	}
 
+	private refineDevelopSettings(settings: DevelopSettings) {
+		this.requestExposurePreview(settings.exposure, 'refining');
+		this.applyDevelopSettings(settings);
+		this.refinementRevision = this.renderSettings.revision;
+	}
+
 	private syncHistory() {
 		this.history = ['imported', ...this.developHistory.labels];
 		this.canUndo = this.developHistory.canUndo;
 		this.canRedo = this.developHistory.canRedo;
 	}
 
-	private clearExposureRender() {
-		if (this.exposureRenderTimer === null) return;
-		clearTimeout(this.exposureRenderTimer);
-		this.exposureRenderTimer = null;
-	}
-
 	private clearFiles() {
+		this.releaseExposurePreview();
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
 		this.thumbnailLoads.clear();
