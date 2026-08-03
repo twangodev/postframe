@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
 	defaultDevelopSettings,
+	defaultLightSettings,
 	developSettingsSchema,
 	developStorageName
 } from '../src/lib/develop-settings.ts';
@@ -18,6 +19,14 @@ test('provides an independent neutral light snapshot', () => {
 		blacks: 0
 	});
 	assert.notEqual(defaultDevelopSettings(), defaultDevelopSettings());
+	assert.deepEqual(defaultLightSettings(), {
+		exposure: 0,
+		contrast: 0,
+		highlights: 0,
+		shadows: 0,
+		whites: 0,
+		blacks: 0
+	});
 	assert.equal(developStorageName('photo-one'), 'photo-one.json');
 });
 

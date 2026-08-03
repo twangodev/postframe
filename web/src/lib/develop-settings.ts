@@ -2,8 +2,7 @@ import { z } from 'zod';
 
 export const DEVELOP_SETTINGS_VERSION = 1;
 
-export const developSettingsSchema = z.object({
-	version: z.literal(DEVELOP_SETTINGS_VERSION),
+export const lightSettingsSchema = z.object({
 	exposure: z.number().finite().min(-4).max(4),
 	contrast: z.number().finite().min(-100).max(100),
 	highlights: z.number().finite().min(-100).max(100),
@@ -12,8 +11,12 @@ export const developSettingsSchema = z.object({
 	blacks: z.number().finite().min(-100).max(100)
 });
 
+export const developSettingsSchema = lightSettingsSchema.extend({
+	version: z.literal(DEVELOP_SETTINGS_VERSION)
+});
+
 export type DevelopSettings = z.infer<typeof developSettingsSchema>;
-export type LightSettings = Omit<DevelopSettings, 'version'>;
+export type LightSettings = z.infer<typeof lightSettingsSchema>;
 
 export const LIGHT_CONTROL_NAMES = [
 	'exposure',
@@ -26,9 +29,8 @@ export const LIGHT_CONTROL_NAMES = [
 
 export type LightControlName = (typeof LIGHT_CONTROL_NAMES)[number];
 
-export function defaultDevelopSettings(): DevelopSettings {
+export function defaultLightSettings(): LightSettings {
 	return {
-		version: DEVELOP_SETTINGS_VERSION,
 		exposure: 0,
 		contrast: 0,
 		highlights: 0,
@@ -36,6 +38,10 @@ export function defaultDevelopSettings(): DevelopSettings {
 		whites: 0,
 		blacks: 0
 	};
+}
+
+export function defaultDevelopSettings(): DevelopSettings {
+	return { version: DEVELOP_SETTINGS_VERSION, ...defaultLightSettings() };
 }
 
 export function lightSettings(settings: DevelopSettings): LightSettings {
