@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Slider } from 'bits-ui';
+	import { onDestroy } from 'svelte';
 
 	interface Props {
 		label: string;
@@ -33,6 +34,8 @@
 
 	let editing = $state(false);
 	let draft = $state('');
+	let wheelCommitTimer: ReturnType<typeof setTimeout> | undefined;
+	let wheelCommitPending = false;
 
 	const format = (candidate: number) =>
 		`${signed && candidate > 0 ? '+' : ''}${candidate.toFixed(decimals)}${suffix}`;
@@ -51,12 +54,43 @@
 		return fraction.length;
 	}
 
-	function apply(candidate: number) {
+	function updateValue(candidate: number) {
 		const next = normalize(candidate);
-		if (next === value) return;
+		if (next === value) return null;
 		value = next;
 		onValueChange(next);
+		return next;
+	}
+
+	function apply(candidate: number) {
+		flushWheelCommit();
+		const next = updateValue(candidate);
+		if (next === null) return;
 		onValueCommit(next);
+	}
+
+	function scheduleWheelCommit() {
+		if (wheelCommitTimer !== undefined) clearTimeout(wheelCommitTimer);
+		wheelCommitPending = true;
+		wheelCommitTimer = setTimeout(flushWheelCommit, 180);
+	}
+
+	function flushWheelCommit() {
+		if (wheelCommitTimer !== undefined) clearTimeout(wheelCommitTimer);
+		wheelCommitTimer = undefined;
+		if (!wheelCommitPending) return;
+		wheelCommitPending = false;
+		onValueCommit(value);
+	}
+
+	function handleWheel(event: WheelEvent) {
+		if (disabled || event.deltaY === 0 || event.ctrlKey || event.metaKey) return;
+		event.preventDefault();
+		const next = updateValue(value + (event.deltaY < 0 ? step : -step));
+		if (next === null) return;
+		editing = false;
+		draft = '';
+		scheduleWheelCommit();
 	}
 
 	function reset(event: MouseEvent) {
@@ -67,6 +101,7 @@
 	}
 
 	function beginEditing(event: FocusEvent & { currentTarget: HTMLInputElement }) {
+		flushWheelCommit();
 		editing = true;
 		draft = value.toFixed(decimals);
 		const input = event.currentTarget;
@@ -100,6 +135,8 @@
 			event.currentTarget.blur();
 		}
 	}
+
+	onDestroy(flushWheelCommit);
 </script>
 
 <div
@@ -139,10 +176,12 @@
 		value={inputValue}
 		{disabled}
 		spellcheck="false"
+		title={`scroll to adjust ${label.toLowerCase()}`}
 		onfocus={beginEditing}
 		oninput={updateDraft}
 		onblur={commitDraft}
 		onkeydown={handleKeydown}
+		onwheel={handleWheel}
 		class="border-subtle/0 hover:border-subtle focus:border-muted focus:bg-surface text-muted h-5 w-full rounded border bg-transparent px-1 text-right font-mono text-[10px] tabular-nums transition-colors outline-none disabled:cursor-default"
 	/>
 </div>

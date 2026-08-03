@@ -36,4 +36,10 @@ test('switches scope modes and edits adjustment values', async ({ page }) => {
 
 	await page.getByRole('slider', { name: 'Contrast' }).dblclick();
 	await expect(value).toHaveValue('0');
+
+	await value.hover();
+	await page.mouse.wheel(0, -100);
+	await expect(value).toHaveValue('+1');
+	await page.mouse.wheel(0, 100);
+	await expect(value).toHaveValue('0');
 });
