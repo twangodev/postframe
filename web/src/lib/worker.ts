@@ -44,6 +44,15 @@ export interface DevelopProgress {
 	activeFrame: number;
 }
 
+export type RenderPerformanceStage =
+	'file-read' | 'raw-decode' | 'display-decode' | 'merge' | 'preview' | 'tile';
+
+export interface RenderPerformanceMeasurement {
+	stage: RenderPerformanceStage;
+	durationMs: number;
+	detail?: string;
+}
+
 export interface RenderTileRequest {
 	x: number;
 	y: number;
@@ -79,6 +88,7 @@ export type Request =
 	| { id: number; type: 'close' };
 
 export type Response =
+	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
 	| ({ id: number; type: 'progress' } & DevelopProgress)
 	| { id: number; type: 'capabilities'; rawExtensions: string[] }
 	| { id: number; type: 'validated' }
@@ -123,6 +133,7 @@ type ActiveDocument = RawDocument | DisplayDocument;
 
 const ready = init({ module_or_path: wasmUrl });
 let document: ActiveDocument | null = null;
+const performanceEnabled = new URL(self.location.href).searchParams.has('perf');
 
 const post = (message: Response, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);
@@ -136,7 +147,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				post({ id: message.id, type: 'capabilities', rawExtensions: supported_raw_extensions() });
 				break;
 			case 'validate':
-				validate_raw(new Uint8Array(message.raw));
+				measure('raw-decode', () => validate_raw(new Uint8Array(message.raw)), 'validation');
 				post({ id: message.id, type: 'validated' });
 				break;
 			case 'inspect':
@@ -149,7 +160,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				await openDisplayDocument(message);
 				break;
 			case 'tile': {
-				const png = await renderTile(activeDocument(), message);
+				const png = await measureAsync('tile', () => renderTile(activeDocument(), message));
 				post({ id: message.id, type: 'tile', png }, [png]);
 				break;
 			}
@@ -188,7 +199,11 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 };
 
 function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
-	const result = inspect_raw(new Uint8Array(message.raw), message.maxDimension);
+	const result = measure(
+		'raw-decode',
+		() => inspect_raw(new Uint8Array(message.raw), message.maxDimension),
+		'inspection'
+	);
 	try {
 		const thumbnailJpeg = result.thumbnail_jpeg.buffer as ArrayBuffer;
 		post(
@@ -249,28 +264,42 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 			const activeFrame = index + 1;
 			const frameStart = bytesRead;
 			progress('reading', activeFrame);
-			const raw = await readFile(frame.raw, sizes[index].raw, (completed) => {
-				bytesRead = frameStart + completed;
-				progress('reading', activeFrame);
-			});
+			const raw = await measureAsync(
+				'file-read',
+				() =>
+					readFile(frame.raw, sizes[index].raw, (completed) => {
+						bytesRead = frameStart + completed;
+						progress('reading', activeFrame);
+					}),
+				frame.raw.name
+			);
 			const jpegStart = bytesRead;
 			const jpeg = frame.jpeg
-				? await readFile(frame.jpeg, sizes[index].jpeg, (completed) => {
-						bytesRead = jpegStart + completed;
-						progress('reading', activeFrame);
-					})
+				? await measureAsync(
+						'file-read',
+						() =>
+							readFile(frame.jpeg!, sizes[index].jpeg, (completed) => {
+								bytesRead = jpegStart + completed;
+								progress('reading', activeFrame);
+							}),
+						frame.jpeg.name
+					)
 				: undefined;
 			progress('decoding', activeFrame);
-			session.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined);
+			measure(
+				'raw-decode',
+				() => session.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined),
+				frame.raw.name
+			);
 			framesDecoded = activeFrame;
 			progress('decoding', activeFrame);
 		}
 
 		progress('merging', message.frames.length);
-		session.merge(message.maxDimension);
+		measure('merge', () => session.merge(message.maxDimension));
 		progress('rendering', message.frames.length);
 		document = { kind: 'raw', session };
-		const preview = renderRawPreview(session, message.settings, true);
+		const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
 		post(
 			{
 				id: message.id,
@@ -295,7 +324,11 @@ async function openDisplayDocument(message: Extract<Request, { type: 'open-displ
 	closeDocument();
 	const source = await message.source.getFile();
 	postDisplayProgress(message, 'reading', 0, source.size);
-	const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
+	const bitmap = await measureAsync(
+		'display-decode',
+		() => createImageBitmap(source, { imageOrientation: 'from-image' }),
+		source.name
+	);
 	const light = new DisplayTransform(...lightArguments(message.settings));
 	try {
 		postDisplayProgress(message, 'decoding', source.size, source.size);
@@ -309,7 +342,9 @@ async function openDisplayDocument(message: Extract<Request, { type: 'open-displ
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);
-		const rendered = await renderDisplayPreview(next, message.settings);
+		const rendered = await measureAsync('preview', () =>
+			renderDisplayPreview(next, message.settings)
+		);
 		post(
 			{
 				id: message.id,
@@ -576,4 +611,35 @@ function closeDocument() {
 		document.bitmap.close();
 	}
 	document = null;
+}
+
+function measure<T>(stage: RenderPerformanceStage, operation: () => T, detail?: string): T {
+	const startedAt = performance.now();
+	try {
+		return operation();
+	} finally {
+		postMeasurement(stage, startedAt, detail);
+	}
+}
+
+async function measureAsync<T>(
+	stage: RenderPerformanceStage,
+	operation: () => Promise<T>,
+	detail?: string
+): Promise<T> {
+	const startedAt = performance.now();
+	try {
+		return await operation();
+	} finally {
+		postMeasurement(stage, startedAt, detail);
+	}
+}
+
+function postMeasurement(stage: RenderPerformanceStage, startedAt: number, detail?: string) {
+	if (!performanceEnabled) return;
+	post({
+		id: 0,
+		type: 'performance',
+		measurement: { stage, durationMs: performance.now() - startedAt, detail }
+	});
 }

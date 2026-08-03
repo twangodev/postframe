@@ -1,4 +1,10 @@
-import type { RawFrameHandleInput, RenderTileRequest, Request, Response } from './worker';
+import type {
+	RawFrameHandleInput,
+	RenderPerformanceMeasurement,
+	RenderTileRequest,
+	Request,
+	Response
+} from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
 import type { LightSettings } from './develop-settings.ts';
 
@@ -32,6 +38,7 @@ interface RenderedPreview {
 }
 
 export type ProgressListener = (progress: ProgressResponse) => void;
+export type PerformanceListener = (measurement: RenderPerformanceMeasurement) => void;
 
 type WorkerFactory = () => Worker;
 
@@ -40,15 +47,13 @@ export class PostframeWorkerClient {
 	private readonly workerFactory: WorkerFactory;
 	private readonly pending = new Map<number, PendingRequest>();
 	private readonly progressListeners = new Set<ProgressListener>();
+	private readonly performanceListeners = new Set<PerformanceListener>();
 	private nextRequestId = 1;
 	private destroyed = false;
 	private previewInFlight = false;
 	private queuedPreview: QueuedPreview | null = null;
 
-	constructor(
-		workerFactory: WorkerFactory = () =>
-			new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
-	) {
+	constructor(workerFactory: WorkerFactory = createWorker) {
 		this.workerFactory = workerFactory;
 		this.worker = this.workerFactory();
 		this.attachWorker();
@@ -138,6 +143,11 @@ export class PostframeWorkerClient {
 		return () => this.progressListeners.delete(listener);
 	}
 
+	onPerformance(listener: PerformanceListener) {
+		this.performanceListeners.add(listener);
+		return () => this.performanceListeners.delete(listener);
+	}
+
 	restart(reason = 'Postframe worker restarted') {
 		if (this.destroyed) return;
 		this.detachWorker();
@@ -156,6 +166,7 @@ export class PostframeWorkerClient {
 		this.rejectPending(new Error('Postframe worker closed'));
 		this.rejectQueuedPreview(new Error('Postframe worker closed'));
 		this.progressListeners.clear();
+		this.performanceListeners.clear();
 	}
 
 	private send<Type extends CompletionType>(
@@ -209,6 +220,11 @@ export class PostframeWorkerClient {
 
 	private handleMessage = (event: MessageEvent<Response>) => {
 		const response = event.data;
+		if (response.type === 'performance') {
+			this.recordPerformance(response.measurement);
+			for (const listener of this.performanceListeners) listener(response.measurement);
+			return;
+		}
 		if (response.type === 'progress') {
 			for (const listener of this.progressListeners) listener(response);
 			return;
@@ -228,6 +244,15 @@ export class PostframeWorkerClient {
 		}
 		pending.resolve(response);
 	};
+
+	private recordPerformance(measurement: RenderPerformanceMeasurement) {
+		if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return;
+		performance.measure(`postframe:${measurement.stage}`, {
+			start: Math.max(0, performance.now() - measurement.durationMs),
+			duration: measurement.durationMs,
+			detail: measurement.detail
+		});
+	}
 
 	private handleWorkerError = (event: ErrorEvent) => {
 		this.rejectPending(new Error(event.message || 'Postframe worker failed'));
@@ -253,6 +278,18 @@ export class PostframeWorkerClient {
 		for (const waiter of this.queuedPreview.waiters) waiter.reject(error);
 		this.queuedPreview = null;
 	}
+}
+
+function createWorker() {
+	const url = new URL('./worker.ts', import.meta.url);
+	if (
+		import.meta.env.DEV &&
+		typeof location !== 'undefined' &&
+		new URLSearchParams(location.search).has('perf')
+	) {
+		url.searchParams.set('perf', '');
+	}
+	return new Worker(url, { type: 'module' });
 }
 
 function openedDocument(response: Extract<Response, { type: 'opened' }>) {

@@ -97,6 +97,26 @@ test('reports document progress before resolving the developed preview', async (
 	client.destroy();
 });
 
+test('reports worker performance measurements without consuming pending requests', async () => {
+	const { client, workers } = setup();
+	const measurements: Extract<Response, { type: 'performance' }>['measurement'][] = [];
+	client.onPerformance((measurement) => measurements.push(measurement));
+	const capabilities = client.capabilities();
+
+	workers[0]?.respond({
+		id: 0,
+		type: 'performance',
+		measurement: { stage: 'raw-decode', durationMs: 14.5, detail: 'portrait.raf' }
+	});
+	workers[0]?.respond({ id: 1, type: 'capabilities', rawExtensions: ['raf'] });
+
+	assert.equal((await capabilities).rawExtensions[0], 'raf');
+	assert.deepEqual(measurements, [
+		{ stage: 'raw-decode', durationMs: 14.5, detail: 'portrait.raf' }
+	]);
+	client.destroy();
+});
+
 test('restarting cancels stale work and accepts requests on a fresh worker', async () => {
 	const { client, workers } = setup();
 	const pending = client.capabilities();
