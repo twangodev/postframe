@@ -33,7 +33,7 @@ import {
 } from './browser-storage';
 import { defaultDevelopSettings, type DevelopSettings } from './develop-settings';
 import { DevelopHistory } from './develop-history';
-import type { ImageScopeData } from './image-scope';
+import { imageScopeFromRgba, type ImageScopeData } from './image-scope';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -660,6 +660,8 @@ export class WorkspaceState {
 		if (!store || !display) throw new Error('Display original is unavailable');
 		const file = await store.readOriginal(display.storageName);
 		if (revision !== this.documentRevision) return;
+		const scope = await displayImageScope(file);
+		if (revision !== this.documentRevision) return;
 		const src = URL.createObjectURL(file);
 		this.objectUrls.add(src);
 		this.editPreview = {
@@ -667,6 +669,7 @@ export class WorkspaceState {
 			width: photo.width ?? 1,
 			height: photo.height ?? 1
 		};
+		this.imageScope = scope;
 		this.documentStatus = { kind: 'ready', photoId: photo.id, boostStops: null };
 	}
 
@@ -1332,6 +1335,30 @@ function previewDimension() {
 	if (typeof window === 'undefined') return 2048;
 	const longestSide = Math.max(window.innerWidth, window.innerHeight) * window.devicePixelRatio;
 	return Math.round(Math.min(2560, Math.max(1024, longestSide)));
+}
+
+async function displayImageScope(file: Blob): Promise<ImageScopeData | null> {
+	try {
+		const bitmap = await createImageBitmap(file);
+		try {
+			const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+			const canvas = document.createElement('canvas');
+			canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+			canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+			const context = canvas.getContext('2d', { willReadFrequently: true });
+			if (!context) return null;
+			context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+			return imageScopeFromRgba(
+				context.getImageData(0, 0, canvas.width, canvas.height).data,
+				canvas.width,
+				canvas.height
+			);
+		} finally {
+			bitmap.close();
+		}
+	} catch {
+		return null;
+	}
 }
 
 function developProgress(progress: DevelopProgress) {

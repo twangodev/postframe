@@ -1,5 +1,9 @@
 export const HISTOGRAM_BINS = 256;
 export const SCOPE_CHANNELS = 4;
+export const WAVEFORM_WIDTH = 256;
+export const WAVEFORM_HEIGHT = 128;
+
+const SAMPLE_TARGET = 750_000;
 
 export interface ImageScopeTransfer {
 	histogram: ArrayBuffer;
@@ -39,4 +43,43 @@ export function imageScopeFromTransfer(scope: ImageScopeTransfer): ImageScopeDat
 		waveformHeight: scope.waveformHeight,
 		sampleCount: scope.sampleCount
 	};
+}
+
+export function imageScopeFromRgba(rgba: Uint8ClampedArray, width: number, height: number) {
+	if (width <= 0 || height <= 0 || rgba.length !== width * height * 4) {
+		throw new Error('Scope pixel buffer has an unexpected size');
+	}
+	const pixelCount = width * height;
+	const stride = Math.max(1, Math.ceil(Math.sqrt(pixelCount / SAMPLE_TARGET)));
+	const histogram = new Uint32Array(SCOPE_CHANNELS * HISTOGRAM_BINS);
+	const waveform = new Uint16Array(SCOPE_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT);
+	let sampleCount = 0;
+
+	for (let y = 0; y < height; y += stride) {
+		for (let x = 0; x < width; x += stride) {
+			const offset = (y * width + x) * 4;
+			const red = rgba[offset] ?? 0;
+			const green = rgba[offset + 1] ?? 0;
+			const blue = rgba[offset + 2] ?? 0;
+			const luma = (54 * red + 183 * green + 19 * blue) >> 8;
+			const scopeX = Math.floor((x * WAVEFORM_WIDTH) / width);
+
+			for (const [channel, value] of [red, green, blue, luma].entries()) {
+				histogram[channel * HISTOGRAM_BINS + value] += 1;
+				const scopeY =
+					WAVEFORM_HEIGHT - 1 - Math.floor((value * (WAVEFORM_HEIGHT - 1)) / (HISTOGRAM_BINS - 1));
+				const index = channel * WAVEFORM_WIDTH * WAVEFORM_HEIGHT + scopeY * WAVEFORM_WIDTH + scopeX;
+				waveform[index] = Math.min(65_535, waveform[index] + 1);
+			}
+			sampleCount += 1;
+		}
+	}
+
+	return {
+		histogram,
+		waveform,
+		waveformWidth: WAVEFORM_WIDTH,
+		waveformHeight: WAVEFORM_HEIGHT,
+		sampleCount
+	} satisfies ImageScopeData;
 }

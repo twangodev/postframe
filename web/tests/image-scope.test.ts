@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { imageScopeFromTransfer } from '../src/lib/image-scope.ts';
+import { imageScopeFromRgba, imageScopeFromTransfer } from '../src/lib/image-scope.ts';
+
+test('measures tonal and spatial density from display pixels', () => {
+	const scope = imageScopeFromRgba(new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255]), 2, 1);
+
+	for (let channel = 0; channel < 4; channel += 1) {
+		assert.equal(scope.histogram[channel * 256], 1);
+		assert.equal(scope.histogram[channel * 256 + 255], 1);
+	}
+	assert.equal(scope.sampleCount, 2);
+});
 
 test('restores transferred histogram and waveform buffers', () => {
 	const histogram = new Uint32Array(4 * 256);
@@ -34,4 +44,5 @@ test('rejects malformed scope transfers', () => {
 			}),
 		/unexpected size/
 	);
+	assert.throws(() => imageScopeFromRgba(new Uint8ClampedArray(4), 2, 1), /unexpected size/);
 });

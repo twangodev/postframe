@@ -115,7 +115,7 @@ export const WASM_TODOS = {
 	metadata: {
 		scope: 'Read real capture, camera, lens, exposure, dimensions, histogram, and color data.',
 		bindings: ['inspect_raw', 'add_frame', 'width', 'height', 'preview_frame'],
-		planned: ['display EXIF parser', 'display image scope']
+		planned: ['display EXIF parser']
 	},
 	generative: {
 		scope: 'Run a model-backed edit and composite its result into the active document.',

@@ -1058,7 +1058,6 @@
 				<Tabs.Content value="adjust" class="motion-tab">
 					<!-- TODO(WASM_TODOS.adjustments): connect the remaining sliders to the renderer. -->
 					<div class="border-subtle border-b p-3">
-						<!-- TODO(WASM_TODOS.metadata): analyze rendered-only photos through the display image scope path. -->
 						<ImageScope
 							data={workspace.imageScope}
 							loading={workspace.documentStatus.kind === 'loading'}
