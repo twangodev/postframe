@@ -1134,6 +1134,7 @@
 							min={2000}
 							max={12000}
 							step={50}
+							defaultValue={5600}
 							suffix="K"
 							signed={false}
 						/>
@@ -1190,6 +1191,7 @@
 							bind:value={workspace.adjustments.sharpening}
 							min={0}
 							max={100}
+							defaultValue={40}
 							signed={false}
 						/>
 						<AdjustmentSlider
@@ -1197,6 +1199,7 @@
 							bind:value={workspace.adjustments.noiseReduction}
 							min={0}
 							max={100}
+							defaultValue={10}
 							signed={false}
 						/>
 					</Panel>
