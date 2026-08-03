@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { ToggleGroup } from 'bits-ui';
 	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import type { ImageScopeData, ImageScopeMode } from '$lib/image-scope';
-	import { renderImageScope } from '$lib/image-scope-canvas';
+	import { renderWaveformScope } from '$lib/image-scope-canvas';
 
 	interface Props {
 		data?: ImageScopeData | null;
@@ -16,9 +17,11 @@
 	let animationFrame: number | null = null;
 	let painted = false;
 	let paintedSize = '';
-	let reduceMotion = false;
+	let reduceMotion = $state(false);
+	let Histogram = $state<typeof import('./ImageHistogram.svelte').default>();
 
 	const label = $derived(mode === 'waveform' ? 'RGB waveform scope' : 'RGB histogram scope');
+	const histogramReady = $derived(mode === 'histogram' && Histogram !== undefined);
 	const footer = $derived(
 		mode === 'waveform'
 			? { start: '0', center: 'waveform', end: '100' }
@@ -48,10 +51,15 @@
 
 	$effect(() => {
 		const scope = data;
-		const scopeMode = mode;
 		const { width, height } = dimensions;
 		if (!canvas || width === 0 || height === 0) return;
-		transitionTo(renderImageScope(canvas, scope, scopeMode, width, height), width, height);
+		transitionTo(renderWaveformScope(canvas, scope, width, height), width, height);
+	});
+
+	$effect(() => {
+		if (mode === 'histogram' && !Histogram) {
+			import('./ImageHistogram.svelte').then(({ default: component }) => (Histogram = component));
+		}
 	});
 
 	function selectMode(value: string) {
@@ -123,7 +131,17 @@
 		title={data ? `${data.sampleCount.toLocaleString()} preview samples` : label}
 		class="bg-canvas border-subtle relative h-28 overflow-hidden rounded-sm border"
 	>
-		<canvas bind:this={canvas} aria-hidden="true" class="size-full"></canvas>
+		<canvas
+			bind:this={canvas}
+			aria-hidden="true"
+			class:opacity-0={histogramReady}
+			class="size-full transition-opacity duration-150"
+		></canvas>
+		{#if histogramReady && Histogram && data}
+			<div class="absolute inset-0" transition:fade={{ duration: reduceMotion ? 0 : 140 }}>
+				<Histogram {data} {reduceMotion} />
+			</div>
+		{/if}
 		{#if !data}
 			<div
 				class="text-muted/55 pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] tracking-[0.04em] lowercase"

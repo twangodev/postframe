@@ -1,9 +1,8 @@
-import { HISTOGRAM_BINS, type ImageScopeData, type ImageScopeMode } from './image-scope.ts';
+import type { ImageScopeData } from './image-scope.ts';
 
-export function renderImageScope(
+export function renderWaveformScope(
 	host: HTMLCanvasElement,
 	scope: ImageScopeData | null,
-	mode: ImageScopeMode,
 	width: number,
 	height: number
 ) {
@@ -14,8 +13,7 @@ export function renderImageScope(
 	if (!context) return target;
 	drawGrid(context, width, height);
 	if (!scope) return target;
-	if (mode === 'waveform') drawWaveform(context, target, scope, width, height);
-	else drawHistogram(context, scope, width, height);
+	drawWaveform(context, target, scope, width, height);
 	return target;
 }
 
@@ -82,79 +80,4 @@ function drawWaveform(
 
 function densityLevel(count: number, logarithmicPeak: number) {
 	return count === 0 ? 0 : Math.pow(Math.log1p(count) / logarithmicPeak, 0.78);
-}
-
-function drawHistogram(
-	context: CanvasRenderingContext2D,
-	scope: ImageScopeData,
-	width: number,
-	height: number
-) {
-	let peak = 0;
-	for (const count of scope.histogram) peak = Math.max(peak, count);
-	const logarithmicPeak = Math.log1p(Math.max(1, peak));
-	const channels = [
-		{ index: 3, color: '#e8e5df', fill: 0.07, line: 0.36 },
-		{ index: 0, color: '#ff5968', fill: 0.1, line: 0.82 },
-		{ index: 1, color: '#62d979', fill: 0.09, line: 0.78 },
-		{ index: 2, color: '#5f83ff', fill: 0.11, line: 0.86 }
-	];
-	for (const channel of channels) {
-		const values = scope.histogram.subarray(
-			channel.index * HISTOGRAM_BINS,
-			(channel.index + 1) * HISTOGRAM_BINS
-		);
-		const paths = histogramPaths(values, logarithmicPeak, width, height);
-		context.save();
-		context.globalCompositeOperation = 'screen';
-		context.fillStyle = channel.color;
-		context.globalAlpha = channel.fill;
-		context.fill(paths.fill);
-		context.globalAlpha = channel.line;
-		context.strokeStyle = channel.color;
-		context.lineWidth = Math.max(1, width / 280);
-		context.shadowColor = channel.color;
-		context.shadowBlur = Math.max(2, width / 90);
-		context.stroke(paths.trace);
-		context.restore();
-	}
-}
-
-function histogramPaths(
-	values: Uint32Array,
-	logarithmicPeak: number,
-	width: number,
-	height: number
-) {
-	const fill = new Path2D();
-	const trace = new Path2D();
-	const bottom = height;
-	const verticalPadding = Math.max(3, height * 0.04);
-	const availableHeight = height - verticalPadding * 2;
-	const point = (index: number) => ({
-		x: (index / (HISTOGRAM_BINS - 1)) * width,
-		y:
-			height -
-			verticalPadding -
-			(Math.log1p(values[index] ?? 0) / logarithmicPeak) * availableHeight
-	});
-	let previous = point(0);
-	fill.moveTo(0, bottom);
-	fill.lineTo(previous.x, previous.y);
-	trace.moveTo(previous.x, previous.y);
-	for (let index = 1; index < HISTOGRAM_BINS; index += 1) {
-		const current = point(index);
-		const midpoint = {
-			x: (previous.x + current.x) / 2,
-			y: (previous.y + current.y) / 2
-		};
-		fill.quadraticCurveTo(previous.x, previous.y, midpoint.x, midpoint.y);
-		trace.quadraticCurveTo(previous.x, previous.y, midpoint.x, midpoint.y);
-		previous = current;
-	}
-	fill.lineTo(previous.x, previous.y);
-	trace.lineTo(previous.x, previous.y);
-	fill.lineTo(width, bottom);
-	fill.closePath();
-	return { fill, trace };
 }

@@ -27,6 +27,7 @@ test('switches scope modes and edits adjustment values', async ({ page }) => {
 	await expect(page.getByText('scope unavailable')).toHaveCount(0);
 	await page.getByRole('radio', { name: 'Histogram scope' }).click();
 	await expect(page.getByRole('img', { name: 'RGB histogram scope' })).toBeVisible();
+	await expect(page.locator('.lc-path')).toHaveCount(4);
 
 	const value = page.getByRole('textbox', { name: 'Contrast value' });
 	await value.fill('37');
