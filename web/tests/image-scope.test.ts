@@ -10,12 +10,13 @@ test('measures tonal and spatial density from display pixels', () => {
 		assert.equal(scope.histogram[channel * 256], 1);
 		assert.equal(scope.histogram[channel * 256 + 255], 1);
 	}
+	assert.equal(scope.waveform.length, 3 * 512 * 256);
 	assert.equal(scope.sampleCount, 2);
 });
 
 test('restores transferred histogram and waveform buffers', () => {
 	const histogram = new Uint32Array(4 * 256);
-	const waveform = new Uint16Array(4 * 16 * 8);
+	const waveform = new Uint16Array(3 * 16 * 8);
 	histogram[255] = 12;
 	waveform[15] = 7;
 

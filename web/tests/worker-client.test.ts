@@ -7,9 +7,9 @@ import type { Request, Response } from '../src/lib/worker.ts';
 function scopeTransfer() {
 	return {
 		histogram: new Uint32Array(4 * 256).buffer,
-		waveform: new Uint16Array(4 * 256 * 128).buffer,
-		waveformWidth: 256,
-		waveformHeight: 128,
+		waveform: new Uint16Array(3 * 512 * 256).buffer,
+		waveformWidth: 512,
+		waveformHeight: 256,
 		sampleCount: 512
 	};
 }
@@ -77,7 +77,7 @@ test('reports document progress before resolving the developed preview', async (
 	const result = await opened;
 	assert.equal(result.jpeg.byteLength, 12);
 	assert.equal(result.scope.histogram.length, 4 * 256);
-	assert.equal(result.scope.waveform.length, 4 * 256 * 128);
+	assert.equal(result.scope.waveform.length, 3 * 512 * 256);
 	assert.equal(result.scope.sampleCount, 512);
 	assert.equal(result.boostStops, 1.5);
 	assert.equal(result.width, 6240);

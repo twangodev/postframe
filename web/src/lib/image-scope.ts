@@ -1,7 +1,8 @@
 export const HISTOGRAM_BINS = 256;
-export const SCOPE_CHANNELS = 4;
-export const WAVEFORM_WIDTH = 256;
-export const WAVEFORM_HEIGHT = 128;
+export const HISTOGRAM_CHANNELS = 4;
+export const WAVEFORM_CHANNELS = 3;
+export const WAVEFORM_WIDTH = 512;
+export const WAVEFORM_HEIGHT = 256;
 
 const SAMPLE_TARGET = 750_000;
 
@@ -26,13 +27,13 @@ export type ImageScopeMode = 'waveform' | 'histogram';
 export function imageScopeFromTransfer(scope: ImageScopeTransfer): ImageScopeData {
 	const histogram = new Uint32Array(scope.histogram);
 	const waveform = new Uint16Array(scope.waveform);
-	if (histogram.length !== SCOPE_CHANNELS * HISTOGRAM_BINS) {
+	if (histogram.length !== HISTOGRAM_CHANNELS * HISTOGRAM_BINS) {
 		throw new Error('Scope histogram has an unexpected size');
 	}
 	if (
 		scope.waveformWidth <= 0 ||
 		scope.waveformHeight <= 0 ||
-		waveform.length !== SCOPE_CHANNELS * scope.waveformWidth * scope.waveformHeight
+		waveform.length !== WAVEFORM_CHANNELS * scope.waveformWidth * scope.waveformHeight
 	) {
 		throw new Error('Scope waveform has an unexpected size');
 	}
@@ -51,8 +52,8 @@ export function imageScopeFromRgba(rgba: Uint8ClampedArray, width: number, heigh
 	}
 	const pixelCount = width * height;
 	const stride = Math.max(1, Math.ceil(Math.sqrt(pixelCount / SAMPLE_TARGET)));
-	const histogram = new Uint32Array(SCOPE_CHANNELS * HISTOGRAM_BINS);
-	const waveform = new Uint16Array(SCOPE_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT);
+	const histogram = new Uint32Array(HISTOGRAM_CHANNELS * HISTOGRAM_BINS);
+	const waveform = new Uint16Array(WAVEFORM_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT);
 	let sampleCount = 0;
 
 	for (let y = 0; y < height; y += stride) {
@@ -66,6 +67,9 @@ export function imageScopeFromRgba(rgba: Uint8ClampedArray, width: number, heigh
 
 			for (const [channel, value] of [red, green, blue, luma].entries()) {
 				histogram[channel * HISTOGRAM_BINS + value] += 1;
+			}
+
+			for (const [channel, value] of [red, green, blue].entries()) {
 				const scopeY =
 					WAVEFORM_HEIGHT - 1 - Math.floor((value * (WAVEFORM_HEIGHT - 1)) / (HISTOGRAM_BINS - 1));
 				const index = channel * WAVEFORM_WIDTH * WAVEFORM_HEIGHT + scopeY * WAVEFORM_WIDTH + scopeX;

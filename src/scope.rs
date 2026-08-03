@@ -1,9 +1,10 @@
 use crate::{Error, Result};
 
 pub const HISTOGRAM_BINS: usize = 256;
-pub const SCOPE_CHANNELS: usize = 4;
-pub const WAVEFORM_WIDTH: usize = 256;
-pub const WAVEFORM_HEIGHT: usize = 128;
+pub const HISTOGRAM_CHANNELS: usize = 4;
+pub const WAVEFORM_CHANNELS: usize = 3;
+pub const WAVEFORM_WIDTH: usize = 512;
+pub const WAVEFORM_HEIGHT: usize = 256;
 
 const SAMPLE_TARGET: usize = 750_000;
 
@@ -27,8 +28,8 @@ impl ImageScope {
         }
 
         let stride = ((pixel_count as f64 / SAMPLE_TARGET as f64).sqrt().ceil() as usize).max(1);
-        let mut histogram = vec![0; SCOPE_CHANNELS * HISTOGRAM_BINS];
-        let mut waveform = vec![0u16; SCOPE_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT];
+        let mut histogram = vec![0; HISTOGRAM_CHANNELS * HISTOGRAM_BINS];
+        let mut waveform = vec![0u16; WAVEFORM_CHANNELS * WAVEFORM_WIDTH * WAVEFORM_HEIGHT];
         let mut sample_count = 0;
 
         for y in (0..height).step_by(stride) {
@@ -42,6 +43,9 @@ impl ImageScope {
 
                 for (channel, value) in [red, green, blue, luma].into_iter().enumerate() {
                     histogram[channel * HISTOGRAM_BINS + value as usize] += 1;
+                }
+
+                for (channel, value) in [red, green, blue].into_iter().enumerate() {
                     let scope_y = WAVEFORM_HEIGHT
                         - 1
                         - value as usize * (WAVEFORM_HEIGHT - 1) / (HISTOGRAM_BINS - 1);
@@ -82,13 +86,15 @@ mod tests {
     fn measures_tonal_distribution_and_spatial_density() {
         let scope = ImageScope::analyze(&[0, 0, 0, 255, 255, 255], 2, 1).unwrap();
 
-        for channel in 0..SCOPE_CHANNELS {
+        for channel in 0..HISTOGRAM_CHANNELS {
             let histogram =
                 &scope.histogram[channel * HISTOGRAM_BINS..(channel + 1) * HISTOGRAM_BINS];
             assert_eq!(histogram[0], 1);
             assert_eq!(histogram[255], 1);
             assert_eq!(histogram.iter().sum::<u32>(), 2);
+        }
 
+        for channel in 0..WAVEFORM_CHANNELS {
             let waveform = &scope.waveform[channel * WAVEFORM_WIDTH * WAVEFORM_HEIGHT
                 ..(channel + 1) * WAVEFORM_WIDTH * WAVEFORM_HEIGHT];
             assert_eq!(
