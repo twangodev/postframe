@@ -7,6 +7,7 @@
 //! camera would have rendered it.
 
 pub mod bracket;
+mod cache;
 pub mod color;
 pub mod decode;
 pub mod error;

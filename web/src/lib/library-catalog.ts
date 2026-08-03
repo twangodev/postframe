@@ -7,6 +7,7 @@ import {
 	type StoredPhoto
 } from './library-schema.ts';
 import { developStorageName } from './develop-settings.ts';
+import { renderCacheStorageName } from './render-cache.ts';
 
 const DATABASE_NAME = 'postframe-catalog';
 const LIBRARY_ID = 'library';
@@ -54,7 +55,7 @@ interface StackPhotoRecord {
 }
 
 export interface PendingDeleteRecord {
-	kind: 'original' | 'thumbnail' | 'edit';
+	kind: 'original' | 'thumbnail' | 'edit' | 'derived';
 	storageName: string;
 	queuedAt: number;
 }
@@ -385,6 +386,11 @@ export class LibraryCatalog {
 						kind: 'edit',
 						storageName: developStorageName(photoId),
 						queuedAt: now
+					},
+					{
+						kind: 'derived',
+						storageName: renderCacheStorageName(photoId),
+						queuedAt: now
 					}
 				];
 				await bulkPut(this.database.pendingDeletes, pending);
@@ -422,7 +428,8 @@ export class LibraryCatalog {
 			thumbnails: new Set(
 				photos.flatMap((photo) => (photo.thumbnailStorageName ? [photo.thumbnailStorageName] : []))
 			),
-			edits: new Set(photos.map(({ id }) => developStorageName(id)))
+			edits: new Set(photos.map(({ id }) => developStorageName(id))),
+			derived: new Set(photos.map(({ id }) => renderCacheStorageName(id)))
 		};
 	}
 

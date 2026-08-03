@@ -4,6 +4,7 @@ const APP_DIRECTORY = 'postframe';
 const ORIGINALS_DIRECTORY = 'originals';
 const THUMBNAILS_DIRECTORY = 'thumbnails';
 const EDITS_DIRECTORY = 'edits';
+const DERIVED_DIRECTORY = 'derived';
 
 export interface OriginalWrite {
 	storageName: string;
@@ -63,6 +64,12 @@ export class AssetStore {
 		}
 	}
 
+	async derivedHandle(storageName: string) {
+		storageNameSchema.parse(storageName);
+		const directory = await this.fileDirectory(DERIVED_DIRECTORY, true);
+		return directory.getFileHandle(storageName, { create: true });
+	}
+
 	async writeOriginals(writes: readonly OriginalWrite[]) {
 		return this.writeFiles(
 			ORIGINALS_DIRECTORY,
@@ -96,6 +103,10 @@ export class AssetStore {
 		await this.deleteFiles(EDITS_DIRECTORY, storageNames);
 	}
 
+	async deleteDerived(storageNames: readonly string[]) {
+		await this.deleteFiles(DERIVED_DIRECTORY, storageNames);
+	}
+
 	listOriginals() {
 		return this.listFiles(ORIGINALS_DIRECTORY);
 	}
@@ -106,6 +117,10 @@ export class AssetStore {
 
 	listEdits() {
 		return this.listFiles(EDITS_DIRECTORY);
+	}
+
+	listDerived() {
+		return this.listFiles(DERIVED_DIRECTORY);
 	}
 
 	async clearAll() {

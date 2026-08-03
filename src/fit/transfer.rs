@@ -4,8 +4,8 @@ use crate::fit::pair::Sample;
 
 #[derive(Clone)]
 pub struct Curve {
-    knots_log2: Vec<f32>,
-    coded: Vec<f32>,
+    pub(crate) knots_log2: Vec<f32>,
+    pub(crate) coded: Vec<f32>,
 }
 
 #[derive(Clone)]

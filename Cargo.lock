@@ -1064,6 +1064,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "anyhow",
+ "bytemuck",
  "clap",
  "demosaic",
  "image",

@@ -77,11 +77,12 @@ export class PostframeWorkerClient {
 
 	async openRawDocument(
 		frames: RawFrameHandleInput[],
+		cache: FileSystemFileHandle,
 		maxDimension: number,
 		settings: LightSettings
 	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open-raw', frames, maxDimension, settings }),
+			(id) => ({ id, type: 'open-raw', frames, cache, maxDimension, settings }),
 			'opened'
 		);
 		return openedDocument(response);

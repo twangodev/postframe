@@ -18,6 +18,7 @@ class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
 	readonly thumbnails = new Map<string, Blob>();
 	readonly edits = new Map<string, Blob>();
+	readonly derived = new Map<string, Blob>();
 
 	async readEdit(storageName: string) {
 		const blob = this.edits.get(storageName);
@@ -63,6 +64,10 @@ class MemoryAssetStore {
 		for (const storageName of storageNames) this.edits.delete(storageName);
 	}
 
+	async deleteDerived(storageNames: readonly string[]) {
+		for (const storageName of storageNames) this.derived.delete(storageName);
+	}
+
 	async listOriginals(): Promise<StoredFile[]> {
 		return [...this.originals].map(([storageName, file]) => ({ storageName, size: file.size }));
 	}
@@ -75,10 +80,15 @@ class MemoryAssetStore {
 		return [...this.edits].map(([storageName, blob]) => ({ storageName, size: blob.size }));
 	}
 
+	async listDerived(): Promise<StoredFile[]> {
+		return [...this.derived].map(([storageName, blob]) => ({ storageName, size: blob.size }));
+	}
+
 	async clearAll() {
 		this.originals.clear();
 		this.thumbnails.clear();
 		this.edits.clear();
+		this.derived.clear();
 	}
 }
 
@@ -208,14 +218,16 @@ test('cleans only unreferenced OPFS files', async () => {
 		assets.originals.set('orphan.dng', new File(['orphan'], 'orphan.dng'));
 		assets.thumbnails.set('orphan.jpg', new Blob(['orphan']));
 		assets.edits.set('orphan.json', new Blob(['{}']));
+		assets.derived.set('render-v0-orphan.pfc', new Blob(['cache']));
 
 		const result = await service.cleanup();
-		assert.equal(result.deletedFiles, 3);
+		assert.equal(result.deletedFiles, 4);
 		assert.equal(result.failedFiles, 0);
-		assert.equal(result.reclaimedBytes, 14);
+		assert.equal(result.reclaimedBytes, 19);
 		assert.deepEqual([...assets.originals.keys()], ['asset-one.dng']);
 		assert.deepEqual([...assets.thumbnails.keys()], ['photo-one.jpg']);
 		assert.deepEqual([...assets.edits.keys()], []);
+		assert.deepEqual([...assets.derived.keys()], []);
 	} finally {
 		await service.clearAll();
 	}
@@ -232,7 +244,7 @@ test('resumes file deletion queued by a committed catalog removal', async () => 
 		await catalog.deletePhoto(photo.id);
 
 		const result = await service.resumePendingDeletions();
-		assert.equal(result.deletedFiles, 3);
+		assert.equal(result.deletedFiles, 4);
 		assert.equal(result.failedFiles, 0);
 		assert.equal((await catalog.pendingDeletions()).length, 0);
 		assert.equal(assets.originals.size, 0);

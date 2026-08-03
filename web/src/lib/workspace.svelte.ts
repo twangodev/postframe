@@ -647,9 +647,11 @@ export class WorkspaceState {
 				return;
 			}
 			const frames = await this.documentFrames(photo);
+			const cache = await this.libraryService!.renderCacheHandle(photo.id);
 			if (revision !== this.documentRevision) return;
 			const result = await this.workerClient.openRawDocument(
 				frames,
+				cache,
 				previewDimension(),
 				lightSettings(photo.develop)
 			);

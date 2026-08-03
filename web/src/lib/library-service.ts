@@ -20,6 +20,7 @@ import {
 	developStorageName,
 	type DevelopSettings
 } from './develop-settings.ts';
+import { renderCacheStorageName } from './render-cache.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
 
@@ -59,6 +60,10 @@ export class LibraryService {
 
 	originalHandle(storageName: string) {
 		return this.assets.originalHandle(storageName);
+	}
+
+	renderCacheHandle(photoId: string) {
+		return this.assets.derivedHandle(renderCacheStorageName(photoId));
 	}
 
 	readThumbnail(storageName: string) {
@@ -175,17 +180,19 @@ export class LibraryService {
 	}
 
 	async cleanup(): Promise<CleanupResult> {
-		const [references, originals, thumbnails, edits, pending] = await Promise.all([
+		const [references, originals, thumbnails, edits, derived, pending] = await Promise.all([
 			this.catalog.storageReferences(),
 			this.assets.listOriginals(),
 			this.assets.listThumbnails(),
 			this.assets.listEdits(),
+			this.assets.listDerived(),
 			this.catalog.pendingDeletions()
 		]);
 		const files = new Map<string, StoredFile>();
 		for (const file of originals) files.set(deletionKey('original', file.storageName), file);
 		for (const file of thumbnails) files.set(deletionKey('thumbnail', file.storageName), file);
 		for (const file of edits) files.set(deletionKey('edit', file.storageName), file);
+		for (const file of derived) files.set(deletionKey('derived', file.storageName), file);
 		const deletions = new Map<string, PendingDeleteRecord>();
 		for (const deletion of pending)
 			deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
@@ -207,20 +214,28 @@ export class LibraryService {
 				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
 			}
 		}
+		for (const file of derived) {
+			if (!references.derived.has(file.storageName)) {
+				const deletion = pendingDeletion('derived', file.storageName);
+				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
+			}
+		}
 		return this.flushDeletions([...deletions.values()], files);
 	}
 
 	async resumePendingDeletions(): Promise<CleanupResult> {
-		const [deletions, originals, thumbnails, edits] = await Promise.all([
+		const [deletions, originals, thumbnails, edits, derived] = await Promise.all([
 			this.catalog.pendingDeletions(),
 			this.assets.listOriginals(),
 			this.assets.listThumbnails(),
-			this.assets.listEdits()
+			this.assets.listEdits(),
+			this.assets.listDerived()
 		]);
 		const files = new Map<string, StoredFile>();
 		for (const file of originals) files.set(deletionKey('original', file.storageName), file);
 		for (const file of thumbnails) files.set(deletionKey('thumbnail', file.storageName), file);
 		for (const file of edits) files.set(deletionKey('edit', file.storageName), file);
+		for (const file of derived) files.set(deletionKey('derived', file.storageName), file);
 		return this.flushDeletions(deletions, files);
 	}
 
@@ -250,7 +265,8 @@ export class LibraryService {
 						await this.assets.deleteOriginals([deletion.storageName]);
 					else if (deletion.kind === 'thumbnail')
 						await this.assets.deleteThumbnails([deletion.storageName]);
-					else await this.assets.deleteEdits([deletion.storageName]);
+					else if (deletion.kind === 'edit') await this.assets.deleteEdits([deletion.storageName]);
+					else await this.assets.deleteDerived([deletion.storageName]);
 					completed.push(deletion);
 					reclaimedBytes += files.get(deletionKey(deletion.kind, deletion.storageName))?.size ?? 0;
 				} catch {

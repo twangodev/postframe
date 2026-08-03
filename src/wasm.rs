@@ -469,6 +469,29 @@ impl Session {
 
     pub fn merge(&mut self, preview_dimension: usize) -> Result<(), JsError> {
         let merged = bracket::merge(std::mem::take(&mut self.frames)).map_err(err)?;
+        self.install_merged(merged, preview_dimension);
+        Ok(())
+    }
+
+    pub fn restore_cache(
+        &mut self,
+        cache: Vec<u8>,
+        preview_dimension: usize,
+    ) -> Result<(), JsError> {
+        let merged = Merged::from_cache_bytes(&cache).map_err(err)?;
+        self.frames.clear();
+        self.install_merged(merged, preview_dimension);
+        Ok(())
+    }
+
+    pub fn cache_bytes(&self) -> Result<Vec<u8>, JsError> {
+        self.merged
+            .as_ref()
+            .map(Merged::to_cache_bytes)
+            .ok_or(JsError::new("merge first"))
+    }
+
+    fn install_merged(&mut self, merged: Merged, preview_dimension: usize) {
         let pyramid = MipPyramid::new(&merged, MAX_PYRAMID_BIN);
         let thumb = pyramid.thumbnail(&merged, preview_dimension.max(256));
         let lut = Preview::new(&thumb);
@@ -477,7 +500,6 @@ impl Session {
         self.thumb = Some((thumb, lut));
         self.pyramid = Some(pyramid);
         self.merged = Some(merged);
-        Ok(())
     }
 
     pub fn boost_stops(&self) -> f32 {

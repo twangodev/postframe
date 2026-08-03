@@ -58,9 +58,10 @@ test('reports document progress before resolving the developed preview', async (
 	client.onProgress((message) => progress.push(message));
 
 	const settings = { ...neutral, exposure: 1.25 };
-	const opened = client.openRawDocument([], 2048, settings);
+	const cache = { name: 'render-v1-photo-one.pfc' } as FileSystemFileHandle;
+	const opened = client.openRawDocument([], cache, 2048, settings);
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'open-raw', frames: [], maxDimension: 2048, settings }
+		{ id: 1, type: 'open-raw', frames: [], cache, maxDimension: 2048, settings }
 	]);
 
 	workers[0]?.respond({

@@ -45,7 +45,15 @@ export interface DevelopProgress {
 }
 
 export type RenderPerformanceStage =
-	'file-read' | 'raw-decode' | 'display-decode' | 'merge' | 'preview' | 'tile';
+	| 'file-read'
+	| 'cache-read'
+	| 'cache-restore'
+	| 'cache-write'
+	| 'raw-decode'
+	| 'display-decode'
+	| 'merge'
+	| 'preview'
+	| 'tile';
 
 export interface RenderPerformanceMeasurement {
 	stage: RenderPerformanceStage;
@@ -71,6 +79,7 @@ export type Request =
 			id: number;
 			type: 'open-raw';
 			frames: RawFrameHandleInput[];
+			cache: FileSystemFileHandle;
 			maxDimension: number;
 			settings: LightSettings;
 	  }
@@ -141,6 +150,7 @@ type ActiveDocument = RawDocument | DisplayDocument;
 
 const ready = init({ module_or_path: wasmUrl });
 let document: ActiveDocument | null = null;
+let cacheWriteTimer: ReturnType<typeof setTimeout> | null = null;
 const performanceEnabled = new URL(self.location.href).searchParams.has('perf');
 
 const post = (message: Response, transfer: Transferable[] = []) =>
@@ -256,6 +266,10 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 	const session = new Session();
 
 	try {
+		if (await restoreRawCache(session, message)) {
+			publishRawDocument(message, session);
+			return;
+		}
 		const sizes = await Promise.all(
 			message.frames.map(async (frame) => ({
 				raw: await fileSize(frame.raw),
@@ -315,26 +329,68 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 		progress('merging', message.frames.length);
 		measure('merge', () => session.merge(message.maxDimension));
 		progress('rendering', message.frames.length);
-		document = { kind: 'raw', session };
-		const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
-		post(
-			{
-				id: message.id,
-				type: 'opened',
-				image: preview.image,
-				mediaType: preview.mediaType,
-				scope: preview.scope,
-				boostStops: session.boost_stops(),
-				width: session.width(),
-				height: session.height()
-			},
-			preview.transfer
-		);
+		publishRawDocument(message, session);
+		scheduleRawCacheWrite(session, message.cache);
 	} catch (error) {
 		session.free();
 		if (document?.kind === 'raw' && document.session === session) document = null;
 		throw error;
 	}
+}
+
+async function restoreRawCache(session: Session, message: Extract<Request, { type: 'open-raw' }>) {
+	const file = await message.cache.getFile();
+	if (file.size === 0) return false;
+	post({
+		id: message.id,
+		type: 'progress',
+		phase: 'reading',
+		bytesRead: 0,
+		totalBytes: file.size,
+		framesDecoded: 0,
+		totalFrames: message.frames.length,
+		activeFrame: 1
+	});
+	const bytes = await measureAsync('cache-read', () =>
+		readFile(message.cache, file.size, () => {})
+	);
+	try {
+		measure('cache-restore', () =>
+			session.restore_cache(new Uint8Array(bytes), message.maxDimension)
+		);
+		return true;
+	} catch {
+		await writeFileHandle(message.cache, new Uint8Array());
+		return false;
+	}
+}
+
+function publishRawDocument(message: Extract<Request, { type: 'open-raw' }>, session: Session) {
+	document = { kind: 'raw', session };
+	const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
+	post(
+		{
+			id: message.id,
+			type: 'opened',
+			image: preview.image,
+			mediaType: preview.mediaType,
+			scope: preview.scope,
+			boostStops: session.boost_stops(),
+			width: session.width(),
+			height: session.height()
+		},
+		preview.transfer
+	);
+}
+
+function scheduleRawCacheWrite(session: Session, cache: FileSystemFileHandle) {
+	if (cacheWriteTimer !== null) clearTimeout(cacheWriteTimer);
+	cacheWriteTimer = setTimeout(() => {
+		cacheWriteTimer = null;
+		if (document?.kind !== 'raw' || document.session !== session) return;
+		const bytes = session.cache_bytes();
+		void measureAsync('cache-write', () => writeFileHandle(cache, bytes)).catch(() => {});
+	}, 500);
 }
 
 async function openDisplayDocument(message: Extract<Request, { type: 'open-display' }>) {
@@ -698,12 +754,53 @@ function activeRawDocument() {
 }
 
 function closeDocument() {
+	if (cacheWriteTimer !== null) {
+		clearTimeout(cacheWriteTimer);
+		cacheWriteTimer = null;
+	}
 	if (document?.kind === 'raw') document.session.free();
 	if (document?.kind === 'display') {
 		document.light.free();
 		document.bitmap.close();
 	}
 	document = null;
+}
+
+async function writeFileHandle(handle: FileSystemFileHandle, bytes: Uint8Array) {
+	const syncHandle = handle as FileSystemFileHandle & {
+		createSyncAccessHandle?: () => Promise<{
+			write: (buffer: ArrayBufferView, options?: { at?: number }) => number;
+			truncate: (size: number) => void;
+			flush: () => void;
+			close: () => void;
+		}>;
+	};
+	if (typeof syncHandle.createSyncAccessHandle === 'function') {
+		const access = await syncHandle.createSyncAccessHandle();
+		try {
+			access.truncate(0);
+			let offset = 0;
+			while (offset < bytes.byteLength) {
+				const written = access.write(bytes.subarray(offset), { at: offset });
+				if (written === 0) throw new Error(`Unable to write ${handle.name}`);
+				offset += written;
+			}
+			access.flush();
+		} finally {
+			access.close();
+		}
+		return;
+	}
+	const writable = await handle.createWritable();
+	try {
+		const contents = new Uint8Array(bytes.byteLength);
+		contents.set(bytes);
+		await writable.write(contents);
+		await writable.close();
+	} catch (error) {
+		await writable.abort();
+		throw error;
+	}
 }
 
 function measure<T>(stage: RenderPerformanceStage, operation: () => T, detail?: string): T {

@@ -30,6 +30,8 @@ export const WASM_BINDINGS = {
 	add_frame: { rust: 'Session::add_frame', worker: 'open-raw' },
 	frame_count: { rust: 'Session::frame_count', worker: null },
 	merge: { rust: 'Session::merge', worker: 'open-raw' },
+	restore_cache: { rust: 'Session::restore_cache', worker: 'open-raw' },
+	cache_bytes: { rust: 'Session::cache_bytes', worker: 'open-raw' },
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
 	width: { rust: 'Session::width', worker: 'open-raw' },
 	height: { rust: 'Session::height', worker: 'open-raw' },
@@ -62,7 +64,7 @@ interface ImplementationTodo {
 export const WASM_TODOS = {
 	libraryStorage: {
 		scope: 'Restore the photo library and persist non-destructive render graph edits in OPFS.',
-		bindings: ['constructor', 'add_frame'],
+		bindings: ['constructor', 'add_frame', 'restore_cache', 'cache_bytes'],
 		planned: ['collection membership', 'OPFS recovery', 'versioned edit snapshots']
 	},
 	photoIngest: {
@@ -76,6 +78,8 @@ export const WASM_TODOS = {
 			'add_frame',
 			'frame_count',
 			'merge',
+			'restore_cache',
+			'cache_bytes',
 			'boost_stops',
 			'width',
 			'height'
