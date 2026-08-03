@@ -91,6 +91,14 @@ impl PreparedRegion {
     pub(crate) fn byte_len(&self) -> usize {
         self.rgb.len() * std::mem::size_of::<[f32; 3]>()
     }
+
+    pub(crate) fn rgba32(&self) -> Vec<f32> {
+        let mut rgba = Vec::with_capacity(self.rgb.len() * 4);
+        for pixel in &self.rgb {
+            rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 1.0]);
+        }
+        rgba
+    }
 }
 
 impl MipPyramid {
@@ -247,6 +255,18 @@ impl Preview {
             coded,
             mix: merged.transfer.mix,
         }
+    }
+
+    pub(crate) fn gpu_lut(&self) -> Vec<f32> {
+        self.coded.iter().flatten().copied().collect()
+    }
+
+    pub(crate) fn gpu_lookup_low_bits() -> u32 {
+        LOOKUP_LOW_BITS
+    }
+
+    pub(crate) fn gpu_lookup_shift() -> u32 {
+        LOOKUP_SHIFT
     }
 
     fn lookup(&self, channel: usize, value: f32) -> f32 {

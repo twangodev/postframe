@@ -8,6 +8,11 @@ import init, {
 import wasmUrl from './pf/postframe_bg.wasm?url';
 import type { LightSettings } from './develop-settings';
 import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
+import {
+	RawWebGpuRenderer,
+	type LinearTileSource,
+	type RawRenderProfile
+} from './webgpu-renderer.ts';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -135,6 +140,8 @@ export type Response =
 interface RawDocument {
 	kind: 'raw';
 	session: Session;
+	renderer: RawWebGpuRenderer | null;
+	lightLut: { key: string; values: Float32Array } | null;
 }
 
 interface DisplayDocument {
@@ -267,7 +274,7 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 
 	try {
 		if (await restoreRawCache(session, message)) {
-			publishRawDocument(message, session);
+			await publishRawDocument(message, session);
 			return;
 		}
 		const sizes = await Promise.all(
@@ -329,7 +336,7 @@ async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) 
 		progress('merging', message.frames.length);
 		measure('merge', () => session.merge(message.maxDimension));
 		progress('rendering', message.frames.length);
-		publishRawDocument(message, session);
+		await publishRawDocument(message, session);
 		scheduleRawCacheWrite(session, message.cache);
 	} catch (error) {
 		session.free();
@@ -365,8 +372,16 @@ async function restoreRawCache(session: Session, message: Extract<Request, { typ
 	}
 }
 
-function publishRawDocument(message: Extract<Request, { type: 'open-raw' }>, session: Session) {
-	document = { kind: 'raw', session };
+async function publishRawDocument(
+	message: Extract<Request, { type: 'open-raw' }>,
+	session: Session
+) {
+	document = {
+		kind: 'raw',
+		session,
+		renderer: await createRawRenderer(session),
+		lightLut: null
+	};
 	const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
 	post(
 		{
@@ -582,6 +597,35 @@ function renderDisplayScope(
 
 async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 	if (active.kind === 'raw') {
+		if (active.renderer) {
+			const key = rawTileKey(request);
+			let tile: ReturnType<Session['render_tile_linear']> | null = null;
+			try {
+				let source: LinearTileSource | null = null;
+				if (!active.renderer.hasSource(key)) {
+					tile = active.session.render_tile_linear(
+						request.x,
+						request.y,
+						request.width,
+						request.height,
+						request.bin
+					);
+					source = { rgba: tile.rgba, width: tile.width, height: tile.height };
+				}
+				return await active.renderer.render(
+					key,
+					source,
+					request.settings,
+					request.tone,
+					rawLightLut(active, request.settings)
+				);
+			} catch {
+				active.renderer.destroy();
+				active.renderer = null;
+			} finally {
+				tile?.free();
+			}
+		}
 		const tile = active.session.render_tile(
 			request.x,
 			request.y,
@@ -758,12 +802,63 @@ function closeDocument() {
 		clearTimeout(cacheWriteTimer);
 		cacheWriteTimer = null;
 	}
-	if (document?.kind === 'raw') document.session.free();
+	if (document?.kind === 'raw') {
+		document.renderer?.destroy();
+		document.session.free();
+	}
 	if (document?.kind === 'display') {
 		document.light.free();
 		document.bitmap.close();
 	}
 	document = null;
+}
+
+async function createRawRenderer(session: Session) {
+	const profile = session.render_profile();
+	try {
+		return await RawWebGpuRenderer.create({
+			transferLut: profile.transfer_lut,
+			transferLutLength: profile.transfer_lut_length,
+			mix: profile.mix,
+			lookupLowBits: profile.lookup_low_bits,
+			lookupShift: profile.lookup_shift,
+			radianceMax: profile.radiance_max
+		} satisfies RawRenderProfile);
+	} catch {
+		return null;
+	} finally {
+		profile.free();
+	}
+}
+
+function rawTileKey(tile: RenderTileRequest) {
+	return `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
+}
+
+function rawLightLut(active: RawDocument, settings: LightSettings) {
+	const key = [
+		settings.contrast,
+		settings.highlights,
+		settings.shadows,
+		settings.whites,
+		settings.blacks
+	].join(':');
+	if (active.lightLut?.key === key) return active.lightLut.values;
+	const transform = new DisplayTransform(
+		0,
+		settings.contrast,
+		settings.highlights,
+		settings.shadows,
+		settings.whites,
+		settings.blacks
+	);
+	try {
+		const values = transform.luminance_lut;
+		active.lightLut = { key, values };
+		return values;
+	} finally {
+		transform.free();
+	}
 }
 
 async function writeFileHandle(handle: FileSystemFileHandle, bytes: Uint8Array) {

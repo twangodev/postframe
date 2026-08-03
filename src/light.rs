@@ -89,6 +89,10 @@ impl LightTransform {
         self.settings
     }
 
+    pub fn luminance_lut(&self) -> &[f32] {
+        self.luminance.as_slice()
+    }
+
     pub fn apply_display_rgb8(&self, rgb8: &[u8]) -> Result<Vec<u8>> {
         if !rgb8.len().is_multiple_of(3) {
             return Err(Error::Unsupported("RGB buffer size mismatch"));

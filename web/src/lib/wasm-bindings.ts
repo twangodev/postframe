@@ -25,6 +25,10 @@ export const WASM_BINDINGS = {
 		rust: 'DisplayTransform::apply_rgba',
 		worker: ['open-display', 'preview', 'tile']
 	},
+	display_luminance_lut: {
+		rust: 'DisplayTransform::luminance_lut',
+		worker: 'tile'
+	},
 	constructor: { rust: 'Session::new', worker: 'open-raw' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'close' },
 	add_frame: { rust: 'Session::add_frame', worker: 'open-raw' },
@@ -35,10 +39,12 @@ export const WASM_BINDINGS = {
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
 	width: { rust: 'Session::width', worker: 'open-raw' },
 	height: { rust: 'Session::height', worker: 'open-raw' },
+	render_profile: { rust: 'Session::render_profile', worker: 'open-raw' },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'open-raw' },
 	preview_scope: { rust: 'Session::preview_scope', worker: 'scope' },
 	render_tile: { rust: 'Session::render_tile', worker: 'tile' },
+	render_tile_linear: { rust: 'Session::render_tile_linear', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
 } as const satisfies Record<
@@ -49,7 +55,8 @@ export const WASM_BINDINGS = {
 	| 'inspect_raw'
 	| 'display_transform'
 	| 'display_free'
-	| 'apply_display_rgba',
+	| 'apply_display_rgba'
+	| 'display_luminance_lut',
 	WasmBinding
 >;
 
@@ -93,8 +100,16 @@ export const WASM_TODOS = {
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
-		bindings: ['preview_jpeg', 'preview_frame', 'preview_scope', 'render_tile', 'preview_ultra'],
-		planned: ['GPU display transform']
+		bindings: [
+			'preview_jpeg',
+			'preview_frame',
+			'preview_scope',
+			'render_profile',
+			'render_tile',
+			'render_tile_linear',
+			'preview_ultra'
+		],
+		planned: ['GPU masks and non-light adjustments']
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
@@ -107,10 +122,13 @@ export const WASM_TODOS = {
 			'display_transform',
 			'display_free',
 			'apply_display_rgba',
+			'display_luminance_lut',
 			'preview_jpeg',
 			'preview_frame',
 			'preview_scope',
-			'render_tile'
+			'render_profile',
+			'render_tile',
+			'render_tile_linear'
 		],
 		planned: ['Session::set_mask_adjustments', 'color and presence controls']
 	},

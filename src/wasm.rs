@@ -68,6 +68,29 @@ impl TileCache {
     }
 }
 
+fn validate_tile(
+    merged: &Merged,
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+    bin: usize,
+) -> Result<(), JsError> {
+    if bin == 0 || !bin.is_power_of_two() {
+        return Err(JsError::new("tile bin must be a non-zero power of two"));
+    }
+    if !x.is_multiple_of(bin) || !y.is_multiple_of(bin) {
+        return Err(JsError::new("tile origin must align to its bin"));
+    }
+    if x >= merged.radiance.width || y >= merged.radiance.height || width == 0 || height == 0 {
+        return Err(JsError::new("tile is outside the image"));
+    }
+    if width.div_ceil(bin) > MAX_TILE_DIMENSION || height.div_ceil(bin) > MAX_TILE_DIMENSION {
+        return Err(JsError::new("tile output exceeds the maximum dimension"));
+    }
+    Ok(())
+}
+
 fn err(error: crate::Error) -> JsError {
     JsError::new(&error.to_string())
 }
@@ -115,6 +138,11 @@ impl DisplayTransform {
 
     pub fn apply_rgba(&self, rgba: Vec<u8>) -> Result<Vec<u8>, JsError> {
         self.light.apply_display_rgba8(&rgba).map_err(err)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn luminance_lut(&self) -> Vec<f32> {
+        self.light.luminance_lut().to_vec()
     }
 }
 
@@ -422,6 +450,74 @@ pub struct RenderedTile {
 }
 
 #[wasm_bindgen]
+pub struct LinearTile {
+    rgba: Vec<f32>,
+    width: u32,
+    height: u32,
+}
+
+#[wasm_bindgen]
+impl LinearTile {
+    #[wasm_bindgen(getter)]
+    pub fn rgba(&self) -> Vec<f32> {
+        self.rgba.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+#[wasm_bindgen]
+pub struct RenderProfile {
+    transfer_lut: Vec<f32>,
+    transfer_lut_length: u32,
+    mix: Vec<f32>,
+    lookup_low_bits: u32,
+    lookup_shift: u32,
+    radiance_max: f32,
+}
+
+#[wasm_bindgen]
+impl RenderProfile {
+    #[wasm_bindgen(getter)]
+    pub fn transfer_lut(&self) -> Vec<f32> {
+        self.transfer_lut.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn transfer_lut_length(&self) -> u32 {
+        self.transfer_lut_length
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn mix(&self) -> Vec<f32> {
+        self.mix.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn lookup_low_bits(&self) -> u32 {
+        self.lookup_low_bits
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn lookup_shift(&self) -> u32 {
+        self.lookup_shift
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn radiance_max(&self) -> f32 {
+        self.radiance_max
+    }
+}
+
+#[wasm_bindgen]
 impl RenderedTile {
     #[wasm_bindgen(getter)]
     pub fn rgba(&self) -> Vec<u8> {
@@ -521,6 +617,20 @@ impl Session {
             .as_ref()
             .map(|merged| merged.radiance.height as u32)
             .ok_or(JsError::new("merge first"))
+    }
+
+    pub fn render_profile(&self) -> Result<RenderProfile, JsError> {
+        let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
+        let (_, preview) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let transfer_lut = preview.gpu_lut();
+        Ok(RenderProfile {
+            transfer_lut_length: (transfer_lut.len() / 3) as u32,
+            transfer_lut,
+            mix: merged.transfer.mix.into_iter().flatten().collect(),
+            lookup_low_bits: Preview::gpu_lookup_low_bits(),
+            lookup_shift: Preview::gpu_lookup_shift(),
+            radiance_max: merged.report.radiance_max,
+        })
     }
 
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
@@ -638,18 +748,7 @@ impl Session {
             height as usize,
             bin as usize,
         );
-        if bin == 0 || !bin.is_power_of_two() {
-            return Err(JsError::new("tile bin must be a non-zero power of two"));
-        }
-        if x % bin != 0 || y % bin != 0 {
-            return Err(JsError::new("tile origin must align to its bin"));
-        }
-        if x >= merged.radiance.width || y >= merged.radiance.height || width == 0 || height == 0 {
-            return Err(JsError::new("tile is outside the image"));
-        }
-        if width.div_ceil(bin) > MAX_TILE_DIMENSION || height.div_ceil(bin) > MAX_TILE_DIMENSION {
-            return Err(JsError::new("tile output exceeds the maximum dimension"));
-        }
+        validate_tile(merged, x, y, width, height, bin)?;
         let region = TileRegion {
             x,
             y,
@@ -682,6 +781,49 @@ impl Session {
             rgba,
             width: rendered.width as u32,
             height: rendered.height as u32,
+        })
+    }
+
+    pub fn render_tile_linear(
+        &mut self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        bin: u32,
+    ) -> Result<LinearTile, JsError> {
+        let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
+        let (x, y, width, height, bin) = (
+            x as usize,
+            y as usize,
+            width as usize,
+            height as usize,
+            bin as usize,
+        );
+        validate_tile(merged, x, y, width, height, bin)?;
+        let region = TileRegion {
+            x,
+            y,
+            width,
+            height,
+            bin,
+        };
+        if !self.tiles.contains(&region) {
+            let prepared = self
+                .pyramid
+                .as_ref()
+                .ok_or(JsError::new("merge first"))?
+                .prepare(merged, (x, y), (width, height), bin);
+            self.tiles.insert(region, prepared);
+        }
+        let prepared = self
+            .tiles
+            .get(&region)
+            .ok_or(JsError::new("unable to prepare tile"))?;
+        Ok(LinearTile {
+            rgba: prepared.rgba32(),
+            width: width.div_ceil(bin) as u32,
+            height: height.div_ceil(bin) as u32,
         })
     }
 
