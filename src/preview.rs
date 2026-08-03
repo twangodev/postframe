@@ -1,5 +1,5 @@
 use crate::color;
-use crate::{Merged, Rendered};
+use crate::{LightSettings, LightTransform, Merged, Rendered};
 
 const SAMPLES: usize = 4096;
 const LOG2_LO: f32 = -18.0;
@@ -90,11 +90,19 @@ impl Preview {
     }
 
     pub fn render(&self, merged: &Merged, ev: f32, tone: bool) -> Vec<u8> {
-        let gain = (2.0f32).powf(ev);
+        let settings = LightSettings {
+            exposure: ev,
+            ..LightSettings::NEUTRAL
+        };
+        self.render_adjusted(merged, &LightTransform::new(settings).unwrap(), tone)
+    }
+
+    pub fn render_adjusted(&self, merged: &Merged, light: &LightTransform, tone: bool) -> Vec<u8> {
+        let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
         let mut rgb8 = Vec::with_capacity(merged.radiance.rgb.len() * 3);
         for pixel in &merged.radiance.rgb {
-            rgb8.extend(self.render_pixel(*pixel, gain, white, tone));
+            rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
         }
         rgb8
     }
@@ -109,21 +117,30 @@ impl Preview {
         tone: bool,
     ) -> Rendered {
         let region = PreparedRegion::new(merged, origin, size, bin);
-        self.render_prepared(merged, &region, ev, tone)
+        let settings = LightSettings {
+            exposure: ev,
+            ..LightSettings::NEUTRAL
+        };
+        self.render_prepared_adjusted(
+            merged,
+            &region,
+            &LightTransform::new(settings).unwrap(),
+            tone,
+        )
     }
 
-    pub(crate) fn render_prepared(
+    pub(crate) fn render_prepared_adjusted(
         &self,
         merged: &Merged,
         region: &PreparedRegion,
-        ev: f32,
+        light: &LightTransform,
         tone: bool,
     ) -> Rendered {
-        let gain = (2.0f32).powf(ev);
+        let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
         let mut rgb8 = Vec::with_capacity(region.rgb.len() * 3);
         for pixel in &region.rgb {
-            rgb8.extend(self.render_pixel(*pixel, gain, white, tone));
+            rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
         }
 
         Rendered {
@@ -133,7 +150,14 @@ impl Preview {
         }
     }
 
-    fn render_pixel(&self, pixel: [f32; 3], gain: f32, white: f32, tone: bool) -> [u8; 3] {
+    fn render_pixel(
+        &self,
+        pixel: [f32; 3],
+        gain: f32,
+        white: f32,
+        tone: bool,
+        light: &LightTransform,
+    ) -> [u8; 3] {
         let exposed = pixel.map(|channel| channel * gain);
         let compress = if tone {
             let brightest = exposed
@@ -144,11 +168,11 @@ impl Preview {
             1.0
         };
         let mixed = color::apply(&self.mix, exposed.map(|channel| channel * compress));
-        std::array::from_fn(|channel| {
+        light.apply_encoded_pixel(std::array::from_fn(|channel| {
             self.lookup(channel, mixed[channel])
                 .round()
                 .clamp(0.0, 255.0) as u8
-        })
+        }))
     }
 }
 
@@ -211,7 +235,12 @@ mod tests {
 
         let preview = Preview::new(&merged);
         let prepared = PreparedRegion::new(&merged, (2, 1), (3, 4), 1);
-        let tile = preview.render_prepared(&merged, &prepared, 0.5, false);
+        let light = LightTransform::new(LightSettings {
+            exposure: 0.5,
+            ..LightSettings::NEUTRAL
+        })
+        .unwrap();
+        let tile = preview.render_prepared_adjusted(&merged, &prepared, &light, false);
         let expected = (1..5)
             .flat_map(|y| {
                 let start = (y * 8 + 2) * 3;
@@ -221,7 +250,12 @@ mod tests {
         assert_eq!((tile.width, tile.height), (3, 4));
         assert_eq!(tile.rgb8, expected);
 
-        let rerendered = preview.render_prepared(&merged, &prepared, -0.5, false);
+        let light = LightTransform::new(LightSettings {
+            exposure: -0.5,
+            ..LightSettings::NEUTRAL
+        })
+        .unwrap();
+        let rerendered = preview.render_prepared_adjusted(&merged, &prepared, &light, false);
         let direct = preview.render_region(&merged, (2, 1), (3, 4), 1, -0.5, false);
         assert_eq!(rerendered.rgb8, direct.rgb8);
 

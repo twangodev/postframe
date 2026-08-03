@@ -12,6 +12,7 @@ pub mod decode;
 pub mod error;
 pub mod fit;
 pub mod hdr;
+pub mod light;
 pub mod preview;
 pub mod scope;
 #[cfg(feature = "wasm")]
@@ -22,6 +23,7 @@ pub use color::WorkingSpace;
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use hdr::UltraHdr;
+pub use light::{LightSettings, LightTransform};
 pub use preview::Preview;
 pub use scope::ImageScope;
 

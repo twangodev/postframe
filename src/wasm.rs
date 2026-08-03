@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::PreparedRegion;
-use crate::{ImageScope, Merged, Preview};
+use crate::{ImageScope, LightSettings, LightTransform, Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const TILE_CACHE_CAPACITY: usize = 16;
@@ -44,6 +44,24 @@ pub fn validate_raw(raw: Vec<u8>) -> Result<(), JsError> {
     rawler::decode_dummy(&source)
         .map(|_| ())
         .map_err(|error| JsError::new(&error.to_string()))
+}
+
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn adjust_display_rgba(
+    rgba: Vec<u8>,
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+) -> Result<Vec<u8>, JsError> {
+    LightTransform::new(light_settings(
+        exposure, contrast, highlights, shadows, whites, blacks,
+    ))
+    .and_then(|transform| transform.apply_display_rgba8(&rgba))
+    .map_err(err)
 }
 
 #[wasm_bindgen]
@@ -294,6 +312,7 @@ pub struct Session {
     merged: Option<Merged>,
     thumb: Option<(Merged, Preview)>,
     tiles: LruCache<TileRegion, PreparedRegion>,
+    light: Option<LightTransform>,
 }
 
 #[wasm_bindgen]
@@ -305,6 +324,7 @@ impl Session {
             merged: None,
             thumb: None,
             tiles: LruCache::new(NonZeroUsize::new(TILE_CACHE_CAPACITY).unwrap()),
+            light: None,
         }
     }
 
@@ -353,15 +373,49 @@ impl Session {
     }
 
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
-    pub fn preview_jpeg(&self, ev: f32, tone: bool) -> Result<Vec<u8>, JsError> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn preview_jpeg(
+        &mut self,
+        exposure: f32,
+        contrast: f32,
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
+        tone: bool,
+    ) -> Result<Vec<u8>, JsError> {
+        self.prepare_light(light_settings(
+            exposure, contrast, highlights, shadows, whites, blacks,
+        ))?;
+        let light = self
+            .light
+            .as_ref()
+            .ok_or(JsError::new("missing light transform"))?;
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
-        let rgb8 = lut.render(thumb, ev, tone);
+        let rgb8 = lut.render_adjusted(thumb, light, tone);
         encode_jpeg(&rgb8, thumb.radiance.width, thumb.radiance.height)
     }
 
-    pub fn preview_frame(&self, ev: f32, tone: bool) -> Result<PreviewFrame, JsError> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn preview_frame(
+        &mut self,
+        exposure: f32,
+        contrast: f32,
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
+        tone: bool,
+    ) -> Result<PreviewFrame, JsError> {
+        self.prepare_light(light_settings(
+            exposure, contrast, highlights, shadows, whites, blacks,
+        ))?;
+        let light = self
+            .light
+            .as_ref()
+            .ok_or(JsError::new("missing light transform"))?;
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
-        let rgb8 = lut.render(thumb, ev, tone);
+        let rgb8 = lut.render_adjusted(thumb, light, tone);
         let scope =
             ImageScope::analyze(&rgb8, thumb.radiance.width, thumb.radiance.height).map_err(err)?;
         Ok(PreviewFrame {
@@ -382,9 +436,17 @@ impl Session {
         width: u32,
         height: u32,
         bin: u32,
-        ev: f32,
+        exposure: f32,
+        contrast: f32,
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
         tone: bool,
     ) -> Result<Vec<u8>, JsError> {
+        self.prepare_light(light_settings(
+            exposure, contrast, highlights, shadows, whites, blacks,
+        ))?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
@@ -420,7 +482,11 @@ impl Session {
             .tiles
             .get(&region)
             .ok_or(JsError::new("unable to prepare tile"))?;
-        let rendered = lut.render_prepared(merged, prepared, ev, tone);
+        let light = self
+            .light
+            .as_ref()
+            .ok_or(JsError::new("missing light transform"))?;
+        let rendered = lut.render_prepared_adjusted(merged, prepared, light, tone);
         encode_png(&rendered.rgb8, rendered.width, rendered.height)
     }
 
@@ -434,6 +500,14 @@ impl Session {
     pub fn export_ultra(&self) -> Result<Vec<u8>, JsError> {
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         Ok(crate::hdr::encode(merged).map_err(err)?.bytes)
+    }
+
+    fn prepare_light(&mut self, settings: LightSettings) -> Result<(), JsError> {
+        settings.validated().map_err(err)?;
+        if self.light.as_ref().map(LightTransform::settings) != Some(settings) {
+            self.light = Some(LightTransform::new(settings).map_err(err)?);
+        }
+        Ok(())
     }
 }
 
@@ -471,4 +545,22 @@ fn encode_dynamic_jpeg(image: &DynamicImage) -> Result<Vec<u8>, JsError> {
         image.width() as usize,
         image.height() as usize,
     )
+}
+
+fn light_settings(
+    exposure: f32,
+    contrast: f32,
+    highlights: f32,
+    shadows: f32,
+    whites: f32,
+    blacks: f32,
+) -> LightSettings {
+    LightSettings {
+        exposure,
+        contrast,
+        highlights,
+        shadows,
+        whites,
+        blacks,
+    }
 }
