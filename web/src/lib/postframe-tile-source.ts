@@ -1,6 +1,7 @@
 import type OpenSeadragon from 'openseadragon';
 import type { Size } from './photo-viewport.ts';
 import type { RenderTileRequest } from './worker.ts';
+import type { LightSettings } from './develop-settings.ts';
 
 export const PYRAMID_TILE_SIZE = 512;
 export const PYRAMID_TILE_OVERLAP = 1;
@@ -34,7 +35,7 @@ interface TileSourceOptions {
 	revision: number;
 	image: Size;
 	renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ArrayBuffer>;
-	ev: number;
+	settings: LightSettings;
 	tone: boolean;
 	onTileEvent?: (event: PyramidTileEvent) => void;
 }
@@ -135,7 +136,7 @@ export function createPostframeTileSource(
 				width: region.width,
 				height: region.height,
 				bin: region.bin,
-				ev: options.ev,
+				settings: options.settings,
 				tone: options.tone
 			})
 			.then((png) => decodeTile(png, state))

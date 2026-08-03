@@ -1,7 +1,10 @@
 use crate::{Error, Result};
+use std::sync::OnceLock;
 
 const CURVE_SAMPLES: usize = 4096;
 const ANCHOR_INPUTS: [f32; 7] = [0.0, 0.08, 0.25, 0.5, 0.75, 0.92, 1.0];
+static SRGB_TO_LINEAR: OnceLock<[f32; 256]> = OnceLock::new();
+static LINEAR_TO_SRGB: OnceLock<[u8; CURVE_SAMPLES]> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LightSettings {
@@ -216,7 +219,11 @@ fn monotone_sample(input: f32, inputs: &[f32; 7], outputs: &[f32; 7], tangents: 
 }
 
 fn srgb_to_linear(channel: u8) -> f32 {
-    let encoded = channel as f32 / 255.0;
+    SRGB_TO_LINEAR.get_or_init(|| std::array::from_fn(decode_srgb))[channel as usize]
+}
+
+fn decode_srgb(index: usize) -> f32 {
+    let encoded = index as f32 / 255.0;
     if encoded <= 0.04045 {
         encoded / 12.92
     } else {
@@ -225,7 +232,12 @@ fn srgb_to_linear(channel: u8) -> f32 {
 }
 
 fn linear_to_srgb(channel: f32) -> u8 {
-    let linear = channel.clamp(0.0, 1.0);
+    let position = channel.clamp(0.0, 1.0) * (CURVE_SAMPLES - 1) as f32;
+    LINEAR_TO_SRGB.get_or_init(|| std::array::from_fn(encode_linear))[position.round() as usize]
+}
+
+fn encode_linear(index: usize) -> u8 {
+    let linear = index as f32 / (CURVE_SAMPLES - 1) as f32;
     let encoded = if linear <= 0.003_130_8 {
         12.92 * linear
     } else {

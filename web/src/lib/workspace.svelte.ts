@@ -31,15 +31,21 @@ import {
 	storageErrorMessage,
 	type BrowserStorageStatus
 } from './browser-storage';
-import { defaultDevelopSettings, type DevelopSettings } from './develop-settings';
+import {
+	defaultDevelopSettings,
+	LIGHT_CONTROL_NAMES,
+	lightSettings,
+	type DevelopSettings,
+	type LightControlName
+} from './develop-settings';
 import { DevelopHistory } from './develop-history';
-import { imageScopeFromRgba, type ImageScopeData } from './image-scope';
+import type { ImageScopeData } from './image-scope';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
-export type ExposurePreviewPhase = 'applying' | 'refining';
+export type DevelopPreviewPhase = 'applying' | 'refining';
 export type DocumentStatus =
 	| { kind: 'idle' }
 	| {
@@ -111,10 +117,10 @@ const defaultAdjustments = {
 	tint: 4,
 	exposure: 0,
 	contrast: 0,
-	highlights: -18,
-	shadows: 12,
+	highlights: 0,
+	shadows: 0,
 	whites: 0,
-	blacks: -6,
+	blacks: 0,
 	vibrance: 8,
 	saturation: 0,
 	texture: 0,
@@ -152,11 +158,11 @@ export class WorkspaceState {
 	private objectUrls = new Set<string>();
 	private thumbnailLoads = new Map<string, Promise<void>>();
 	private documentRevision = 0;
-	private exposurePreviewTimer: ReturnType<typeof setTimeout> | null = null;
-	private exposurePreviewRevision = 0;
-	private exposurePreviewUrl: string | null = null;
+	private developPreviewTimer: ReturnType<typeof setTimeout> | null = null;
+	private developPreviewRevision = 0;
+	private developPreviewUrl: string | null = null;
 	private refinementRevision: number | null = null;
-	private exposureGestureStart: DevelopSettings | null = null;
+	private developGesture: { control: LightControlName; before: DevelopSettings } | null = null;
 	private readonly developHistory = new DevelopHistory();
 	private removeProgressListener: (() => void) | null = null;
 
@@ -184,15 +190,14 @@ export class WorkspaceState {
 	storageCleanupResult = $state<CleanupResult | null>(null);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
-	exposurePreview = $state<{
+	developPreview = $state<{
 		photoId: string;
 		src: string | null;
-		phase: ExposurePreviewPhase;
+		phase: DevelopPreviewPhase;
 	} | null>(null);
 	imageScope = $state<ImageScopeData | null>(null);
-	// TODO(WASM_TODOS.adjustments): route the remaining controls through render settings.
 	adjustments = $state({ ...defaultAdjustments });
-	renderSettings = $state({ exposure: 0, revision: 0 });
+	renderSettings = $state({ settings: lightSettings(defaultDevelopSettings()), revision: 0 });
 	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
@@ -210,9 +215,8 @@ export class WorkspaceState {
 				}
 			: null
 	);
-	canAdjustExposure = $derived(
+	canAdjustLight = $derived(
 		this.selectedPhoto !== null &&
-			this.selectedPhoto.kind !== 'display' &&
 			this.documentStatus.kind === 'ready' &&
 			this.documentStatus.photoId === this.selectedPhoto.id
 	);
@@ -392,20 +396,25 @@ export class WorkspaceState {
 		this.documentStatus = { kind: 'cancelled', photoId };
 	};
 
-	previewExposure = (exposure: number) => {
-		if (!this.canAdjustExposure || !this.selectedPhoto) return;
-		this.exposureGestureStart ??= { ...this.selectedPhoto.develop };
-		this.adjustments.exposure = exposure;
-		this.scheduleExposurePreview(exposure);
+	previewLight = (control: LightControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedPhoto) return;
+		if (this.developGesture?.control !== control) {
+			this.developGesture = { control, before: { ...this.selectedPhoto.develop } };
+		}
+		this.adjustments[control] = value;
+		this.scheduleDevelopPreview({ ...this.selectedPhoto.develop, [control]: value });
 	};
 
-	commitExposure = (exposure: number) => {
-		if (!this.canAdjustExposure || !this.selectedPhoto) return;
-		const before = this.exposureGestureStart ?? { ...this.selectedPhoto.develop };
-		const after = { ...this.selectedPhoto.develop, exposure };
-		this.exposureGestureStart = null;
-		if (!this.developHistory.commit({ label: exposureLabel(exposure), before, after })) {
-			this.releaseExposurePreview();
+	commitLight = (control: LightControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedPhoto) return;
+		const before =
+			this.developGesture?.control === control
+				? this.developGesture.before
+				: { ...this.selectedPhoto.develop };
+		const after = { ...this.selectedPhoto.develop, [control]: value };
+		this.developGesture = null;
+		if (!this.developHistory.commit({ label: lightEditLabel(control, value), before, after })) {
+			this.releaseDevelopPreview();
 			return;
 		}
 		this.refineDevelopSettings(after);
@@ -415,7 +424,7 @@ export class WorkspaceState {
 	undo = () => {
 		const settings = this.developHistory.undo();
 		if (!settings) return;
-		this.exposureGestureStart = null;
+		this.developGesture = null;
 		this.refineDevelopSettings(settings);
 		this.syncHistory();
 	};
@@ -423,25 +432,24 @@ export class WorkspaceState {
 	redo = () => {
 		const settings = this.developHistory.redo();
 		if (!settings) return;
-		this.exposureGestureStart = null;
+		this.developGesture = null;
 		this.refineDevelopSettings(settings);
 		this.syncHistory();
 	};
 
-	settleExposureRender = (revision: number) => {
+	settleDevelopRender = (revision: number) => {
 		if (this.refinementRevision !== revision) return;
 		this.refinementRevision = null;
-		this.releaseExposurePreview();
+		this.releaseDevelopPreview();
 	};
 
 	renderTile = async (photoId: string, tile: RenderTileRequest) => {
 		if (
 			!this.workerClient ||
 			this.documentStatus.kind !== 'ready' ||
-			this.documentStatus.photoId !== photoId ||
-			this.selectedPhoto?.kind === 'display'
+			this.documentStatus.photoId !== photoId
 		) {
-			throw new Error('RAW document is not ready for tile rendering');
+			throw new Error('Document is not ready for tile rendering');
 		}
 		return this.workerClient.renderTile(tile);
 	};
@@ -573,7 +581,7 @@ export class WorkspaceState {
 
 	destroy = () => {
 		this.documentRevision += 1;
-		this.releaseExposurePreview();
+		this.releaseDevelopPreview();
 		this.removeProgressListener?.();
 		this.removeProgressListener = null;
 		this.clearFiles();
@@ -582,15 +590,15 @@ export class WorkspaceState {
 	};
 
 	private resetEditState(develop = defaultDevelopSettings()) {
-		this.releaseExposurePreview();
+		this.releaseDevelopPreview();
 		this.imageScope = null;
-		this.exposureGestureStart = null;
+		this.developGesture = null;
 		this.developHistory.reset();
 		this.masks = [];
 		this.selectedMaskId = null;
-		this.adjustments = { ...defaultAdjustments, exposure: develop.exposure };
+		this.adjustments = { ...defaultAdjustments, ...lightSettings(develop) };
 		this.renderSettings = {
-			exposure: develop.exposure,
+			settings: lightSettings(develop),
 			revision: this.renderSettings.revision + 1
 		};
 		this.syncHistory();
@@ -607,8 +615,8 @@ export class WorkspaceState {
 		}
 		this.releaseEditPreview();
 
-		if (!this.workerClient && photo.kind !== 'display') {
-			this.documentStatus = { kind: 'error', photoId, message: 'RAW decoder is unavailable' };
+		if (!this.workerClient) {
+			this.documentStatus = { kind: 'error', photoId, message: 'Image worker is unavailable' };
 			return;
 		}
 
@@ -632,18 +640,14 @@ export class WorkspaceState {
 			}
 			const frames = await this.documentFrames(photo);
 			if (revision !== this.documentRevision) return;
-			const result = await this.workerClient!.openDocument(
+			const result = await this.workerClient.openRawDocument(
 				frames,
 				previewDimension(),
-				photo.develop.exposure
+				lightSettings(photo.develop)
 			);
 			if (revision !== this.documentRevision) return;
 
-			const src = URL.createObjectURL(new Blob([result.jpeg], { type: 'image/jpeg' }));
-			this.objectUrls.add(src);
-			this.editPreview = { src, width: result.width, height: result.height };
-			this.imageScope = result.scope;
-			this.documentStatus = { kind: 'ready', photoId, boostStops: result.boostStops };
+			this.installOpenedDocument(photoId, result);
 		} catch (error) {
 			if (revision !== this.documentRevision) return;
 			this.documentStatus = {
@@ -658,19 +662,26 @@ export class WorkspaceState {
 		const store = this.libraryService;
 		const display = primaryStoredFrame(photo).display;
 		if (!store || !display) throw new Error('Display original is unavailable');
-		const file = await store.readOriginal(display.storageName);
+		const source = await store.originalHandle(display.storageName);
 		if (revision !== this.documentRevision) return;
-		const scope = await displayImageScope(file);
+		const result = await this.workerClient!.openDisplayDocument(
+			source,
+			previewDimension(),
+			lightSettings(photo.develop)
+		);
 		if (revision !== this.documentRevision) return;
-		const src = URL.createObjectURL(file);
+		this.installOpenedDocument(photo.id, result);
+	}
+
+	private installOpenedDocument(
+		photoId: string,
+		result: Awaited<ReturnType<PostframeWorkerClient['openRawDocument']>>
+	) {
+		const src = URL.createObjectURL(new Blob([result.image], { type: result.mediaType }));
 		this.objectUrls.add(src);
-		this.editPreview = {
-			src,
-			width: photo.width ?? 1,
-			height: photo.height ?? 1
-		};
-		this.imageScope = scope;
-		this.documentStatus = { kind: 'ready', photoId: photo.id, boostStops: null };
+		this.editPreview = { src, width: result.width, height: result.height };
+		this.imageScope = result.scope;
+		this.documentStatus = { kind: 'ready', photoId, boostStops: result.boostStops };
 	}
 
 	private async documentFrames(photo: Photo): Promise<RawFrameHandleInput[]> {
@@ -691,7 +702,7 @@ export class WorkspaceState {
 
 	private closeDocument() {
 		this.documentRevision += 1;
-		this.releaseExposurePreview();
+		this.releaseDevelopPreview();
 		const hadDocument = this.documentStatus.kind !== 'idle';
 		this.releaseEditPreview();
 		this.imageScope = null;
@@ -706,89 +717,91 @@ export class WorkspaceState {
 		this.editPreview = null;
 	}
 
-	private scheduleExposurePreview(exposure: number) {
-		this.clearExposurePreviewTimer();
-		this.showExposurePreview('applying');
-		this.exposurePreviewTimer = setTimeout(() => {
-			this.exposurePreviewTimer = null;
-			this.requestExposurePreview(exposure, 'applying');
+	private scheduleDevelopPreview(settings: DevelopSettings) {
+		this.clearDevelopPreviewTimer();
+		this.showDevelopPreview('applying');
+		this.developPreviewTimer = setTimeout(() => {
+			this.developPreviewTimer = null;
+			this.requestDevelopPreview(settings, 'applying');
 		}, 40);
 	}
 
-	private applyExposureRender(exposure: number) {
-		if (this.renderSettings.exposure === exposure) return;
-		this.renderSettings = { exposure, revision: this.renderSettings.revision + 1 };
+	private applyDevelopRender(settings: DevelopSettings) {
+		const next = lightSettings(settings);
+		if (LIGHT_CONTROL_NAMES.every((name) => this.renderSettings.settings[name] === next[name]))
+			return;
+		this.renderSettings = { settings: next, revision: this.renderSettings.revision + 1 };
 	}
 
-	private requestExposurePreview(exposure: number, phase: ExposurePreviewPhase) {
-		this.clearExposurePreviewTimer();
-		if (!this.workerClient || !this.selectedPhoto || !this.canAdjustExposure) return;
+	private requestDevelopPreview(settings: DevelopSettings, phase: DevelopPreviewPhase) {
+		this.clearDevelopPreviewTimer();
+		if (!this.workerClient || !this.selectedPhoto || !this.canAdjustLight) return;
 		const photoId = this.selectedPhoto.id;
-		const revision = ++this.exposurePreviewRevision;
-		this.showExposurePreview(phase);
+		const revision = ++this.developPreviewRevision;
+		this.showDevelopPreview(phase);
 		void this.workerClient
-			.preview(exposure, true)
+			.preview(lightSettings(settings), true)
 			.then((preview) => {
-				if (revision !== this.exposurePreviewRevision || this.selectedPhoto?.id !== photoId) return;
-				const src = URL.createObjectURL(new Blob([preview.jpeg], { type: 'image/jpeg' }));
-				this.replaceExposurePreviewUrl(src);
+				if (revision !== this.developPreviewRevision || this.selectedPhoto?.id !== photoId) return;
+				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
+				this.replaceDevelopPreviewUrl(src);
 				this.imageScope = preview.scope;
-				this.exposurePreview = { photoId, src, phase: this.exposurePreview?.phase ?? phase };
+				this.developPreview = { photoId, src, phase: this.developPreview?.phase ?? phase };
 			})
 			.catch(() => {
-				if (revision === this.exposurePreviewRevision && this.refinementRevision === null) {
-					this.releaseExposurePreview();
+				if (revision === this.developPreviewRevision && this.refinementRevision === null) {
+					this.releaseDevelopPreview();
 				}
 			});
 	}
 
-	private showExposurePreview(phase: ExposurePreviewPhase) {
+	private showDevelopPreview(phase: DevelopPreviewPhase) {
 		if (!this.selectedPhoto) return;
-		this.exposurePreview = {
+		this.developPreview = {
 			photoId: this.selectedPhoto.id,
-			src: this.exposurePreviewUrl,
+			src: this.developPreviewUrl,
 			phase
 		};
 	}
 
-	private replaceExposurePreviewUrl(src: string) {
-		if (this.exposurePreviewUrl) {
-			URL.revokeObjectURL(this.exposurePreviewUrl);
-			this.objectUrls.delete(this.exposurePreviewUrl);
+	private replaceDevelopPreviewUrl(src: string) {
+		if (this.developPreviewUrl) {
+			URL.revokeObjectURL(this.developPreviewUrl);
+			this.objectUrls.delete(this.developPreviewUrl);
 		}
-		this.exposurePreviewUrl = src;
+		this.developPreviewUrl = src;
 		this.objectUrls.add(src);
 	}
 
-	private releaseExposurePreview() {
-		this.clearExposurePreviewTimer();
-		this.exposurePreviewRevision += 1;
+	private releaseDevelopPreview() {
+		this.clearDevelopPreviewTimer();
+		this.developPreviewRevision += 1;
 		this.refinementRevision = null;
-		if (this.exposurePreviewUrl) {
-			URL.revokeObjectURL(this.exposurePreviewUrl);
-			this.objectUrls.delete(this.exposurePreviewUrl);
+		if (this.developPreviewUrl) {
+			URL.revokeObjectURL(this.developPreviewUrl);
+			this.objectUrls.delete(this.developPreviewUrl);
 		}
-		this.exposurePreviewUrl = null;
-		this.exposurePreview = null;
+		this.developPreviewUrl = null;
+		this.developPreview = null;
 	}
 
-	private clearExposurePreviewTimer() {
-		if (this.exposurePreviewTimer === null) return;
-		clearTimeout(this.exposurePreviewTimer);
-		this.exposurePreviewTimer = null;
+	private clearDevelopPreviewTimer() {
+		if (this.developPreviewTimer === null) return;
+		clearTimeout(this.developPreviewTimer);
+		this.developPreviewTimer = null;
 	}
 
 	private applyDevelopSettings(settings: DevelopSettings) {
 		if (!this.selectedPhoto) return;
-		this.adjustments.exposure = settings.exposure;
-		this.applyExposureRender(settings.exposure);
+		for (const control of LIGHT_CONTROL_NAMES) this.adjustments[control] = settings[control];
+		this.applyDevelopRender(settings);
 		this.selectedPhoto.develop = { ...settings };
 		const photoId = this.selectedPhoto.id;
 		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
 	}
 
 	private refineDevelopSettings(settings: DevelopSettings) {
-		this.requestExposurePreview(settings.exposure, 'refining');
+		this.requestDevelopPreview(settings, 'refining');
 		this.applyDevelopSettings(settings);
 		this.refinementRevision = this.renderSettings.revision;
 	}
@@ -800,7 +813,7 @@ export class WorkspaceState {
 	}
 
 	private clearFiles() {
-		this.releaseExposurePreview();
+		this.releaseDevelopPreview();
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
 		this.thumbnailLoads.clear();
@@ -1337,30 +1350,6 @@ function previewDimension() {
 	return Math.round(Math.min(2560, Math.max(1024, longestSide)));
 }
 
-async function displayImageScope(file: Blob): Promise<ImageScopeData | null> {
-	try {
-		const bitmap = await createImageBitmap(file);
-		try {
-			const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
-			const canvas = document.createElement('canvas');
-			canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-			canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-			const context = canvas.getContext('2d', { willReadFrequently: true });
-			if (!context) return null;
-			context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-			return imageScopeFromRgba(
-				context.getImageData(0, 0, canvas.width, canvas.height).data,
-				canvas.width,
-				canvas.height
-			);
-		} finally {
-			bitmap.close();
-		}
-	} catch {
-		return null;
-	}
-}
-
 function developProgress(progress: DevelopProgress) {
 	return {
 		phase: progress.phase,
@@ -1377,6 +1366,7 @@ export function formatBytes(bytes: number) {
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function exposureLabel(exposure: number) {
-	return `exposure ${exposure > 0 ? '+' : ''}${exposure.toFixed(2)} EV`;
+function lightEditLabel(control: LightControlName, value: number) {
+	const formatted = control === 'exposure' ? `${value.toFixed(2)} EV` : value.toFixed(0);
+	return `${control} ${value > 0 ? '+' : ''}${formatted}`;
 }

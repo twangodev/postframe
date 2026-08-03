@@ -59,6 +59,7 @@ export function imageScopeFromRgba(rgba: Uint8ClampedArray, width: number, heigh
 	for (let y = 0; y < height; y += stride) {
 		for (let x = 0; x < width; x += stride) {
 			const offset = (y * width + x) * 4;
+			if ((rgba[offset + 3] ?? 0) === 0) continue;
 			const red = rgba[offset] ?? 0;
 			const green = rgba[offset + 1] ?? 0;
 			const blue = rgba[offset + 2] ?? 0;

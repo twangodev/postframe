@@ -14,6 +14,14 @@ test('measures tonal and spatial density from display pixels', () => {
 	assert.equal(scope.sampleCount, 2);
 });
 
+test('ignores fully transparent display pixels', () => {
+	const scope = imageScopeFromRgba(new Uint8ClampedArray([255, 0, 0, 0, 0, 255, 0, 255]), 2, 1);
+
+	assert.equal(scope.sampleCount, 1);
+	assert.equal(scope.histogram[255], 0);
+	assert.equal(scope.histogram[256 + 255], 1);
+});
+
 test('restores transferred histogram and waveform buffers', () => {
 	const histogram = new Uint32Array(4 * 256);
 	const waveform = new Uint16Array(3 * 16 * 8);

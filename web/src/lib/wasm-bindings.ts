@@ -6,28 +6,47 @@ type WorkerRequest = Request['type'];
 
 interface WasmBinding {
 	rust: string;
-	worker: WorkerRequest | null;
+	worker: WorkerRequest | readonly WorkerRequest[] | null;
 }
 
 export const WASM_BINDINGS = {
 	supported_raw_extensions: { rust: 'supported_raw_extensions', worker: 'capabilities' },
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
-	constructor: { rust: 'Session::new', worker: 'open' },
+	display_transform: {
+		rust: 'DisplayTransform::new',
+		worker: ['open-display', 'preview', 'tile']
+	},
+	display_free: {
+		rust: 'wasm-bindgen DisplayTransform destructor',
+		worker: ['preview', 'tile', 'close']
+	},
+	apply_display_rgba: {
+		rust: 'DisplayTransform::apply_rgba',
+		worker: ['open-display', 'preview', 'tile']
+	},
+	constructor: { rust: 'Session::new', worker: 'open-raw' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'close' },
-	add_frame: { rust: 'Session::add_frame', worker: 'open' },
+	add_frame: { rust: 'Session::add_frame', worker: 'open-raw' },
 	frame_count: { rust: 'Session::frame_count', worker: null },
-	merge: { rust: 'Session::merge', worker: 'open' },
-	boost_stops: { rust: 'Session::boost_stops', worker: 'open' },
-	width: { rust: 'Session::width', worker: 'open' },
-	height: { rust: 'Session::height', worker: 'open' },
+	merge: { rust: 'Session::merge', worker: 'open-raw' },
+	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
+	width: { rust: 'Session::width', worker: 'open-raw' },
+	height: { rust: 'Session::height', worker: 'open-raw' },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: null },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'preview' },
 	render_tile_png: { rust: 'Session::render_tile_png', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
 	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
 } as const satisfies Record<
-	SessionMethod | 'constructor' | 'supported_raw_extensions' | 'validate_raw' | 'inspect_raw',
+	| SessionMethod
+	| 'constructor'
+	| 'supported_raw_extensions'
+	| 'validate_raw'
+	| 'inspect_raw'
+	| 'display_transform'
+	| 'display_free'
+	| 'apply_display_rgba',
 	WasmBinding
 >;
 
@@ -70,7 +89,7 @@ export const WASM_TODOS = {
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',
 		bindings: ['preview_frame', 'render_tile_png', 'preview_ultra'],
-		planned: ['GPU display transform', 'tile invalidation after edits']
+		planned: ['GPU display transform']
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
@@ -78,9 +97,15 @@ export const WASM_TODOS = {
 		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
 	},
 	adjustments: {
-		scope: 'Apply global and masked adjustments to the render graph.',
-		bindings: ['preview_frame', 'render_tile_png'],
-		planned: ['Session::set_adjustments', 'Session::set_mask_adjustments']
+		scope: 'Apply remaining global and masked adjustments to the render graph.',
+		bindings: [
+			'display_transform',
+			'display_free',
+			'apply_display_rgba',
+			'preview_frame',
+			'render_tile_png'
+		],
+		planned: ['Session::set_mask_adjustments', 'color and presence controls']
 	},
 	documentGeometry: {
 		scope: 'Resize, crop, rotate, distort, warp, and transform document pixels and bounds.',

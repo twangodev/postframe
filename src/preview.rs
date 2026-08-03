@@ -1,5 +1,5 @@
 use crate::color;
-use crate::{LightSettings, LightTransform, Merged, Rendered};
+use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
 
 const SAMPLES: usize = 4096;
 const LOG2_LO: f32 = -18.0;
@@ -89,12 +89,12 @@ impl Preview {
         table[index] + t * (table[index + 1] - table[index])
     }
 
-    pub fn render(&self, merged: &Merged, ev: f32, tone: bool) -> Vec<u8> {
+    pub fn render(&self, merged: &Merged, ev: f32, tone: bool) -> Result<Vec<u8>> {
         let settings = LightSettings {
             exposure: ev,
             ..LightSettings::NEUTRAL
         };
-        self.render_adjusted(merged, &LightTransform::new(settings).unwrap(), tone)
+        Ok(self.render_adjusted(merged, &LightTransform::new(settings)?, tone))
     }
 
     pub fn render_adjusted(&self, merged: &Merged, light: &LightTransform, tone: bool) -> Vec<u8> {
@@ -115,18 +115,13 @@ impl Preview {
         bin: usize,
         ev: f32,
         tone: bool,
-    ) -> Rendered {
+    ) -> Result<Rendered> {
         let region = PreparedRegion::new(merged, origin, size, bin);
         let settings = LightSettings {
             exposure: ev,
             ..LightSettings::NEUTRAL
         };
-        self.render_prepared_adjusted(
-            merged,
-            &region,
-            &LightTransform::new(settings).unwrap(),
-            tone,
-        )
+        Ok(self.render_prepared_adjusted(merged, &region, &LightTransform::new(settings)?, tone))
     }
 
     pub(crate) fn render_prepared_adjusted(
@@ -220,7 +215,7 @@ mod tests {
             },
         };
 
-        let fast = Preview::new(&merged).render(&merged, 0.5, false);
+        let fast = Preview::new(&merged).render(&merged, 0.5, false).unwrap();
         let exact = merged.render(0.5);
         let worst = fast
             .iter()
@@ -256,10 +251,14 @@ mod tests {
         })
         .unwrap();
         let rerendered = preview.render_prepared_adjusted(&merged, &prepared, &light, false);
-        let direct = preview.render_region(&merged, (2, 1), (3, 4), 1, -0.5, false);
+        let direct = preview
+            .render_region(&merged, (2, 1), (3, 4), 1, -0.5, false)
+            .unwrap();
         assert_eq!(rerendered.rgb8, direct.rgb8);
 
-        let binned = preview.render_region(&merged, (0, 0), (8, 8), 4, 0.0, true);
+        let binned = preview
+            .render_region(&merged, (0, 0), (8, 8), 4, 0.0, true)
+            .unwrap();
         assert_eq!((binned.width, binned.height, binned.rgb8.len()), (2, 2, 12));
     }
 }

@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { DevelopHistory } from '../src/lib/develop-history.ts';
+import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
 test('records a committed gesture as one reversible develop edit', () => {
 	const history = new DevelopHistory();
-	const before = { version: 1 as const, exposure: 0 };
-	const after = { version: 1 as const, exposure: 1.25 };
+	const before = defaultDevelopSettings();
+	const after = { ...before, exposure: 1.25 };
 
 	assert.equal(history.commit({ label: 'exposure +1.25 EV', before, after }), true);
 	assert.deepEqual(history.labels, ['exposure +1.25 EV']);
@@ -19,9 +20,9 @@ test('records a committed gesture as one reversible develop edit', () => {
 
 test('ignores no-op edits and clears redo after a new edit', () => {
 	const history = new DevelopHistory();
-	const neutral = { version: 1 as const, exposure: 0 };
-	const raised = { version: 1 as const, exposure: 1 };
-	const lowered = { version: 1 as const, exposure: -1 };
+	const neutral = defaultDevelopSettings();
+	const raised = { ...neutral, shadows: 40 };
+	const lowered = { ...neutral, shadows: -30 };
 
 	assert.equal(history.commit({ label: 'no-op', before: neutral, after: neutral }), false);
 	history.commit({ label: 'raised', before: neutral, after: raised });

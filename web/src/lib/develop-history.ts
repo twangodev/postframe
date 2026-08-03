@@ -1,4 +1,4 @@
-import type { DevelopSettings } from './develop-settings.ts';
+import { LIGHT_CONTROL_NAMES, type DevelopSettings } from './develop-settings.ts';
 
 export interface DevelopHistoryEntry {
 	label: string;
@@ -50,7 +50,10 @@ export class DevelopHistory {
 }
 
 function sameSettings(left: DevelopSettings, right: DevelopSettings) {
-	return left.version === right.version && left.exposure === right.exposure;
+	return (
+		left.version === right.version &&
+		LIGHT_CONTROL_NAMES.every((name) => left[name] === right[name])
+	);
 }
 
 function cloneEntry(entry: DevelopHistoryEntry): DevelopHistoryEntry {

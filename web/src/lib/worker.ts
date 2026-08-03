@@ -1,11 +1,13 @@
 import init, {
+	DisplayTransform,
 	Session,
 	inspect_raw,
 	supported_raw_extensions,
 	validate_raw
 } from './pf/postframe.js';
 import wasmUrl from './pf/postframe_bg.wasm?url';
-import type { ImageScopeTransfer } from './image-scope';
+import type { LightSettings } from './develop-settings';
+import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -48,7 +50,7 @@ export interface RenderTileRequest {
 	width: number;
 	height: number;
 	bin: number;
-	ev: number;
+	settings: LightSettings;
 	tone: boolean;
 }
 
@@ -56,45 +58,71 @@ export type Request =
 	| { id: number; type: 'capabilities' }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
 	| { id: number; type: 'inspect'; raw: ArrayBuffer; maxDimension: number }
-	| { id: number; type: 'open'; frames: RawFrameHandleInput[]; maxDimension: number; ev: number }
+	| {
+			id: number;
+			type: 'open-raw';
+			frames: RawFrameHandleInput[];
+			maxDimension: number;
+			settings: LightSettings;
+	  }
+	| {
+			id: number;
+			type: 'open-display';
+			source: FileSystemFileHandle;
+			maxDimension: number;
+			settings: LightSettings;
+	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
-	| { id: number; type: 'preview'; ev: number; tone: boolean }
+	| { id: number; type: 'preview'; settings: LightSettings; tone: boolean }
 	| { id: number; type: 'ultra' }
 	| { id: number; type: 'export' }
 	| { id: number; type: 'close' };
 
 export type Response =
-	| {
-			id: number;
-			type: 'progress';
-			phase: DevelopPhase;
-			bytesRead: number;
-			totalBytes: number;
-			framesDecoded: number;
-			totalFrames: number;
-			activeFrame: number;
-	  }
+	| ({ id: number; type: 'progress' } & DevelopProgress)
 	| { id: number; type: 'capabilities'; rawExtensions: string[] }
 	| { id: number; type: 'validated' }
 	| { id: number; type: 'inspected'; inspection: RawInspection }
 	| {
 			id: number;
 			type: 'opened';
-			jpeg: ArrayBuffer;
+			image: ArrayBuffer;
+			mediaType: 'image/jpeg' | 'image/png';
 			scope: ImageScopeTransfer;
-			boostStops: number;
+			boostStops: number | null;
 			width: number;
 			height: number;
 	  }
 	| { id: number; type: 'tile'; png: ArrayBuffer }
-	| { id: number; type: 'preview'; jpeg: ArrayBuffer; scope: ImageScopeTransfer }
+	| {
+			id: number;
+			type: 'preview';
+			image: ArrayBuffer;
+			mediaType: 'image/jpeg' | 'image/png';
+			scope: ImageScopeTransfer;
+	  }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }
 	| { id: number; type: 'error'; message: string };
 
+interface RawDocument {
+	kind: 'raw';
+	session: Session;
+}
+
+interface DisplayDocument {
+	kind: 'display';
+	bitmap: ImageBitmap;
+	preview: ImageData;
+	settings: LightSettings;
+	light: DisplayTransform;
+}
+
+type ActiveDocument = RawDocument | DisplayDocument;
+
 const ready = init({ module_or_path: wasmUrl });
-let session: Session | null = null;
+let document: ActiveDocument | null = null;
 
 const post = (message: Response, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);
@@ -111,75 +139,46 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				validate_raw(new Uint8Array(message.raw));
 				post({ id: message.id, type: 'validated' });
 				break;
-			case 'inspect': {
-				const result = inspect_raw(new Uint8Array(message.raw), message.maxDimension);
-				try {
-					const thumbnailJpeg = result.thumbnail_jpeg.buffer as ArrayBuffer;
-					post(
-						{
-							id: message.id,
-							type: 'inspected',
-							inspection: {
-								thumbnailJpeg,
-								metadata: {
-									width: result.width,
-									height: result.height,
-									orientation: result.orientation,
-									cameraMake: result.camera_make ?? null,
-									cameraModel: result.camera_model ?? null,
-									lens: result.lens ?? null,
-									capturedAt: result.captured_at ?? null,
-									exposureSeconds: result.exposure_seconds ?? null,
-									fNumber: result.f_number ?? null,
-									iso: result.iso ?? null,
-									focalLengthMm: result.focal_length_mm ?? null
-								}
-							}
-						},
-						[thumbnailJpeg]
-					);
-				} finally {
-					result.free();
-				}
+			case 'inspect':
+				inspectDocument(message);
 				break;
-			}
-			case 'open':
-				await openDocument(message);
+			case 'open-raw':
+				await openRawDocument(message);
+				break;
+			case 'open-display':
+				await openDisplayDocument(message);
 				break;
 			case 'tile': {
-				const png = activeSession().render_tile_png(
-					message.x,
-					message.y,
-					message.width,
-					message.height,
-					message.bin,
-					message.ev,
-					message.tone
-				).buffer as ArrayBuffer;
+				const png = await renderTile(activeDocument(), message);
 				post({ id: message.id, type: 'tile', png }, [png]);
 				break;
 			}
 			case 'preview': {
-				const preview = renderPreview(activeSession(), message.ev, message.tone);
+				const preview = await renderPreview(activeDocument(), message.settings, message.tone);
 				post(
-					{ id: message.id, type: 'preview', jpeg: preview.jpeg, scope: preview.scope },
+					{
+						id: message.id,
+						type: 'preview',
+						image: preview.image,
+						mediaType: preview.mediaType,
+						scope: preview.scope
+					},
 					preview.transfer
 				);
 				break;
 			}
 			case 'ultra': {
-				const jpeg = activeSession().preview_ultra().buffer as ArrayBuffer;
+				const jpeg = activeRawDocument().preview_ultra().buffer as ArrayBuffer;
 				post({ id: message.id, type: 'ultra', jpeg }, [jpeg]);
 				break;
 			}
 			case 'export': {
-				const jpeg = activeSession().export_ultra().buffer as ArrayBuffer;
+				const jpeg = activeRawDocument().export_ultra().buffer as ArrayBuffer;
 				post({ id: message.id, type: 'export', jpeg }, [jpeg]);
 				break;
 			}
 			case 'close':
-				session?.free();
-				session = null;
+				closeDocument();
 				post({ id: message.id, type: 'closed' });
 				break;
 		}
@@ -188,10 +187,41 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 	}
 };
 
-async function openDocument(message: Extract<Request, { type: 'open' }>) {
-	session?.free();
-	session = null;
-	const next = new Session();
+function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
+	const result = inspect_raw(new Uint8Array(message.raw), message.maxDimension);
+	try {
+		const thumbnailJpeg = result.thumbnail_jpeg.buffer as ArrayBuffer;
+		post(
+			{
+				id: message.id,
+				type: 'inspected',
+				inspection: {
+					thumbnailJpeg,
+					metadata: {
+						width: result.width,
+						height: result.height,
+						orientation: result.orientation,
+						cameraMake: result.camera_make ?? null,
+						cameraModel: result.camera_model ?? null,
+						lens: result.lens ?? null,
+						capturedAt: result.captured_at ?? null,
+						exposureSeconds: result.exposure_seconds ?? null,
+						fNumber: result.f_number ?? null,
+						iso: result.iso ?? null,
+						focalLengthMm: result.focal_length_mm ?? null
+					}
+				}
+			},
+			[thumbnailJpeg]
+		);
+	} finally {
+		result.free();
+	}
+}
+
+async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) {
+	closeDocument();
+	const session = new Session();
 
 	try {
 		const sizes = await Promise.all(
@@ -231,41 +261,115 @@ async function openDocument(message: Extract<Request, { type: 'open' }>) {
 					})
 				: undefined;
 			progress('decoding', activeFrame);
-			next.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined);
+			session.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined);
 			framesDecoded = activeFrame;
 			progress('decoding', activeFrame);
 		}
 
 		progress('merging', message.frames.length);
-		next.merge(message.maxDimension);
+		session.merge(message.maxDimension);
 		progress('rendering', message.frames.length);
-		const preview = renderPreview(next, message.ev, true);
-		const boostStops = next.boost_stops();
-		const width = next.width();
-		const height = next.height();
-		session = next;
+		document = { kind: 'raw', session };
+		const preview = renderRawPreview(session, message.settings, true);
 		post(
 			{
 				id: message.id,
 				type: 'opened',
-				jpeg: preview.jpeg,
+				image: preview.image,
+				mediaType: preview.mediaType,
 				scope: preview.scope,
-				boostStops,
-				width,
-				height
+				boostStops: session.boost_stops(),
+				width: session.width(),
+				height: session.height()
 			},
 			preview.transfer
 		);
 	} catch (error) {
-		next.free();
+		session.free();
+		if (document?.kind === 'raw' && document.session === session) document = null;
 		throw error;
 	}
 }
 
-function renderPreview(active: Session, ev: number, tone: boolean) {
-	const frame = active.preview_frame(ev, tone);
+async function openDisplayDocument(message: Extract<Request, { type: 'open-display' }>) {
+	closeDocument();
+	const source = await message.source.getFile();
+	postDisplayProgress(message, 'reading', 0, source.size);
+	const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
+	const light = new DisplayTransform(...lightArguments(message.settings));
 	try {
-		const jpeg = frame.jpeg.buffer as ArrayBuffer;
+		postDisplayProgress(message, 'decoding', source.size, source.size);
+		const preview = displayPreview(bitmap, message.maxDimension);
+		const next = {
+			kind: 'display',
+			bitmap,
+			preview,
+			settings: { ...message.settings },
+			light
+		} satisfies DisplayDocument;
+		document = next;
+		postDisplayProgress(message, 'rendering', source.size, source.size);
+		const rendered = await renderDisplayPreview(next, message.settings);
+		post(
+			{
+				id: message.id,
+				type: 'opened',
+				image: rendered.image,
+				mediaType: rendered.mediaType,
+				scope: rendered.scope,
+				boostStops: null,
+				width: bitmap.width,
+				height: bitmap.height
+			},
+			rendered.transfer
+		);
+	} catch (error) {
+		light.free();
+		bitmap.close();
+		if (document?.kind === 'display' && document.bitmap === bitmap) document = null;
+		throw error;
+	}
+}
+
+function postDisplayProgress(
+	message: Extract<Request, { type: 'open-display' }>,
+	phase: DevelopPhase,
+	bytesRead: number,
+	totalBytes: number
+) {
+	post({
+		id: message.id,
+		type: 'progress',
+		phase,
+		bytesRead,
+		totalBytes,
+		framesDecoded: phase === 'reading' ? 0 : 1,
+		totalFrames: 1,
+		activeFrame: 1
+	});
+}
+
+function displayPreview(bitmap: ImageBitmap, maxDimension: number) {
+	const scale = Math.min(1, Math.max(256, maxDimension) / Math.max(bitmap.width, bitmap.height));
+	const width = Math.max(1, Math.round(bitmap.width * scale));
+	const height = Math.max(1, Math.round(bitmap.height * scale));
+	const context = canvasContext(width, height);
+	context.imageSmoothingEnabled = true;
+	context.imageSmoothingQuality = 'high';
+	context.drawImage(bitmap, 0, 0, width, height);
+	return context.getImageData(0, 0, width, height);
+}
+
+async function renderPreview(active: ActiveDocument, settings: LightSettings, tone: boolean) {
+	return active.kind === 'raw'
+		? renderRawPreview(active.session, settings, tone)
+		: renderDisplayPreview(active, settings);
+}
+
+function renderRawPreview(session: Session, settings: LightSettings, tone: boolean) {
+	const frame = session.preview_frame(...lightArguments(settings), tone);
+	try {
+		const image = frame.jpeg.buffer as ArrayBuffer;
 		const histogram = frame.histogram.buffer as ArrayBuffer;
 		const waveform = frame.waveform.buffer as ArrayBuffer;
 		const scope = {
@@ -275,10 +379,128 @@ function renderPreview(active: Session, ev: number, tone: boolean) {
 			waveformHeight: frame.waveform_height,
 			sampleCount: frame.sample_count
 		} satisfies ImageScopeTransfer;
-		return { jpeg, scope, transfer: [jpeg, histogram, waveform] };
+		return {
+			image,
+			mediaType: 'image/jpeg' as const,
+			scope,
+			transfer: [image, histogram, waveform]
+		};
 	} finally {
 		frame.free();
 	}
+}
+
+async function renderDisplayPreview(active: DisplayDocument, settings: LightSettings) {
+	const light = displayTransform(active, settings);
+	const adjusted = light.apply_rgba(new Uint8Array(active.preview.data));
+	return renderDisplayPixels(adjusted, active.preview.width, active.preview.height);
+}
+
+async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
+	if (active.kind === 'raw') {
+		return active.session.render_tile_png(
+			request.x,
+			request.y,
+			request.width,
+			request.height,
+			request.bin,
+			...lightArguments(request.settings),
+			request.tone
+		).buffer as ArrayBuffer;
+	}
+
+	const width = Math.ceil(request.width / request.bin);
+	const height = Math.ceil(request.height / request.bin);
+	const context = canvasContext(width, height);
+	context.imageSmoothingEnabled = request.bin > 1;
+	context.imageSmoothingQuality = 'high';
+	context.drawImage(
+		active.bitmap,
+		request.x,
+		request.y,
+		request.width,
+		request.height,
+		0,
+		0,
+		width,
+		height
+	);
+	const pixels = context.getImageData(0, 0, width, height);
+	const adjusted = displayTransform(active, request.settings).apply_rgba(
+		new Uint8Array(pixels.data)
+	);
+	context.putImageData(imageData(adjusted, width, height), 0, 0);
+	return (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
+}
+
+async function renderDisplayPixels(pixels: Uint8Array, width: number, height: number) {
+	const rgba = new Uint8ClampedArray(pixels);
+	const scope = transferableScope(imageScopeFromRgba(rgba, width, height));
+	const context = canvasContext(width, height);
+	context.putImageData(new ImageData(rgba, width, height), 0, 0);
+	const image = await (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
+	return {
+		image,
+		mediaType: 'image/png' as const,
+		scope: scope.data,
+		transfer: [image, ...scope.transfer]
+	};
+}
+
+function transferableScope(scope: ImageScopeData) {
+	const histogram = scope.histogram.buffer as ArrayBuffer;
+	const waveform = scope.waveform.buffer as ArrayBuffer;
+	return {
+		data: {
+			histogram,
+			waveform,
+			waveformWidth: scope.waveformWidth,
+			waveformHeight: scope.waveformHeight,
+			sampleCount: scope.sampleCount
+		} satisfies ImageScopeTransfer,
+		transfer: [histogram, waveform]
+	};
+}
+
+function canvasContext(width: number, height: number) {
+	const canvas = new OffscreenCanvas(width, height);
+	const context = canvas.getContext('2d', { willReadFrequently: true });
+	if (!context) throw new Error('Unable to create an image canvas');
+	return context;
+}
+
+function imageData(pixels: Uint8Array, width: number, height: number) {
+	return new ImageData(new Uint8ClampedArray(pixels), width, height);
+}
+
+function lightArguments(settings: LightSettings) {
+	return [
+		settings.exposure,
+		settings.contrast,
+		settings.highlights,
+		settings.shadows,
+		settings.whites,
+		settings.blacks
+	] as const;
+}
+
+function displayTransform(active: DisplayDocument, settings: LightSettings) {
+	if (sameLightSettings(active.settings, settings)) return active.light;
+	active.light.free();
+	active.settings = { ...settings };
+	active.light = new DisplayTransform(...lightArguments(settings));
+	return active.light;
+}
+
+function sameLightSettings(left: LightSettings, right: LightSettings) {
+	return (
+		left.exposure === right.exposure &&
+		left.contrast === right.contrast &&
+		left.highlights === right.highlights &&
+		left.shadows === right.shadows &&
+		left.whites === right.whites &&
+		left.blacks === right.blacks
+	);
 }
 
 const READ_PROGRESS_STEP = 4 * 1024 * 1024;
@@ -336,7 +558,22 @@ async function readFile(
 	}
 }
 
-function activeSession() {
-	if (!session) throw new Error('Open a document before rendering');
-	return session;
+function activeDocument() {
+	if (!document) throw new Error('Open a document before rendering');
+	return document;
+}
+
+function activeRawDocument() {
+	const active = activeDocument();
+	if (active.kind !== 'raw') throw new Error('This operation requires a RAW document');
+	return active.session;
+}
+
+function closeDocument() {
+	if (document?.kind === 'raw') document.session.free();
+	if (document?.kind === 'display') {
+		document.light.free();
+		document.bitmap.close();
+	}
+	document = null;
 }

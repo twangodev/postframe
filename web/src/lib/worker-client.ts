@@ -1,5 +1,6 @@
 import type { RawFrameHandleInput, RenderTileRequest, Request, Response } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
+import type { LightSettings } from './develop-settings.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
@@ -13,6 +14,23 @@ interface PendingRequest {
 	reject: (error: Error) => void;
 }
 
+interface PreviewWaiter {
+	resolve: (preview: RenderedPreview) => void;
+	reject: (error: Error) => void;
+}
+
+interface QueuedPreview {
+	settings: LightSettings;
+	tone: boolean;
+	waiters: PreviewWaiter[];
+}
+
+interface RenderedPreview {
+	image: ArrayBuffer;
+	mediaType: 'image/jpeg' | 'image/png';
+	scope: ReturnType<typeof imageScopeFromTransfer>;
+}
+
 export type ProgressListener = (progress: ProgressResponse) => void;
 
 type WorkerFactory = () => Worker;
@@ -24,6 +42,8 @@ export class PostframeWorkerClient {
 	private readonly progressListeners = new Set<ProgressListener>();
 	private nextRequestId = 1;
 	private destroyed = false;
+	private previewInFlight = false;
+	private queuedPreview: QueuedPreview | null = null;
 
 	constructor(
 		workerFactory: WorkerFactory = () =>
@@ -51,28 +71,52 @@ export class PostframeWorkerClient {
 		return response.inspection;
 	}
 
-	async openDocument(frames: RawFrameHandleInput[], maxDimension: number, ev: number) {
+	async openRawDocument(
+		frames: RawFrameHandleInput[],
+		maxDimension: number,
+		settings: LightSettings
+	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open', frames, maxDimension, ev }),
+			(id) => ({ id, type: 'open-raw', frames, maxDimension, settings }),
 			'opened'
 		);
-		return {
-			jpeg: response.jpeg,
-			scope: imageScopeFromTransfer(response.scope),
-			boostStops: response.boostStops,
-			width: response.width,
-			height: response.height
-		};
+		return openedDocument(response);
+	}
+
+	async openDisplayDocument(
+		source: FileSystemFileHandle,
+		maxDimension: number,
+		settings: LightSettings
+	) {
+		const response = await this.send(
+			(id) => ({ id, type: 'open-display', source, maxDimension, settings }),
+			'opened'
+		);
+		return openedDocument(response);
 	}
 
 	async renderTile(tile: RenderTileRequest) {
-		const response = await this.send((id) => ({ id, type: 'tile', ...tile }), 'tile');
+		const request = { ...tile, settings: { ...tile.settings } };
+		const response = await this.send((id) => ({ id, type: 'tile', ...request }), 'tile');
 		return response.png;
 	}
 
-	async preview(ev: number, tone: boolean) {
-		const response = await this.send((id) => ({ id, type: 'preview', ev, tone }), 'preview');
-		return { jpeg: response.jpeg, scope: imageScopeFromTransfer(response.scope) };
+	preview(settings: LightSettings, tone: boolean) {
+		return new Promise<RenderedPreview>((resolve, reject) => {
+			if (this.destroyed) {
+				reject(new Error('Postframe worker closed'));
+				return;
+			}
+			const waiter = { resolve, reject };
+			if (this.queuedPreview) {
+				this.queuedPreview.settings = settings;
+				this.queuedPreview.tone = tone;
+				this.queuedPreview.waiters.push(waiter);
+			} else {
+				this.queuedPreview = { settings, tone, waiters: [waiter] };
+			}
+			this.pumpPreview();
+		});
 	}
 
 	async ultraPreview() {
@@ -99,6 +143,7 @@ export class PostframeWorkerClient {
 		this.detachWorker();
 		this.worker.terminate();
 		this.rejectPending(new Error(reason));
+		this.rejectQueuedPreview(new Error(reason));
 		this.worker = this.workerFactory();
 		this.attachWorker();
 	}
@@ -109,6 +154,7 @@ export class PostframeWorkerClient {
 		this.detachWorker();
 		this.worker.terminate();
 		this.rejectPending(new Error('Postframe worker closed'));
+		this.rejectQueuedPreview(new Error('Postframe worker closed'));
 		this.progressListeners.clear();
 	}
 
@@ -132,6 +178,33 @@ export class PostframeWorkerClient {
 				reject(error instanceof Error ? error : new Error('Unable to message Postframe worker'));
 			}
 		});
+	}
+
+	private pumpPreview() {
+		if (this.previewInFlight || !this.queuedPreview) return;
+		const preview = this.queuedPreview;
+		this.queuedPreview = null;
+		this.previewInFlight = true;
+		void this.send(
+			(id) => ({ id, type: 'preview', settings: preview.settings, tone: preview.tone }),
+			'preview'
+		)
+			.then((response) => {
+				const rendered = {
+					image: response.image,
+					mediaType: response.mediaType,
+					scope: imageScopeFromTransfer(response.scope)
+				};
+				for (const waiter of preview.waiters) waiter.resolve(rendered);
+			})
+			.catch((error: unknown) => {
+				const reason = error instanceof Error ? error : new Error('Unable to render preview');
+				for (const waiter of preview.waiters) waiter.reject(reason);
+			})
+			.finally(() => {
+				this.previewInFlight = false;
+				this.pumpPreview();
+			});
 	}
 
 	private handleMessage = (event: MessageEvent<Response>) => {
@@ -174,4 +247,21 @@ export class PostframeWorkerClient {
 		for (const pending of this.pending.values()) pending.reject(error);
 		this.pending.clear();
 	}
+
+	private rejectQueuedPreview(error: Error) {
+		if (!this.queuedPreview) return;
+		for (const waiter of this.queuedPreview.waiters) waiter.reject(error);
+		this.queuedPreview = null;
+	}
+}
+
+function openedDocument(response: Extract<Response, { type: 'opened' }>) {
+	return {
+		image: response.image,
+		mediaType: response.mediaType,
+		scope: imageScopeFromTransfer(response.scope),
+		boostStops: response.boostStops,
+		width: response.width,
+		height: response.height
+	};
 }

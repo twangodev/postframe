@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-test('switches scope modes and edits adjustment values', async ({ page }) => {
+test('renders and persists every light control for a display photo', async ({ page }) => {
+	const tileFailures: string[] = [];
+	page.on('console', (message) => {
+		if (/tile .*failed|could not be cloned/i.test(message.text()))
+			tileFailures.push(message.text());
+	});
 	await page.goto('/');
 	const dataUrl = await page.evaluate(() => {
 		const canvas = document.createElement('canvas');
@@ -28,12 +33,29 @@ test('switches scope modes and edits adjustment values', async ({ page }) => {
 	await page.getByRole('radio', { name: 'Histogram scope' }).click();
 	await expect(page.getByRole('img', { name: 'RGB histogram scope' })).toBeVisible();
 	await expect(page.locator('.lc-path')).toHaveCount(4);
+	const histogramSignature = () =>
+		page
+			.locator('.lc-path')
+			.evaluateAll((paths) => paths.map((path) => path.getAttribute('d')).join('|'));
+
+	const edits = [
+		['Exposure', '0.50', '+0.50 EV'],
+		['Contrast', '37', '+37'],
+		['Highlights', '-28', '-28'],
+		['Shadows', '34', '+34'],
+		['Whites', '21', '+21'],
+		['Blacks', '-16', '-16']
+	] as const;
+	for (const [label, draft, formatted] of edits) {
+		const before = await histogramSignature();
+		const value = page.getByRole('textbox', { name: `${label} value` });
+		await value.fill(draft);
+		await value.press('Enter');
+		await expect(value).toHaveValue(formatted);
+		await expect.poll(histogramSignature).not.toBe(before);
+	}
 
 	const value = page.getByRole('textbox', { name: 'Contrast value' });
-	await value.fill('37');
-	await value.press('Enter');
-	await expect(value).toHaveValue('+37');
-
 	await page.getByRole('slider', { name: 'Contrast' }).dblclick();
 	await expect(value).toHaveValue('0');
 
@@ -42,4 +64,71 @@ test('switches scope modes and edits adjustment values', async ({ page }) => {
 	await expect(value).toHaveValue('+1');
 	await page.mouse.wheel(0, 100);
 	await expect(value).toHaveValue('0');
+
+	await expect
+		.poll(() =>
+			page.evaluate(async () => {
+				const root = await navigator.storage.getDirectory();
+				const app = await root.getDirectoryHandle('postframe');
+				const edits = await app.getDirectoryHandle('edits');
+				for await (const handle of edits.values()) {
+					if (handle.kind !== 'file') continue;
+					return JSON.parse(await (await handle.getFile()).text());
+				}
+				return null;
+			})
+		)
+		.toMatchObject({
+			version: 1,
+			exposure: 0.5,
+			contrast: 0,
+			highlights: -28,
+			shadows: 34,
+			whites: 21,
+			blacks: -16
+		});
+	await expect.poll(() => tileFailures).toEqual([]);
+});
+
+test('keeps transparent PNG pixels transparent while developing', async ({ page }) => {
+	await page.goto('/');
+	const dataUrl = await page.evaluate(() => {
+		const canvas = document.createElement('canvas');
+		canvas.width = 16;
+		canvas.height = 8;
+		const context = canvas.getContext('2d')!;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.fillStyle = '#49a7ff';
+		context.fillRect(8, 0, 8, 8);
+		return canvas.toDataURL('image/png');
+	});
+	await page
+		.locator('main input[type="file"]')
+		.first()
+		.setInputFiles({
+			name: 'transparent.png',
+			mimeType: 'image/png',
+			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
+		});
+
+	const preview = page.getByRole('img', { name: 'transparent.png' }).first();
+	await expect(preview).toBeVisible();
+	await expect
+		.poll(() =>
+			preview.evaluate((image: HTMLImageElement) => {
+				const canvas = document.createElement('canvas');
+				canvas.width = image.naturalWidth;
+				canvas.height = image.naturalHeight;
+				const context = canvas.getContext('2d')!;
+				context.drawImage(image, 0, 0);
+				return context.getImageData(0, 0, 1, 1).data[3];
+			})
+		)
+		.toBe(0);
+
+	const exposure = page.getByRole('textbox', { name: 'Exposure value' });
+	await exposure.fill('1');
+	await exposure.press('Enter');
+	await expect(exposure).toHaveValue('+1.00 EV');
+	await expect(page.locator('[data-photo-pyramid] canvas')).toBeVisible();
 });

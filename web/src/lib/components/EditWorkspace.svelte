@@ -38,6 +38,7 @@
 		type MaskKind,
 		type WorkspaceState
 	} from '$lib/workspace.svelte';
+	import type { LightControlName } from '$lib/develop-settings';
 	import type { DevelopPhase } from '$lib/worker';
 	import {
 		ZOOM_MENU_PRESETS,
@@ -61,6 +62,10 @@
 	}
 
 	let { workspace }: Props = $props();
+	const previewLight = (control: LightControlName) => (value: number) =>
+		workspace.previewLight(control, value);
+	const commitLight = (control: LightControlName) => (value: number) =>
+		workspace.commitLight(control, value);
 	let activeTool = $state('move');
 	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
@@ -832,25 +837,24 @@
 						<PhotoPyramidLayer
 							photoId={active.id}
 							enabled={workspace.documentStatus.kind === 'ready' &&
-								workspace.documentStatus.photoId === active.id &&
-								active.kind !== 'display'}
+								workspace.documentStatus.photoId === active.id}
 							viewport={viewportSize}
 							image={imageSize}
 							transform={viewportTransform}
 							renderTile={workspace.renderTile}
 							renderRevision={workspace.renderSettings.revision}
-							ev={workspace.renderSettings.exposure}
-							onRenderSettled={workspace.settleExposureRender}
+							settings={workspace.renderSettings.settings}
+							onRenderSettled={workspace.settleDevelopRender}
 						/>
-						{#if workspace.exposurePreview?.photoId === active.id}
+						{#if workspace.developPreview?.photoId === active.id}
 							<div
 								class="motion-viewport-photo pointer-events-none absolute top-0 left-0 z-[15] overflow-hidden will-change-transform"
-								class:bg-black={workspace.exposurePreview.src !== null}
+								class:bg-black={workspace.developPreview.src !== null}
 								style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 							>
-								{#if workspace.exposurePreview.src}
+								{#if workspace.developPreview.src}
 									<img
-										src={workspace.exposurePreview.src}
+										src={workspace.developPreview.src}
 										alt=""
 										draggable="false"
 										class="size-full object-fill"
@@ -864,9 +868,9 @@
 								class="border-subtle bg-bg/90 text-muted pointer-events-none absolute bottom-3 left-1/2 z-30 w-36 -translate-x-1/2 overflow-hidden rounded border px-2 py-1.5 text-[9px] shadow-lg backdrop-blur"
 							>
 								<span>
-									{workspace.exposurePreview.phase === 'refining'
+									{workspace.developPreview.phase === 'refining'
 										? 'refining tiles'
-										: 'applying exposure'}
+										: 'applying light'}
 								</span>
 								<div class="bg-subtle mt-1 h-px overflow-hidden">
 									<div class="develop-progress-sweep bg-text h-full w-1/3"></div>
@@ -1056,7 +1060,6 @@
 				</Tabs.List>
 
 				<Tabs.Content value="adjust" class="motion-tab">
-					<!-- TODO(WASM_TODOS.adjustments): connect the remaining sliders to the renderer. -->
 					<div class="border-subtle border-b p-3">
 						<ImageScope
 							data={workspace.imageScope}
@@ -1082,39 +1085,54 @@
 							step={0.05}
 							decimals={2}
 							suffix=" EV"
-							disabled={!workspace.canAdjustExposure}
-							onValueChange={workspace.previewExposure}
-							onValueCommit={workspace.commitExposure}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('exposure')}
+							onValueCommit={commitLight('exposure')}
 						/>
 						<AdjustmentSlider
 							label="Contrast"
 							bind:value={workspace.adjustments.contrast}
 							min={-100}
 							max={100}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('contrast')}
+							onValueCommit={commitLight('contrast')}
 						/>
 						<AdjustmentSlider
 							label="Highlights"
 							bind:value={workspace.adjustments.highlights}
 							min={-100}
 							max={100}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('highlights')}
+							onValueCommit={commitLight('highlights')}
 						/>
 						<AdjustmentSlider
 							label="Shadows"
 							bind:value={workspace.adjustments.shadows}
 							min={-100}
 							max={100}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('shadows')}
+							onValueCommit={commitLight('shadows')}
 						/>
 						<AdjustmentSlider
 							label="Whites"
 							bind:value={workspace.adjustments.whites}
 							min={-100}
 							max={100}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('whites')}
+							onValueCommit={commitLight('whites')}
 						/>
 						<AdjustmentSlider
 							label="Blacks"
 							bind:value={workspace.adjustments.blacks}
 							min={-100}
 							max={100}
+							disabled={!workspace.canAdjustLight}
+							onValueChange={previewLight('blacks')}
+							onValueCommit={commitLight('blacks')}
 						/>
 					</Panel>
 

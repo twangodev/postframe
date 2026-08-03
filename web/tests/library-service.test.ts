@@ -12,6 +12,7 @@ import type {
 import { LibraryCatalog } from '../src/lib/library-catalog.ts';
 import { LibraryService } from '../src/lib/library-service.ts';
 import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts';
+import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
 class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
@@ -86,15 +87,11 @@ test('round-trips versioned develop settings', async () => {
 	const assets = new MemoryAssetStore();
 	const service = new LibraryService(catalog, assets as unknown as AssetStore);
 	try {
-		assert.deepEqual(await service.loadDevelopSettings('photo-one'), {
-			version: 1,
-			exposure: 0
-		});
-		await service.saveDevelopSettings('photo-one', { version: 1, exposure: 1.25 });
-		assert.deepEqual(await service.loadDevelopSettings('photo-one'), {
-			version: 1,
-			exposure: 1.25
-		});
+		const neutral = defaultDevelopSettings();
+		assert.deepEqual(await service.loadDevelopSettings('photo-one'), neutral);
+		const adjusted = { ...neutral, exposure: 1.25, highlights: -35, blacks: 12 };
+		await service.saveDevelopSettings('photo-one', adjusted);
+		assert.deepEqual(await service.loadDevelopSettings('photo-one'), adjusted);
 	} finally {
 		await service.clearAll();
 	}

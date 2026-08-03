@@ -47,21 +47,33 @@ pub fn validate_raw(raw: Vec<u8>) -> Result<(), JsError> {
 }
 
 #[wasm_bindgen]
-#[allow(clippy::too_many_arguments)]
-pub fn adjust_display_rgba(
-    rgba: Vec<u8>,
-    exposure: f32,
-    contrast: f32,
-    highlights: f32,
-    shadows: f32,
-    whites: f32,
-    blacks: f32,
-) -> Result<Vec<u8>, JsError> {
-    LightTransform::new(light_settings(
-        exposure, contrast, highlights, shadows, whites, blacks,
-    ))
-    .and_then(|transform| transform.apply_display_rgba8(&rgba))
-    .map_err(err)
+pub struct DisplayTransform {
+    light: LightTransform,
+}
+
+#[wasm_bindgen]
+impl DisplayTransform {
+    #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        exposure: f32,
+        contrast: f32,
+        highlights: f32,
+        shadows: f32,
+        whites: f32,
+        blacks: f32,
+    ) -> Result<DisplayTransform, JsError> {
+        Ok(Self {
+            light: LightTransform::new(light_settings(
+                exposure, contrast, highlights, shadows, whites, blacks,
+            ))
+            .map_err(err)?,
+        })
+    }
+
+    pub fn apply_rgba(&self, rgba: Vec<u8>) -> Result<Vec<u8>, JsError> {
+        self.light.apply_display_rgba8(&rgba).map_err(err)
+    }
 }
 
 #[wasm_bindgen]

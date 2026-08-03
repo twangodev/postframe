@@ -4,6 +4,15 @@ import test from 'node:test';
 import { PostframeWorkerClient } from '../src/lib/worker-client.ts';
 import type { Request, Response } from '../src/lib/worker.ts';
 
+const neutral = {
+	exposure: 0,
+	contrast: 0,
+	highlights: 0,
+	shadows: 0,
+	whites: 0,
+	blacks: 0
+};
+
 function scopeTransfer() {
 	return {
 		histogram: new Uint32Array(4 * 256).buffer,
@@ -48,9 +57,10 @@ test('reports document progress before resolving the developed preview', async (
 	const progress: Response[] = [];
 	client.onProgress((message) => progress.push(message));
 
-	const opened = client.openDocument([], 2048, 1.25);
+	const settings = { ...neutral, exposure: 1.25 };
+	const opened = client.openRawDocument([], 2048, settings);
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'open', frames: [], maxDimension: 2048, ev: 1.25 }
+		{ id: 1, type: 'open-raw', frames: [], maxDimension: 2048, settings }
 	]);
 
 	workers[0]?.respond({
@@ -66,7 +76,8 @@ test('reports document progress before resolving the developed preview', async (
 	workers[0]?.respond({
 		id: 1,
 		type: 'opened',
-		jpeg: new ArrayBuffer(12),
+		image: new ArrayBuffer(12),
+		mediaType: 'image/jpeg',
 		scope: scopeTransfer(),
 		boostStops: 1.5,
 		width: 6240,
@@ -75,7 +86,8 @@ test('reports document progress before resolving the developed preview', async (
 
 	assert.equal(progress.length, 1);
 	const result = await opened;
-	assert.equal(result.jpeg.byteLength, 12);
+	assert.equal(result.image.byteLength, 12);
+	assert.equal(result.mediaType, 'image/jpeg');
 	assert.equal(result.scope.histogram.length, 4 * 256);
 	assert.equal(result.scope.waveform.length, 3 * 512 * 256);
 	assert.equal(result.scope.sampleCount, 512);
@@ -114,7 +126,7 @@ test('requests a lossless source tile at the selected bin', async () => {
 		width: 1024,
 		height: 1024,
 		bin: 2,
-		ev: 0,
+		settings: neutral,
 		tone: true
 	};
 	const tile = client.renderTile(request);
@@ -122,6 +134,71 @@ test('requests a lossless source tile at the selected bin', async () => {
 	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'tile', ...request }]);
 	workers[0]?.respond({ id: 1, type: 'tile', png: new ArrayBuffer(24) });
 	assert.deepEqual(await tile, new ArrayBuffer(24));
+	client.destroy();
+});
+
+test('opens display documents through the same rendered document contract', async () => {
+	const { client, workers } = setup();
+	const source = { name: 'portrait.png' } as FileSystemFileHandle;
+	const opened = client.openDisplayDocument(source, 1600, neutral);
+
+	assert.deepEqual(workers[0]?.messages, [
+		{ id: 1, type: 'open-display', source, maxDimension: 1600, settings: neutral }
+	]);
+	workers[0]?.respond({
+		id: 1,
+		type: 'opened',
+		image: new ArrayBuffer(16),
+		mediaType: 'image/png',
+		scope: scopeTransfer(),
+		boostStops: null,
+		width: 800,
+		height: 600
+	});
+
+	const result = await opened;
+	assert.equal(result.mediaType, 'image/png');
+	assert.equal(result.boostStops, null);
+	client.destroy();
+});
+
+test('keeps one preview in flight and coalesces queued settings to the latest', async () => {
+	const { client, workers } = setup();
+	const firstSettings = { ...neutral, contrast: 10 };
+	const secondSettings = { ...neutral, contrast: 20 };
+	const latestSettings = { ...neutral, contrast: 30 };
+	const first = client.preview(firstSettings, true);
+	const second = client.preview(secondSettings, true);
+	const latest = client.preview(latestSettings, true);
+
+	assert.deepEqual(workers[0]?.messages, [
+		{ id: 1, type: 'preview', settings: firstSettings, tone: true }
+	]);
+	workers[0]?.respond({
+		id: 1,
+		type: 'preview',
+		image: new ArrayBuffer(10),
+		mediaType: 'image/jpeg',
+		scope: scopeTransfer()
+	});
+	await first;
+	await new Promise((resolve) => queueMicrotask(resolve));
+	assert.deepEqual(workers[0]?.messages[1], {
+		id: 2,
+		type: 'preview',
+		settings: latestSettings,
+		tone: true
+	});
+
+	workers[0]?.respond({
+		id: 2,
+		type: 'preview',
+		image: new ArrayBuffer(20),
+		mediaType: 'image/jpeg',
+		scope: scopeTransfer()
+	});
+	assert.equal((await second).image.byteLength, 20);
+	assert.equal((await latest).image.byteLength, 20);
 	client.destroy();
 });
 
