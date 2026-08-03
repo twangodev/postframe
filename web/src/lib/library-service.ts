@@ -15,13 +15,8 @@ import {
 	type StoredPhoto
 } from './library-schema.ts';
 import {
-	defaultDevelopSettings,
-	developStorageName,
-	lightSettings,
-	type DevelopSettings
-} from './develop-settings.ts';
-import {
 	defaultEditDocument,
+	editDocumentStorageName,
 	editDocumentSchema,
 	parseEditDocument,
 	type EditDocument
@@ -77,7 +72,7 @@ export class LibraryService {
 	}
 
 	async loadEditDocument(photoId: string) {
-		const file = await this.assets.readEdit(developStorageName(photoId));
+		const file = await this.assets.readEdit(editDocumentStorageName(photoId));
 		if (!file) return defaultEditDocument(photoId);
 		return parseEditDocument(JSON.parse(await file.text()), photoId);
 	}
@@ -86,21 +81,10 @@ export class LibraryService {
 		const document = editDocumentSchema.parse(value);
 		if (document.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
 		const write: EditWrite = {
-			storageName: developStorageName(photoId),
+			storageName: editDocumentStorageName(photoId),
 			blob: new Blob([JSON.stringify(document)], { type: 'application/json' })
 		};
 		await this.assets.writeEdits([write]);
-	}
-
-	async loadDevelopSettings(photoId: string) {
-		const document = await this.loadEditDocument(photoId);
-		return { ...defaultDevelopSettings(), ...document.adjustments.light };
-	}
-
-	async saveDevelopSettings(photoId: string, value: DevelopSettings) {
-		const document = await this.loadEditDocument(photoId);
-		document.adjustments.light = lightSettings(value);
-		await this.saveEditDocument(photoId, document);
 	}
 
 	async saveLibrary(

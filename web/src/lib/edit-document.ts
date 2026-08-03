@@ -92,7 +92,7 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 }
 
 export function cloneEditDocument(document: EditDocument): EditDocument {
-	return structuredClone(document);
+	return editDocumentSchema.parse(document);
 }
 
 export function createEditMask(id: string, kind: MaskKind): EditMask {
@@ -111,4 +111,8 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		visible: true,
 		adjustments: { light: defaultLightSettings() }
 	};
+}
+
+export function editDocumentStorageName(photoId: string) {
+	return `${photoId}.json`;
 }

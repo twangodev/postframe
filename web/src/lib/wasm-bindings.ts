@@ -74,7 +74,7 @@ export const WASM_TODOS = {
 	libraryStorage: {
 		scope: 'Restore the photo library and persist non-destructive render graph edits in OPFS.',
 		bindings: ['constructor', 'add_frame', 'restore_cache', 'cache_bytes'],
-		planned: ['collection membership', 'OPFS recovery', 'versioned edit snapshots']
+		planned: ['Wasm render graph serialization']
 	},
 	photoIngest: {
 		scope: 'Decode imported files, pair RAW and JPEG frames, merge brackets, and build thumbnails.',
@@ -98,7 +98,7 @@ export const WASM_TODOS = {
 	editorCommands: {
 		scope: 'Route menus, shortcuts, context menus, and toolbars through one command system.',
 		bindings: [],
-		planned: ['web EditorCommand dispatcher']
+		planned: ['Wasm command transport for geometry, tools, and layers']
 	},
 	previewRendering: {
 		scope: 'Replace object URLs and CSS mock overlays with rendered SDR and Ultra HDR previews.',

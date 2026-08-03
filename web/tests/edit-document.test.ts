@@ -5,6 +5,7 @@ import {
 	EDIT_DOCUMENT_VERSION,
 	createEditMask,
 	defaultEditDocument,
+	editDocumentStorageName,
 	editDocumentSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
@@ -23,6 +24,7 @@ test('creates an independent versioned non-destructive document', () => {
 	});
 	assert.notEqual(first, second);
 	assert.notEqual(first.adjustments.light, second.adjustments.light);
+	assert.equal(editDocumentStorageName('photo-one'), 'photo-one.json');
 });
 
 test('migrates version-one develop settings without changing their light values', () => {

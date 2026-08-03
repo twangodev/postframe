@@ -1,4 +1,21 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+function storedEdit(page: Page) {
+	return page.evaluate(async () => {
+		const root = await navigator.storage.getDirectory();
+		const app = await root.getDirectoryHandle('postframe');
+		const edits = await app.getDirectoryHandle('edits');
+		for await (const handle of edits.values()) {
+			if (handle.kind !== 'file') continue;
+			return JSON.parse(await (await handle.getFile()).text());
+		}
+		return null;
+	});
+}
+
+async function storedMasks(page: Page) {
+	return (await storedEdit(page))?.masks ?? null;
+}
 
 test('renders and persists every light control for a display photo', async ({ page }) => {
 	const tileFailures: string[] = [];
@@ -28,6 +45,10 @@ test('renders and persists every light control for a display photo', async ({ pa
 			mimeType: 'image/png',
 			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
 		});
+	await page.getByRole('tab', { name: 'edit', exact: true }).click();
+	await expect(page.getByRole('textbox', { name: 'Exposure value' })).toBeEnabled({
+		timeout: 20_000
+	});
 	await expect(page.getByRole('img', { name: 'RGB waveform scope' })).toBeVisible();
 	await expect(page.getByText('scope unavailable')).toHaveCount(0);
 	await page.getByRole('radio', { name: 'Histogram scope' }).click();
@@ -66,27 +87,41 @@ test('renders and persists every light control for a display photo', async ({ pa
 	await expect(value).toHaveValue('0');
 
 	await expect
-		.poll(() =>
-			page.evaluate(async () => {
-				const root = await navigator.storage.getDirectory();
-				const app = await root.getDirectoryHandle('postframe');
-				const edits = await app.getDirectoryHandle('edits');
-				for await (const handle of edits.values()) {
-					if (handle.kind !== 'file') continue;
-					return JSON.parse(await (await handle.getFile()).text());
-				}
-				return null;
-			})
-		)
+		.poll(() => storedEdit(page))
 		.toMatchObject({
-			version: 1,
-			exposure: 0.5,
-			contrast: 0,
-			highlights: -28,
-			shadows: 34,
-			whites: 21,
-			blacks: -16
+			version: 2,
+			adjustments: {
+				light: {
+					exposure: 0.5,
+					contrast: 0,
+					highlights: -28,
+					shadows: 34,
+					whites: 21,
+					blacks: -16
+				}
+			},
+			geometry: {
+				rotation: 0,
+				flipHorizontal: false,
+				flipVertical: false,
+				crop: null
+			},
+			masks: []
 		});
+
+	await page.getByRole('tab', { name: /^mask/ }).click();
+	await page.locator('aside').getByRole('button', { name: 'brush', exact: true }).click();
+	await expect
+		.poll(() => storedMasks(page))
+		.toMatchObject([{ name: 'brush', kind: 'brush', visible: true }]);
+
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect.poll(() => storedMasks(page)).toEqual([]);
+
+	await page.getByRole('button', { name: 'Redo' }).click();
+	await expect
+		.poll(() => storedMasks(page))
+		.toMatchObject([{ name: 'brush', kind: 'brush', visible: true }]);
 	await expect.poll(() => tileFailures).toEqual([]);
 });
 
@@ -110,6 +145,10 @@ test('keeps transparent PNG pixels transparent while developing', async ({ page 
 			mimeType: 'image/png',
 			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
 		});
+	await page.getByRole('tab', { name: 'edit', exact: true }).click();
+	await expect(page.getByRole('textbox', { name: 'Exposure value' })).toBeEnabled({
+		timeout: 20_000
+	});
 
 	const preview = page.getByRole('img', { name: 'transparent.png' }).first();
 	await expect(preview).toBeVisible();

@@ -6,7 +6,7 @@ import {
 	type StoredAsset,
 	type StoredPhoto
 } from './library-schema.ts';
-import { developStorageName } from './develop-settings.ts';
+import { editDocumentStorageName } from './edit-document.ts';
 import { renderCacheStorageName } from './render-cache.ts';
 
 const DATABASE_NAME = 'postframe-catalog';
@@ -384,7 +384,7 @@ export class LibraryCatalog {
 						: []),
 					{
 						kind: 'edit',
-						storageName: developStorageName(photoId),
+						storageName: editDocumentStorageName(photoId),
 						queuedAt: now
 					},
 					{
@@ -428,7 +428,7 @@ export class LibraryCatalog {
 			thumbnails: new Set(
 				photos.flatMap((photo) => (photo.thumbnailStorageName ? [photo.thumbnailStorageName] : []))
 			),
-			edits: new Set(photos.map(({ id }) => developStorageName(id))),
+			edits: new Set(photos.map(({ id }) => editDocumentStorageName(id))),
 			derived: new Set(photos.map(({ id }) => renderCacheStorageName(id)))
 		};
 	}

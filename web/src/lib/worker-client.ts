@@ -89,7 +89,7 @@ export class PostframeWorkerClient {
 		settings: LightSettings
 	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open-raw', frames, cache, maxDimension, settings }),
+			(id) => ({ id, type: 'open-raw', frames, cache, maxDimension, settings: { ...settings } }),
 			'opened'
 		);
 		return openedDocument(response);
@@ -101,7 +101,7 @@ export class PostframeWorkerClient {
 		settings: LightSettings
 	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open-display', source, maxDimension, settings }),
+			(id) => ({ id, type: 'open-display', source, maxDimension, settings: { ...settings } }),
 			'opened'
 		);
 		return openedDocument(response);
@@ -121,11 +121,11 @@ export class PostframeWorkerClient {
 			}
 			const waiter = { resolve, reject };
 			if (this.queuedPreview) {
-				this.queuedPreview.settings = settings;
+				this.queuedPreview.settings = { ...settings };
 				this.queuedPreview.tone = tone;
 				this.queuedPreview.waiters.push(waiter);
 			} else {
-				this.queuedPreview = { settings, tone, waiters: [waiter] };
+				this.queuedPreview = { settings: { ...settings }, tone, waiters: [waiter] };
 			}
 			this.pumpPreview();
 		});

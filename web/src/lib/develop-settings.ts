@@ -49,7 +49,3 @@ export function lightSettings(settings: DevelopSettings): LightSettings {
 		LIGHT_CONTROL_NAMES.map((name) => [name, settings[name]])
 	) as LightSettings;
 }
-
-export function developStorageName(photoId: string) {
-	return `${photoId}.json`;
-}

@@ -4,8 +4,7 @@ import test from 'node:test';
 import {
 	defaultDevelopSettings,
 	defaultLightSettings,
-	developSettingsSchema,
-	developStorageName
+	developSettingsSchema
 } from '../src/lib/develop-settings.ts';
 
 test('provides an independent neutral light snapshot', () => {
@@ -27,7 +26,6 @@ test('provides an independent neutral light snapshot', () => {
 		whites: 0,
 		blacks: 0
 	});
-	assert.equal(developStorageName('photo-one'), 'photo-one.json');
 });
 
 test('rejects unsupported, incomplete, and out-of-range snapshots', () => {

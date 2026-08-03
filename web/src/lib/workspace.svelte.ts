@@ -32,19 +32,26 @@ import {
 	type BrowserStorageStatus
 } from './browser-storage';
 import {
-	defaultDevelopSettings,
+	defaultLightSettings,
 	LIGHT_CONTROL_NAMES,
-	lightSettings,
-	type DevelopSettings,
 	type LightControlName,
 	type LightSettings
 } from './develop-settings';
-import { DevelopHistory } from './develop-history';
+import {
+	cloneEditDocument,
+	createEditMask,
+	defaultEditDocument,
+	type EditDocument,
+	type EditMask,
+	type MaskKind
+} from './edit-document';
+import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
+import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
-export type MaskKind = 'brush' | 'linear' | 'radial' | 'subject' | 'sky' | 'background';
+export type { MaskKind } from './edit-document';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 export type DevelopPreviewPhase = 'applying' | 'refining';
 export type DocumentStatus =
@@ -83,7 +90,7 @@ export interface Photo {
 	rejected: boolean;
 	colorLabel: ColorLabel;
 	stackId: string | null;
-	develop: DevelopSettings;
+	edit: EditDocument;
 }
 
 export interface PhotoStack {
@@ -93,12 +100,7 @@ export interface PhotoStack {
 	collapsed: boolean;
 }
 
-export interface Mask {
-	id: string;
-	name: string;
-	kind: MaskKind;
-	visible: boolean;
-}
+export type Mask = EditMask;
 
 interface PhotoImport {
 	photo: Photo;
@@ -170,8 +172,7 @@ export class WorkspaceState {
 	private developPreviewRevision = 0;
 	private developPreviewUrl: string | null = null;
 	private refinementRevision: number | null = null;
-	private developGesture: { control: LightControlName; before: DevelopSettings } | null = null;
-	private readonly developHistory = new DevelopHistory();
+	private readonly editorHistory = new EditorHistory();
 	private removeProgressListener: (() => void) | null = null;
 
 	mode = $state<WorkspaceMode>('welcome');
@@ -205,8 +206,7 @@ export class WorkspaceState {
 	} | null>(null);
 	imageScope = $state<ImageScopeData | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
-	renderSettings = $state({ settings: lightSettings(defaultDevelopSettings()), revision: 0 });
-	// TODO(WASM_TODOS.layersAndHistory): record document operations and back undo and redo.
+	renderSettings = $state({ settings: defaultLightSettings(), revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);
@@ -406,42 +406,31 @@ export class WorkspaceState {
 
 	previewLight = (control: LightControlName, value: number) => {
 		if (!this.canAdjustLight || !this.selectedPhoto) return;
-		if (this.developGesture?.control !== control) {
-			this.developGesture = { control, before: { ...this.selectedPhoto.develop } };
-		}
 		this.adjustments[control] = value;
-		this.scheduleDevelopPreview({ ...this.selectedPhoto.develop, [control]: value });
+		this.scheduleDevelopPreview({
+			...this.selectedPhoto.edit.adjustments.light,
+			[control]: value
+		});
 	};
 
 	commitLight = (control: LightControlName, value: number) => {
 		if (!this.canAdjustLight || !this.selectedPhoto) return;
-		const before =
-			this.developGesture?.control === control
-				? this.developGesture.before
-				: { ...this.selectedPhoto.develop };
-		const after = { ...this.selectedPhoto.develop, [control]: value };
-		this.developGesture = null;
-		if (!this.developHistory.commit({ label: lightEditLabel(control, value), before, after })) {
+		if (!this.dispatchEditorCommand({ type: 'light.set', control, value })) {
 			this.releaseDevelopPreview();
-			return;
 		}
-		this.refineDevelopSettings(after);
-		this.syncHistory();
 	};
 
 	undo = () => {
-		const settings = this.developHistory.undo();
-		if (!settings) return;
-		this.developGesture = null;
-		this.refineDevelopSettings(settings);
+		const result = this.editorHistory.undo();
+		if (!result) return;
+		this.applyEditDocument(result.document, result.invalidation);
 		this.syncHistory();
 	};
 
 	redo = () => {
-		const settings = this.developHistory.redo();
-		if (!settings) return;
-		this.developGesture = null;
-		this.refineDevelopSettings(settings);
+		const result = this.editorHistory.redo();
+		if (!result) return;
+		this.applyEditDocument(result.document, result.invalidation);
 		this.syncHistory();
 	};
 
@@ -556,29 +545,29 @@ export class WorkspaceState {
 
 	createMask(kind: MaskKind) {
 		// TODO(WASM_TODOS.masks): create the actual mask raster in the Wasm document.
-		const labels: Record<MaskKind, string> = {
-			brush: 'brush',
-			linear: 'linear gradient',
-			radial: 'radial gradient',
-			subject: 'subject',
-			sky: 'sky',
-			background: 'background'
-		};
-		const mask = { id: id('mask'), name: labels[kind], kind, visible: true };
-		this.masks.push(mask);
-		this.selectedMaskId = mask.id;
+		const mask = createEditMask(id('mask'), kind);
+		if (this.dispatchEditorCommand({ type: 'mask.create', mask })) {
+			this.selectedMaskId = mask.id;
+		}
 	}
 
 	toggleMask(maskId: string) {
 		// TODO(WASM_TODOS.masks): mirror visibility into the render graph.
 		const mask = this.masks.find((candidate) => candidate.id === maskId);
-		if (mask) mask.visible = !mask.visible;
+		if (mask) {
+			this.dispatchEditorCommand({
+				type: 'mask.visibility',
+				maskId,
+				visible: !mask.visible
+			});
+		}
 	}
 
 	deleteMask(maskId: string) {
 		// TODO(WASM_TODOS.masks): delete the mask raster and its adjustment node.
-		this.masks = this.masks.filter((mask) => mask.id !== maskId);
-		this.selectedMaskId = this.masks.at(-1)?.id ?? null;
+		if (this.dispatchEditorCommand({ type: 'mask.delete', maskId })) {
+			this.selectedMaskId = this.masks.at(-1)?.id ?? null;
+		}
 	}
 
 	reset = () => {
@@ -597,16 +586,16 @@ export class WorkspaceState {
 		this.libraryService?.close();
 	};
 
-	private resetEditState(develop = defaultDevelopSettings()) {
+	private resetEditState(document: EditDocument | null = null) {
 		this.releaseDevelopPreview();
 		this.imageScope = null;
-		this.developGesture = null;
-		this.developHistory.reset();
-		this.masks = [];
+		this.editorHistory.reset();
+		const light = document?.adjustments.light ?? defaultLightSettings();
+		this.masks = document?.masks.map((mask) => structuredClone(mask)) ?? [];
 		this.selectedMaskId = null;
-		this.adjustments = { ...defaultAdjustments, ...lightSettings(develop) };
+		this.adjustments = { ...defaultAdjustments, ...light };
 		this.renderSettings = {
-			settings: lightSettings(develop),
+			settings: { ...light },
 			revision: this.renderSettings.revision + 1
 		};
 		this.syncHistory();
@@ -615,7 +604,7 @@ export class WorkspaceState {
 	private async openDocument(photoId: string) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo || this.mode !== 'edit') return;
-		this.resetEditState(photo.develop);
+		this.resetEditState(photo.edit);
 
 		const revision = ++this.documentRevision;
 		if (this.documentStatus.kind !== 'idle') {
@@ -653,7 +642,7 @@ export class WorkspaceState {
 				frames,
 				cache,
 				previewDimension(),
-				lightSettings(photo.develop)
+				photo.edit.adjustments.light
 			);
 			if (revision !== this.documentRevision) return;
 
@@ -677,7 +666,7 @@ export class WorkspaceState {
 		const result = await this.workerClient!.openDisplayDocument(
 			source,
 			previewDimension(),
-			lightSettings(photo.develop)
+			photo.edit.adjustments.light
 		);
 		if (revision !== this.documentRevision) return;
 		this.installOpenedDocument(photo.id, result);
@@ -727,7 +716,7 @@ export class WorkspaceState {
 		this.editPreview = null;
 	}
 
-	private scheduleDevelopPreview(settings: DevelopSettings) {
+	private scheduleDevelopPreview(settings: LightSettings) {
 		this.clearDevelopPreviewTimer();
 		this.showDevelopPreview('applying');
 		this.developPreviewTimer = setTimeout(() => {
@@ -736,27 +725,29 @@ export class WorkspaceState {
 		}, 40);
 	}
 
-	private applyDevelopRender(settings: DevelopSettings) {
-		const next = lightSettings(settings);
-		if (LIGHT_CONTROL_NAMES.every((name) => this.renderSettings.settings[name] === next[name]))
+	private applyDevelopRender(settings: LightSettings) {
+		if (LIGHT_CONTROL_NAMES.every((name) => this.renderSettings.settings[name] === settings[name]))
 			return;
-		this.renderSettings = { settings: next, revision: this.renderSettings.revision + 1 };
+		this.renderSettings = {
+			settings: { ...settings },
+			revision: this.renderSettings.revision + 1
+		};
 	}
 
-	private requestDevelopPreview(settings: DevelopSettings, phase: DevelopPreviewPhase) {
+	private requestDevelopPreview(settings: LightSettings, phase: DevelopPreviewPhase) {
 		this.clearDevelopPreviewTimer();
 		if (!this.workerClient || !this.selectedPhoto || !this.canAdjustLight) return;
 		const photoId = this.selectedPhoto.id;
 		const revision = ++this.developPreviewRevision;
 		this.showDevelopPreview(phase);
 		void this.workerClient
-			.preview(lightSettings(settings), true)
+			.preview(settings, true)
 			.then((preview) => {
 				if (revision !== this.developPreviewRevision || this.selectedPhoto?.id !== photoId) return;
 				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
 				this.replaceDevelopPreviewUrl(src);
 				this.developPreview = { photoId, src, phase: this.developPreview?.phase ?? phase };
-				this.scheduleDevelopScope(lightSettings(settings), photoId, phase === 'refining');
+				this.scheduleDevelopScope(settings, photoId, phase === 'refining');
 			})
 			.catch(() => {
 				if (revision === this.developPreviewRevision && this.refinementRevision === null) {
@@ -831,25 +822,42 @@ export class WorkspaceState {
 		this.developScopeTimer = null;
 	}
 
-	private applyDevelopSettings(settings: DevelopSettings) {
-		if (!this.selectedPhoto) return;
-		for (const control of LIGHT_CONTROL_NAMES) this.adjustments[control] = settings[control];
-		this.applyDevelopRender(settings);
-		this.selectedPhoto.develop = { ...settings };
-		const photoId = this.selectedPhoto.id;
-		void this.queueCatalogMutation((store) => store.saveDevelopSettings(photoId, settings));
+	private dispatchEditorCommand(command: EditorCommand) {
+		if (!this.selectedPhoto) return false;
+		const before = cloneEditDocument(this.selectedPhoto.edit);
+		const transition = applyEditorCommand(before, command);
+		if (!transition) return false;
+		this.editorHistory.commit(before, transition);
+		this.applyEditDocument(transition.document, transition.invalidation);
+		this.syncHistory();
+		return true;
 	}
 
-	private refineDevelopSettings(settings: DevelopSettings) {
-		this.requestDevelopPreview(settings, 'refining');
-		this.applyDevelopSettings(settings);
-		this.refinementRevision = this.renderSettings.revision;
+	private applyEditDocument(document: EditDocument, invalidation: EditorInvalidation) {
+		if (!this.selectedPhoto || document.photoId !== this.selectedPhoto.id) return;
+		const next = cloneEditDocument(document);
+		this.selectedPhoto.edit = next;
+		this.masks = next.masks.map((mask) => structuredClone(mask));
+		if (this.selectedMaskId && !this.masks.some(({ id }) => id === this.selectedMaskId)) {
+			this.selectedMaskId = this.masks.at(-1)?.id ?? null;
+		}
+		for (const control of LIGHT_CONTROL_NAMES) {
+			this.adjustments[control] = next.adjustments.light[control];
+		}
+
+		if (invalidation === 'render') {
+			this.requestDevelopPreview(next.adjustments.light, 'refining');
+			this.applyDevelopRender(next.adjustments.light);
+			this.refinementRevision = this.renderSettings.revision;
+		}
+		// TODO(WASM_TODOS.documentGeometry): invalidate transformed bounds and render tiles.
+		void this.queueCatalogMutation((store) => store.saveEditDocument(next.photoId, next));
 	}
 
 	private syncHistory() {
-		this.history = ['imported', ...this.developHistory.labels];
-		this.canUndo = this.developHistory.canUndo;
-		this.canRedo = this.developHistory.canRedo;
+		this.history = ['imported', ...this.editorHistory.labels];
+		this.canUndo = this.editorHistory.canUndo;
+		this.canRedo = this.editorHistory.canRedo;
 	}
 
 	private clearFiles() {
@@ -956,7 +964,7 @@ export class WorkspaceState {
 			rejected: false,
 			colorLabel: 'none',
 			stackId: null,
-			develop: defaultDevelopSettings()
+			edit: defaultEditDocument(photoId)
 		} satisfies Photo;
 
 		return {
@@ -996,7 +1004,7 @@ export class WorkspaceState {
 			rejected: photo.rejected,
 			colorLabel: photo.colorLabel,
 			stackId: photo.stackId,
-			develop: await this.libraryService!.loadDevelopSettings(photo.id)
+			edit: await this.libraryService!.loadEditDocument(photo.id)
 		};
 	}
 
@@ -1404,9 +1412,4 @@ function developProgress(progress: DevelopProgress) {
 export function formatBytes(bytes: number) {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function lightEditLabel(control: LightControlName, value: number) {
-	const formatted = control === 'exposure' ? `${value.toFixed(2)} EV` : value.toFixed(0);
-	return `${control} ${value > 0 ? '+' : ''}${formatted}`;
 }
