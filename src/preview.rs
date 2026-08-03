@@ -2,10 +2,10 @@ use crate::color;
 use crate::decode::linear::Linear;
 use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
 
-const SAMPLES: usize = 4096;
-const LOG2_LO: f32 = -18.0;
-const LOG2_HI: f32 = 6.0;
-const STEP: f32 = (LOG2_HI - LOG2_LO) / (SAMPLES - 1) as f32;
+const LOOKUP_LOW_BITS: u32 = 0x3680_0000;
+const LOOKUP_HIGH_BITS: u32 = 0x4280_0000;
+const LOOKUP_SHIFT: u32 = 13;
+const LOOKUP_FRACTION_MASK: u32 = (1 << LOOKUP_SHIFT) - 1;
 
 // The fitted curves cost a knot scan per pixel; a dense table over the log2
 // domain makes slider-rate re-rendering possible.
@@ -232,10 +232,13 @@ impl MipLevel {
 
 impl Preview {
     pub fn new(merged: &Merged) -> Self {
+        let low = LOOKUP_LOW_BITS;
+        let high = LOOKUP_HIGH_BITS;
+        let buckets = ((high - low) >> LOOKUP_SHIFT) as usize;
         let coded = std::array::from_fn(|channel| {
-            (0..SAMPLES)
+            (0..=buckets)
                 .map(|i| {
-                    let x = (2.0f32).powf(LOG2_LO + i as f32 * STEP);
+                    let x = f32::from_bits(low + ((i as u32) << LOOKUP_SHIFT));
                     merged.transfer.channels[channel].eval(x)
                 })
                 .collect()
@@ -247,11 +250,22 @@ impl Preview {
     }
 
     fn lookup(&self, channel: usize, value: f32) -> f32 {
-        let position = (value.max(1e-9).log2() - LOG2_LO) / STEP;
-        let clamped = position.clamp(0.0, (SAMPLES - 1) as f32);
-        let index = (clamped as usize).min(SAMPLES - 2);
-        let t = clamped - index as f32;
         let table = &self.coded[channel];
+        let low = LOOKUP_LOW_BITS;
+        let high = LOOKUP_HIGH_BITS;
+        let value = if value.is_finite() { value } else { 0.0 };
+        let bits = value
+            .clamp(f32::from_bits(low), f32::from_bits(high))
+            .to_bits();
+        if bits <= low {
+            return table[0];
+        }
+        if bits >= high {
+            return *table.last().unwrap();
+        }
+        let offset = bits - low;
+        let index = (offset >> LOOKUP_SHIFT) as usize;
+        let t = (offset & LOOKUP_FRACTION_MASK) as f32 / (1 << LOOKUP_SHIFT) as f32;
         table[index] + t * (table[index + 1] - table[index])
     }
 
