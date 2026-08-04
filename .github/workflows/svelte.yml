@@ -30,6 +30,10 @@ jobs:
       url: https://postframe.twango.dev
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly-2025-11-15
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
