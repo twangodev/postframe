@@ -9,6 +9,7 @@
 pub mod bracket;
 mod cache;
 pub mod color;
+pub mod composite;
 pub mod decode;
 pub mod error;
 pub mod fit;
@@ -21,6 +22,7 @@ mod wasm;
 
 pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
+pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use hdr::UltraHdr;

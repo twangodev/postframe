@@ -103,13 +103,13 @@ impl LightTransform {
         #[cfg(feature = "wasm-threads")]
         return Ok(rgb8
             .par_chunks_exact(3)
-            .flat_map_iter(|pixel| self.display_pixel([pixel[0], pixel[1], pixel[2]]))
+            .flat_map_iter(|pixel| self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]))
             .collect());
         #[cfg(not(feature = "wasm-threads"))]
         let mut adjusted = Vec::with_capacity(rgb8.len());
         #[cfg(not(feature = "wasm-threads"))]
         for pixel in rgb8.chunks_exact(3) {
-            adjusted.extend(self.display_pixel([pixel[0], pixel[1], pixel[2]]));
+            adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
         }
         #[cfg(not(feature = "wasm-threads"))]
         Ok(adjusted)
@@ -123,7 +123,7 @@ impl LightTransform {
         return Ok(rgba8
             .par_chunks_exact(4)
             .flat_map_iter(|pixel| {
-                let adjusted = self.display_pixel([pixel[0], pixel[1], pixel[2]]);
+                let adjusted = self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]);
                 [adjusted[0], adjusted[1], adjusted[2], pixel[3]]
             })
             .collect());
@@ -131,7 +131,7 @@ impl LightTransform {
         let mut adjusted = Vec::with_capacity(rgba8.len());
         #[cfg(not(feature = "wasm-threads"))]
         for pixel in rgba8.chunks_exact(4) {
-            adjusted.extend(self.display_pixel([pixel[0], pixel[1], pixel[2]]));
+            adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
             adjusted.push(pixel[3]);
         }
         #[cfg(not(feature = "wasm-threads"))]
@@ -145,7 +145,7 @@ impl LightTransform {
         self.tone_pixel(pixel.map(srgb_to_linear))
     }
 
-    fn display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
+    pub(crate) fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         if self.settings == LightSettings::NEUTRAL {
             return pixel;
         }
