@@ -67,6 +67,22 @@ export class LibraryService {
 		return this.assets.derivedHandle(renderCacheStorageName(photoId));
 	}
 
+	async saveMaskRaster(photoId: string, componentId: string, alpha: Uint8Array) {
+		const storageName = `${photoId}-${componentId}.mask`;
+		const stored = new Uint8Array(alpha.length);
+		stored.set(alpha);
+		await this.assets.writeMask(storageName, stored);
+		return storageName;
+	}
+
+	readMaskRaster(storageName: string) {
+		return this.assets.readMask(storageName).then((file) => file.arrayBuffer());
+	}
+
+	deleteMaskRasters(storageNames: readonly string[]) {
+		return this.assets.deleteMasks(storageNames);
+	}
+
 	readThumbnail(storageName: string) {
 		return this.assets.readThumbnail(storageName);
 	}

@@ -30,6 +30,18 @@ export const WASM_BINDINGS = {
 		rust: 'DisplayTransform::luminance_lut',
 		worker: 'tile'
 	},
+	developed_tile_compositor: {
+		rust: 'DevelopedTileCompositor::new',
+		worker: 'set-masks'
+	},
+	developed_tile_compositor_free: {
+		rust: 'wasm-bindgen DevelopedTileCompositor destructor',
+		worker: ['set-masks', 'close']
+	},
+	composite_developed_rgba: {
+		rust: 'DevelopedTileCompositor::composite_rgba',
+		worker: 'tile'
+	},
 	constructor: { rust: 'Session::new', worker: 'open-raw' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'close' },
 	add_frame: { rust: 'Session::add_frame', worker: 'open-raw' },
@@ -58,7 +70,10 @@ export const WASM_BINDINGS = {
 	| 'display_transform'
 	| 'display_free'
 	| 'apply_display_rgba'
-	| 'display_luminance_lut',
+	| 'display_luminance_lut'
+	| 'developed_tile_compositor'
+	| 'developed_tile_compositor_free'
+	| 'composite_developed_rgba',
 	WasmBinding
 >;
 
@@ -125,6 +140,9 @@ export const WASM_TODOS = {
 			'display_free',
 			'apply_display_rgba',
 			'display_luminance_lut',
+			'developed_tile_compositor',
+			'developed_tile_compositor_free',
+			'composite_developed_rgba',
 			'preview_jpeg',
 			'preview_frame',
 			'preview_scope',
@@ -132,7 +150,7 @@ export const WASM_TODOS = {
 			'render_tile',
 			'render_tile_linear'
 		],
-		planned: ['Session::set_mask_adjustments', 'color and presence controls']
+		planned: ['color and presence controls']
 	},
 	documentGeometry: {
 		scope: 'Resize, crop, rotate, distort, warp, and transform document pixels and bounds.',
@@ -151,8 +169,12 @@ export const WASM_TODOS = {
 	},
 	masks: {
 		scope: 'Create, rasterize, combine, toggle, and delete brush, gradient, and semantic masks.',
-		bindings: [],
-		planned: ['Session::create_mask', 'Session::update_mask', 'Session::delete_mask']
+		bindings: [
+			'developed_tile_compositor',
+			'developed_tile_compositor_free',
+			'composite_developed_rgba'
+		],
+		planned: ['brush and gradient rasterizers']
 	},
 	layersAndHistory: {
 		scope: 'Back layers, blend modes, undo, redo, and history snapshots with the render graph.',

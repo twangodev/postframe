@@ -5,6 +5,7 @@ import standardUrl from './pf/postframe_bg.wasm?url';
 export type WasmModule = typeof standard;
 export type WasmSession = InstanceType<WasmModule['Session']>;
 export type WasmDisplayTransform = InstanceType<WasmModule['DisplayTransform']>;
+export type WasmDevelopedTileCompositor = InstanceType<WasmModule['DevelopedTileCompositor']>;
 
 interface WasmRuntime {
 	module: WasmModule;

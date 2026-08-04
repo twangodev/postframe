@@ -6,6 +6,7 @@ const THUMBNAILS_DIRECTORY = 'thumbnails';
 const EDITS_DIRECTORY = 'edits';
 const DERIVED_DIRECTORY = 'derived';
 const MODELS_DIRECTORY = 'models';
+const MASKS_DIRECTORY = 'masks';
 
 export interface OriginalWrite {
 	storageName: string;
@@ -73,7 +74,9 @@ export class AssetStore {
 
 	async readModel(storageName: string): Promise<File | null> {
 		try {
-			return await this.fileHandle(MODELS_DIRECTORY, storageName).then((handle) => handle.getFile());
+			return await this.fileHandle(MODELS_DIRECTORY, storageName).then((handle) =>
+				handle.getFile()
+			);
 		} catch (error) {
 			if (isNotFoundError(error)) return null;
 			throw error;
@@ -96,6 +99,22 @@ export class AssetStore {
 		} catch (error) {
 			if (!isNotFoundError(error)) throw error;
 		}
+	}
+
+	async readMask(storageName: string) {
+		return this.fileHandle(MASKS_DIRECTORY, storageName).then((handle) => handle.getFile());
+	}
+
+	async writeMask(storageName: string, contents: FileSystemWriteChunkType) {
+		await this.writeFiles(MASKS_DIRECTORY, [{ storageName, contents }]);
+	}
+
+	async deleteMasks(storageNames: readonly string[]) {
+		await this.deleteFiles(MASKS_DIRECTORY, storageNames);
+	}
+
+	listMasks() {
+		return this.listFiles(MASKS_DIRECTORY);
 	}
 
 	async writeOriginals(writes: readonly OriginalWrite[]) {

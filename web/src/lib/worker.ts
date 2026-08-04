@@ -3,6 +3,7 @@ import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from
 import {
 	loadWasmRuntime,
 	type WasmDisplayTransform,
+	type WasmDevelopedTileCompositor,
 	type WasmModule,
 	type WasmSession
 } from './wasm-runtime';
@@ -74,6 +75,14 @@ export interface RenderTileRequest {
 	tone: boolean;
 }
 
+export interface DevelopedMaskInput {
+	id: string;
+	width: number;
+	height: number;
+	alpha: ArrayBuffer;
+	settings: LightSettings;
+}
+
 export type Request =
 	| { id: number; type: 'capabilities'; performance?: boolean }
 	| { id: number; type: 'validate'; raw: ArrayBuffer }
@@ -94,6 +103,7 @@ export type Request =
 			settings: LightSettings;
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
+	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
 	| { id: number; type: 'preview'; settings: LightSettings; tone: boolean }
 	| {
 			id: number;
@@ -129,6 +139,7 @@ export type Response =
 			height: number;
 	  }
 	| { id: number; type: 'tile'; bitmap: ImageBitmap }
+	| { id: number; type: 'masks-set' }
 	| {
 			id: number;
 			type: 'preview';
@@ -168,6 +179,7 @@ const ready = loadWasmRuntime().then((runtime) => {
 	threadCount = runtime.threadCount;
 });
 let document: ActiveDocument | null = null;
+let maskCompositors: { id: string; compositor: WasmDevelopedTileCompositor }[] = [];
 let cacheWriteTimer: ReturnType<typeof setTimeout> | null = null;
 let performanceEnabled = false;
 
@@ -207,6 +219,10 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				post({ id: message.id, type: 'tile', bitmap }, [bitmap]);
 				break;
 			}
+			case 'set-masks':
+				setMaskCompositors(message.masks);
+				post({ id: message.id, type: 'masks-set' });
+				break;
 			case 'preview': {
 				const preview = await renderPreviewImage(activeDocument(), message.settings, message.tone);
 				post(
@@ -617,6 +633,16 @@ function renderDisplayScope(
 }
 
 async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
+	const developed = await renderDevelopedTile(active, request);
+	if (maskCompositors.length === 0) return developed;
+	try {
+		return compositeDevelopedTile(active, developed, request);
+	} catch {
+		return developed;
+	}
+}
+
+async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRequest) {
 	if (active.kind === 'raw') {
 		if (active.renderer) {
 			const key = rawTileKey(request);
@@ -819,6 +845,7 @@ function activeRawDocument() {
 }
 
 function closeDocument() {
+	clearMaskCompositors();
 	if (cacheWriteTimer !== null) {
 		clearTimeout(cacheWriteTimer);
 		cacheWriteTimer = null;
@@ -832,6 +859,69 @@ function closeDocument() {
 		document.bitmap.close();
 	}
 	document = null;
+}
+
+function setMaskCompositors(masks: DevelopedMaskInput[]) {
+	const next = createMaskCompositors(masks);
+	clearMaskCompositors();
+	maskCompositors = next;
+}
+
+function createMaskCompositors(masks: DevelopedMaskInput[]) {
+	const created: typeof maskCompositors = [];
+	try {
+		for (const mask of masks) {
+			created.push({
+				id: mask.id,
+				compositor: new wasm.DevelopedTileCompositor(
+					new Uint8Array(mask.alpha),
+					mask.width,
+					mask.height,
+					...lightArguments(mask.settings)
+				)
+			});
+		}
+		return created;
+	} catch (error) {
+		for (const mask of created) mask.compositor.free();
+		throw error;
+	}
+}
+
+function clearMaskCompositors() {
+	for (const mask of maskCompositors) mask.compositor.free();
+	maskCompositors = [];
+}
+
+function compositeDevelopedTile(
+	active: ActiveDocument,
+	developed: ImageBitmap,
+	request: RenderTileRequest
+) {
+	const context = canvasContext(developed.width, developed.height, false);
+	context.drawImage(developed, 0, 0);
+	let rgba: Uint8Array = new Uint8Array(
+		context.getImageData(0, 0, developed.width, developed.height).data
+	);
+	const imageWidth = active.kind === 'raw' ? active.session.width() : active.bitmap.width;
+	const imageHeight = active.kind === 'raw' ? active.session.height() : active.bitmap.height;
+	for (const mask of maskCompositors) {
+		rgba = mask.compositor.composite_rgba(
+			rgba,
+			developed.width,
+			developed.height,
+			imageWidth,
+			imageHeight,
+			request.x,
+			request.y,
+			request.width,
+			request.height
+		);
+	}
+	context.putImageData(imageData(rgba, developed.width, developed.height), 0, 0);
+	const composited = context.canvas.transferToImageBitmap();
+	developed.close();
+	return composited;
 }
 
 async function createRawRenderer(session: WasmSession) {

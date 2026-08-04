@@ -1,4 +1,5 @@
 import type {
+	DevelopedMaskInput,
 	RawFrameHandleInput,
 	RenderPerformanceMeasurement,
 	RenderTileRequest,
@@ -122,6 +123,19 @@ export class PostframeWorkerClient {
 		const request = { ...tile, settings: { ...tile.settings } };
 		const response = await this.send((id) => ({ id, type: 'tile', ...request }), 'tile');
 		return response.bitmap;
+	}
+
+	async setMasks(masks: DevelopedMaskInput[]) {
+		const copies = masks.map((mask) => ({
+			...mask,
+			settings: { ...mask.settings },
+			alpha: mask.alpha.slice(0)
+		}));
+		await this.send(
+			(id) => ({ id, type: 'set-masks', masks: copies }),
+			'masks-set',
+			copies.map(({ alpha }) => alpha)
+		);
 	}
 
 	preview(settings: LightSettings, tone: boolean) {

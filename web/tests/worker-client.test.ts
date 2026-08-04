@@ -190,6 +190,31 @@ test('requests a lossless source tile at the selected bin', async () => {
 	client.destroy();
 });
 
+test('copies and transfers persistent masks without detaching document state', async () => {
+	const { client, workers } = setup();
+	const alpha = new Uint8Array([0, 64, 128, 255]);
+	const mask = {
+		id: 'subject',
+		width: 2,
+		height: 2,
+		alpha: alpha.buffer,
+		settings: { ...neutral, exposure: 0.5 }
+	};
+	const updated = client.setMasks([mask]);
+
+	const request = workers[0]?.messages[0];
+	assert.equal(request?.type, 'set-masks');
+	if (request?.type !== 'set-masks') throw new Error('Expected a mask request');
+	assert.notEqual(request.masks[0]?.alpha, mask.alpha);
+	assert.deepEqual(new Uint8Array(request.masks[0]?.alpha ?? new ArrayBuffer()), alpha);
+	assert.equal(mask.alpha.byteLength, 4);
+	assert.deepEqual(workers[0]?.transfers, [[request.masks[0]?.alpha as ArrayBuffer]]);
+
+	workers[0]?.respond({ id: 1, type: 'masks-set' });
+	await updated;
+	client.destroy();
+});
+
 test('opens display documents through the same rendered document contract', async () => {
 	const { client, workers } = setup();
 	const source = { name: 'portrait.png' } as FileSystemFileHandle;
