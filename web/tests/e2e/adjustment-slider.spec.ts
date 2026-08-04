@@ -89,7 +89,7 @@ test('renders and persists every light control for a display photo', async ({ pa
 	await expect
 		.poll(() => storedEdit(page))
 		.toMatchObject({
-			version: 2,
+			version: 3,
 			adjustments: {
 				light: {
 					exposure: 0.5,

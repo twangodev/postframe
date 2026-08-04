@@ -44,7 +44,7 @@ test('persists, deduplicates, cleans, and clears a local photo library', async (
 	await page.getByRole('button', { name: 'clean up' }).click();
 	await expect(page.getByText(/removed 1 files/)).toBeVisible();
 
-	await page.getByRole('button', { name: 'clear' }).click();
+	await page.getByRole('button', { name: 'clear', exact: true }).click();
 	await page.getByRole('button', { name: 'clear everything' }).click();
 	await expect(page.getByRole('button', { name: 'open photo' })).toBeVisible();
 	await page.reload();
