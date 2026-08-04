@@ -1,6 +1,8 @@
 use crate::color;
-use crate::decode::linear::Linear;
 use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
+
+#[cfg(feature = "wasm")]
+use crate::decode::linear::Linear;
 
 #[cfg(feature = "wasm-threads")]
 use rayon::prelude::*;
@@ -23,12 +25,14 @@ pub(crate) struct PreparedRegion {
     rgb: Vec<[f32; 3]>,
 }
 
+#[cfg(feature = "wasm")]
 pub(crate) struct MipPyramid {
     source_width: usize,
     source_height: usize,
     levels: Vec<MipLevel>,
 }
 
+#[cfg(feature = "wasm")]
 struct MipLevel {
     bin: usize,
     image: Linear,
@@ -78,6 +82,7 @@ impl PreparedRegion {
         }
     }
 
+    #[cfg(feature = "wasm")]
     fn from_level(level: &MipLevel, origin: (usize, usize), size: (usize, usize)) -> Self {
         let x = origin.0 / level.bin;
         let y = origin.1 / level.bin;
@@ -91,10 +96,12 @@ impl PreparedRegion {
         Self { width, height, rgb }
     }
 
+    #[cfg(feature = "wasm")]
     pub(crate) fn byte_len(&self) -> usize {
         self.rgb.len() * std::mem::size_of::<[f32; 3]>()
     }
 
+    #[cfg(feature = "wasm")]
     pub(crate) fn rgba32(&self) -> Vec<f32> {
         #[cfg(feature = "wasm-threads")]
         return self
@@ -113,6 +120,7 @@ impl PreparedRegion {
     }
 }
 
+#[cfg(feature = "wasm")]
 impl MipPyramid {
     pub(crate) fn new(merged: &Merged, max_bin: usize) -> Self {
         let source_width = merged.radiance.width;
@@ -171,6 +179,7 @@ impl MipPyramid {
     }
 }
 
+#[cfg(feature = "wasm")]
 impl MipLevel {
     fn from_source(source: &Linear, bin: usize) -> Self {
         let width = source.width.div_ceil(bin);
@@ -269,14 +278,17 @@ impl Preview {
         }
     }
 
+    #[cfg(feature = "wasm")]
     pub(crate) fn gpu_lut(&self) -> Vec<f32> {
         self.coded.iter().flatten().copied().collect()
     }
 
+    #[cfg(feature = "wasm")]
     pub(crate) fn gpu_lookup_low_bits() -> u32 {
         LOOKUP_LOW_BITS
     }
 
+    #[cfg(feature = "wasm")]
     pub(crate) fn gpu_lookup_shift() -> u32 {
         LOOKUP_SHIFT
     }
@@ -523,30 +535,33 @@ mod tests {
             .unwrap();
         assert_eq!((binned.width, binned.height, binned.rgb8.len()), (2, 2, 12));
 
-        let odd = Merged {
-            radiance: Linear {
-                width: 7,
-                height: 5,
-                clipped: (0..35).map(|index| index == 34).collect(),
-                rgb: (0..35)
-                    .map(|index| {
-                        let value = index as f32 / 35.0;
-                        [value, value * 2.0, value * 3.0]
-                    })
-                    .collect(),
-            },
-            transfer: merged.transfer.clone(),
-            space: merged.space,
-            report: merged.report.clone(),
-        };
-        let pyramid = MipPyramid::new(&odd, 8);
-        for bin in [2, 4, 8] {
-            let direct = PreparedRegion::new(&odd, (0, 0), (7, 5), bin);
-            let cached = pyramid.prepare(&odd, (0, 0), (7, 5), bin);
-            assert_eq!((cached.width, cached.height), (direct.width, direct.height));
-            for (actual, expected) in cached.rgb.iter().zip(direct.rgb) {
-                for (actual, expected) in actual.iter().zip(expected) {
-                    assert!((actual - expected).abs() < 1e-6);
+        #[cfg(feature = "wasm")]
+        {
+            let odd = Merged {
+                radiance: Linear {
+                    width: 7,
+                    height: 5,
+                    clipped: (0..35).map(|index| index == 34).collect(),
+                    rgb: (0..35)
+                        .map(|index| {
+                            let value = index as f32 / 35.0;
+                            [value, value * 2.0, value * 3.0]
+                        })
+                        .collect(),
+                },
+                transfer: merged.transfer.clone(),
+                space: merged.space,
+                report: merged.report.clone(),
+            };
+            let pyramid = MipPyramid::new(&odd, 8);
+            for bin in [2, 4, 8] {
+                let direct = PreparedRegion::new(&odd, (0, 0), (7, 5), bin);
+                let cached = pyramid.prepare(&odd, (0, 0), (7, 5), bin);
+                assert_eq!((cached.width, cached.height), (direct.width, direct.height));
+                for (actual, expected) in cached.rgb.iter().zip(direct.rgb) {
+                    for (actual, expected) in actual.iter().zip(expected) {
+                        assert!((actual - expected).abs() < 1e-6);
+                    }
                 }
             }
         }
