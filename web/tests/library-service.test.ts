@@ -13,7 +13,11 @@ import { LibraryCatalog } from '../src/lib/library-catalog.ts';
 import { LibraryService } from '../src/lib/library-service.ts';
 import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts';
 import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
-import { createEditMask, defaultEditDocument } from '../src/lib/edit-document.ts';
+import {
+	EDIT_DOCUMENT_VERSION,
+	createEditMask,
+	defaultEditDocument
+} from '../src/lib/edit-document.ts';
 
 class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
@@ -114,7 +118,7 @@ test('round-trips versioned edit documents and migrates legacy develop settings'
 		const legacy = { ...defaultDevelopSettings(), contrast: 25 };
 		assets.edits.set('photo-two.json', new Blob([JSON.stringify(legacy)]));
 		const migrated = await service.loadEditDocument('photo-two');
-		assert.equal(migrated.version, 2);
+		assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
 		assert.equal(migrated.adjustments.light.contrast, 25);
 	} finally {
 		await service.clearAll();

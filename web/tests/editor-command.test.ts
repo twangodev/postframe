@@ -34,6 +34,7 @@ test('creates, hides, and removes masks through deterministic commands', () => {
 	});
 	assert.ok(created);
 	assert.equal(created.document.masks[0]?.name, 'radial gradient');
+	assert.equal(created.invalidation, 'render');
 
 	const hidden = applyEditorCommand(created.document, {
 		type: 'mask.visibility',
@@ -49,6 +50,21 @@ test('creates, hides, and removes masks through deterministic commands', () => {
 	});
 	assert.ok(removed);
 	assert.deepEqual(removed.document.masks, []);
+});
+
+test('updates local light without changing global development settings', () => {
+	const document = defaultEditDocument('photo-one');
+	document.masks.push(createEditMask('mask-one', 'subject'));
+	const changed = applyEditorCommand(document, {
+		type: 'mask.light.set',
+		maskId: 'mask-one',
+		control: 'exposure',
+		value: 1.25
+	});
+	assert.ok(changed);
+	assert.equal(changed.invalidation, 'render');
+	assert.equal(changed.document.masks[0]?.adjustments.light.exposure, 1.25);
+	assert.equal(changed.document.adjustments.light.exposure, 0);
 });
 
 test('validates geometry commands before committing them', () => {

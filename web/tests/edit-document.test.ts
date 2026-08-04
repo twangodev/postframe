@@ -36,10 +36,25 @@ test('migrates version-one develop settings without changing their light values'
 	assert.equal(migrated.adjustments.light.highlights, -30);
 });
 
+test('preserves global edits while removing version-two visual masks', () => {
+	const previous = {
+		...defaultEditDocument('photo-one'),
+		version: 2,
+		adjustments: {
+			light: { ...defaultEditDocument('photo-one').adjustments.light, exposure: 0.75 }
+		},
+		masks: [{ id: 'visual-only' }]
+	};
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.adjustments.light.exposure, 0.75);
+	assert.deepEqual(migrated.masks, []);
+});
+
 test('rejects mismatched photos, duplicate masks, and invalid normalized crops', () => {
 	const document = defaultEditDocument('photo-one');
 	assert.throws(() => parseEditDocument({ ...document, photoId: 'photo-two' }, 'photo-one'));
 	const mask = createEditMask('mask-one', 'brush');
+	assert.deepEqual(mask.components, []);
 	assert.equal(editDocumentSchema.safeParse({ ...document, masks: [mask, mask] }).success, false);
 	assert.equal(
 		editDocumentSchema.safeParse({

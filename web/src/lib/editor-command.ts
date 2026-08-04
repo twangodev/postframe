@@ -13,6 +13,7 @@ export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
 export type EditorCommand =
 	| { type: 'light.set'; control: LightControlName; value: number }
+	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.create'; mask: EditMask }
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
 	| { type: 'mask.delete'; maskId: string }
@@ -43,11 +44,22 @@ export function applyEditorCommand(
 			next.adjustments.light = light;
 			return transition(command, lightLabel(command.control, command.value), 'render', next);
 		}
+		case 'mask.light.set': {
+			const mask = next.masks.find(({ id }) => id === command.maskId);
+			if (!mask) return null;
+			const light = lightSettingsSchema.parse({
+				...mask.adjustments.light,
+				[command.control]: command.value
+			});
+			if (mask.adjustments.light[command.control] === light[command.control]) return null;
+			mask.adjustments.light = light;
+			return transition(command, lightLabel(command.control, command.value), 'render', next);
+		}
 		case 'mask.create': {
 			const mask = editMaskSchema.parse(command.mask);
 			if (next.masks.some(({ id }) => id === mask.id)) throw new Error(`Mask ${mask.id} exists`);
 			next.masks.push(mask);
-			return transition(command, `created ${mask.name} mask`, 'overlay', next);
+			return transition(command, `created ${mask.name} mask`, 'render', next);
 		}
 		case 'mask.visibility': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -56,7 +68,7 @@ export function applyEditorCommand(
 			return transition(
 				command,
 				`${command.visible ? 'showed' : 'hid'} ${mask.name} mask`,
-				'overlay',
+				'render',
 				next
 			);
 		}
@@ -64,7 +76,7 @@ export function applyEditorCommand(
 			const mask = next.masks.find(({ id }) => id === command.maskId);
 			if (!mask) return null;
 			next.masks = next.masks.filter(({ id }) => id !== command.maskId);
-			return transition(command, `deleted ${mask.name} mask`, 'overlay', next);
+			return transition(command, `deleted ${mask.name} mask`, 'render', next);
 		}
 		case 'geometry.rotate': {
 			if (next.geometry.rotation === command.rotation) return null;

@@ -7,9 +7,66 @@ import {
 	type LightSettings
 } from './develop-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 2;
+export const EDIT_DOCUMENT_VERSION = 3;
 
-export const maskKindSchema = z.enum(['brush', 'linear', 'radial', 'subject', 'sky', 'background']);
+export const maskKindSchema = z.enum([
+	'brush',
+	'linear',
+	'radial',
+	'object',
+	'subject',
+	'sky',
+	'background'
+]);
+export const maskOperationSchema = z.enum(['add', 'subtract', 'intersect']);
+export const maskPromptLabelSchema = z.enum(['foreground', 'background']);
+
+export const normalizedPointSchema = z.object({
+	x: z.number().finite().min(0).max(1),
+	y: z.number().finite().min(0).max(1)
+});
+
+export const maskRasterSchema = z.object({
+	storageName: z.string().min(1),
+	width: z.number().int().positive(),
+	height: z.number().int().positive(),
+	digest: z.string().regex(/^[a-f0-9]{64}$/)
+});
+
+const maskComponentBaseSchema = z.object({
+	id: z.string().min(1),
+	operation: maskOperationSchema,
+	raster: maskRasterSchema.nullable()
+});
+
+export const maskComponentSchema = z.discriminatedUnion('type', [
+	maskComponentBaseSchema.extend({
+		type: z.literal('ai-subject'),
+		inverted: z.boolean(),
+		modelVersion: z.string().min(1).nullable()
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('ai-object'),
+		modelVersion: z.string().min(1).nullable(),
+		prompts: z.array(
+			z.object({
+				label: maskPromptLabelSchema,
+				points: z.array(normalizedPointSchema).min(1)
+			})
+		)
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('brush'),
+		strokes: z.array(
+			z.object({
+				points: z.array(normalizedPointSchema).min(1),
+				size: z.number().finite().positive().max(1),
+				feather: z.number().finite().min(0).max(1),
+				flow: z.number().finite().min(0).max(1)
+			})
+		)
+	})
+]);
 
 export const normalizedCropSchema = z
 	.object({
@@ -26,6 +83,7 @@ export const editMaskSchema = z.object({
 	name: z.string().trim().min(1),
 	kind: maskKindSchema,
 	visible: z.boolean(),
+	components: z.array(maskComponentSchema),
 	adjustments: z.object({ light: lightSettingsSchema })
 });
 
@@ -57,6 +115,9 @@ export const editDocumentSchema = z
 	});
 
 export type MaskKind = z.infer<typeof maskKindSchema>;
+export type MaskOperation = z.infer<typeof maskOperationSchema>;
+export type MaskComponent = z.infer<typeof maskComponentSchema>;
+export type MaskRaster = z.infer<typeof maskRasterSchema>;
 export type EditMask = z.infer<typeof editMaskSchema>;
 export type NormalizedCrop = z.infer<typeof normalizedCropSchema>;
 export type EditDocument = z.infer<typeof editDocumentSchema>;
@@ -88,6 +149,16 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 
 	const legacy = developSettingsSchema.safeParse(value);
 	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
+
+	const previous = previousEditDocumentSchema.safeParse(value);
+	if (previous.success) {
+		if (previous.data.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
+		return {
+			...previous.data,
+			version: EDIT_DOCUMENT_VERSION,
+			masks: []
+		};
+	}
 	return editDocumentSchema.parse(value);
 }
 
@@ -100,6 +171,7 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		brush: 'brush',
 		linear: 'linear gradient',
 		radial: 'radial gradient',
+		object: 'object',
 		subject: 'subject',
 		sky: 'sky',
 		background: 'background'
@@ -109,6 +181,7 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		name: names[kind],
 		kind,
 		visible: true,
+		components: [],
 		adjustments: { light: defaultLightSettings() }
 	};
 }
@@ -116,3 +189,16 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 export function editDocumentStorageName(photoId: string) {
 	return `${photoId}.json`;
 }
+
+const previousEditDocumentSchema = z.object({
+	version: z.literal(2),
+	photoId: z.string().min(1),
+	adjustments: z.object({ light: lightSettingsSchema }),
+	geometry: z.object({
+		rotation: z.number().finite().min(-180).max(180),
+		flipHorizontal: z.boolean(),
+		flipVertical: z.boolean(),
+		crop: normalizedCropSchema.nullable()
+	}),
+	masks: z.array(z.unknown())
+});
