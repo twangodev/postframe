@@ -170,7 +170,7 @@ export class WorkspaceState {
 	private readonly browserStorage = new BrowserStorageService();
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
-	private readonly smartMaskClient = typeof Worker === 'undefined' ? null : new SmartMaskClient();
+	private smartMaskClient: SmartMaskClient | null = null;
 	private readonly rawExtensions = new Set<string>();
 	private capabilityLoading: Promise<void> | null = null;
 	private libraryRevision = 0;
@@ -268,11 +268,6 @@ export class WorkspaceState {
 					...this.documentStatus,
 					...developProgress(progress)
 				};
-			}) ?? null;
-		this.removeSmartMaskProgressListener =
-			this.smartMaskClient?.onProgress((progress) => {
-				if (!this.activeSmartMaskPhotoId) return;
-				this.smartMaskStatus = { ...progress, error: null };
 			}) ?? null;
 		void this.initialize();
 	}
@@ -1156,7 +1151,7 @@ export class WorkspaceState {
 	}
 
 	private smartMaskPhoto() {
-		if (!this.smartMaskClient || !this.libraryService) {
+		if (!this.smartMask() || !this.libraryService) {
 			this.failSmartMask(new Error('Smart masking needs local browser storage'));
 			return null;
 		}
@@ -1165,6 +1160,17 @@ export class WorkspaceState {
 			return null;
 		}
 		return this.selectedPhoto;
+	}
+
+	private smartMask() {
+		if (this.smartMaskClient) return this.smartMaskClient;
+		if (typeof Worker === 'undefined') return null;
+		this.smartMaskClient = new SmartMaskClient();
+		this.removeSmartMaskProgressListener = this.smartMaskClient.onProgress((progress) => {
+			if (!this.activeSmartMaskPhotoId) return;
+			this.smartMaskStatus = { ...progress, error: null };
+		});
+		return this.smartMaskClient;
 	}
 
 	private async ensureSmartMaskPrepared(photoId: string) {
