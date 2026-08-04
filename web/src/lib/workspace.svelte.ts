@@ -197,6 +197,7 @@ export class WorkspaceState {
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageError = $state<string | null>(null);
 	storageCleanupResult = $state<CleanupResult | null>(null);
+	modelCacheBytes = $state(0);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
 	developPreview = $state<{
@@ -341,11 +342,24 @@ export class WorkspaceState {
 	refreshBrowserStorage = async () => {
 		this.browserStorageError = null;
 		try {
-			this.browserStorageStatus = await this.browserStorage.status();
+			const [status, modelCacheBytes] = await Promise.all([
+				this.browserStorage.status(),
+				this.libraryService?.modelCacheUsage() ?? 0
+			]);
+			this.browserStorageStatus = status;
+			this.modelCacheBytes = modelCacheBytes;
 		} catch (error) {
 			this.browserStorageError = storageErrorMessage(error);
 			throw error;
 		}
+	};
+
+	clearModelCache = async () => {
+		const store = this.libraryService;
+		if (!store) return;
+		this.storageCleanupResult = await store.clearModelCache();
+		this.modelCacheBytes = 0;
+		await this.refreshBrowserStorage();
 	};
 
 	cleanupLocalData = async () => {

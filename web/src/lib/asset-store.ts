@@ -5,6 +5,7 @@ const ORIGINALS_DIRECTORY = 'originals';
 const THUMBNAILS_DIRECTORY = 'thumbnails';
 const EDITS_DIRECTORY = 'edits';
 const DERIVED_DIRECTORY = 'derived';
+const MODELS_DIRECTORY = 'models';
 
 export interface OriginalWrite {
 	storageName: string;
@@ -68,6 +69,33 @@ export class AssetStore {
 		storageNameSchema.parse(storageName);
 		const directory = await this.fileDirectory(DERIVED_DIRECTORY, true);
 		return directory.getFileHandle(storageName, { create: true });
+	}
+
+	async readModel(storageName: string): Promise<File | null> {
+		try {
+			return await this.fileHandle(MODELS_DIRECTORY, storageName).then((handle) => handle.getFile());
+		} catch (error) {
+			if (isNotFoundError(error)) return null;
+			throw error;
+		}
+	}
+
+	async writeModel(storageName: string, contents: FileSystemWriteChunkType) {
+		await this.writeFiles(MODELS_DIRECTORY, [{ storageName, contents }]);
+	}
+
+	listModels() {
+		return this.listFiles(MODELS_DIRECTORY);
+	}
+
+	async clearModels() {
+		const root = await this.root();
+		try {
+			const app = await root.getDirectoryHandle(APP_DIRECTORY);
+			await app.removeEntry(MODELS_DIRECTORY, { recursive: true });
+		} catch (error) {
+			if (!isNotFoundError(error)) throw error;
+		}
 	}
 
 	async writeOriginals(writes: readonly OriginalWrite[]) {

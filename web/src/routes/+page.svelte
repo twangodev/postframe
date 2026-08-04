@@ -36,6 +36,7 @@
 		storageStatus={workspace.browserStorageStatus}
 		storageError={workspace.browserStorageError}
 		cleanupResult={workspace.storageCleanupResult}
+		modelCacheBytes={workspace.modelCacheBytes}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
 		onEnterLibrary={workspace.enterLibrary}
@@ -43,6 +44,7 @@
 		onRefreshStorage={workspace.refreshBrowserStorage}
 		onRequestPersistence={workspace.requestPersistentStorage}
 		onCleanup={workspace.cleanupLocalData}
+		onClearModelCache={workspace.clearModelCache}
 	/>
 {:else}
 	<div class="bg-bg text-text hidden h-svh min-h-0 flex-col min-[900px]:flex">

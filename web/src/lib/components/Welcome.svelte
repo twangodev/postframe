@@ -17,6 +17,7 @@
 		storageStatus: BrowserStorageStatus | null;
 		storageError: string | null;
 		cleanupResult: CleanupResult | null;
+		modelCacheBytes: number;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onEnterLibrary: () => void;
@@ -24,6 +25,7 @@
 		onRefreshStorage: () => Promise<void>;
 		onRequestPersistence: () => Promise<void>;
 		onCleanup: () => Promise<void>;
+		onClearModelCache: () => Promise<void>;
 	}
 
 	let {
@@ -35,13 +37,15 @@
 		storageStatus,
 		storageError,
 		cleanupResult,
+		modelCacheBytes,
 		onOpenPhoto,
 		onCreateCollection,
 		onEnterLibrary,
 		onClearLocalData,
 		onRefreshStorage,
 		onRequestPersistence,
-		onCleanup
+		onCleanup,
+		onClearModelCache
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
 	let storageOpen = $state(false);
@@ -254,8 +258,10 @@
 	status={storageStatus}
 	error={storageError}
 	{cleanupResult}
+	{modelCacheBytes}
 	onRefresh={onRefreshStorage}
 	{onRequestPersistence}
 	{onCleanup}
+	{onClearModelCache}
 	{onClearLocalData}
 />

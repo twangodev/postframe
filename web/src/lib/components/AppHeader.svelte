@@ -236,8 +236,10 @@
 	status={workspace.browserStorageStatus}
 	error={workspace.browserStorageError}
 	cleanupResult={workspace.storageCleanupResult}
+	modelCacheBytes={workspace.modelCacheBytes}
 	onRefresh={workspace.refreshBrowserStorage}
 	onRequestPersistence={workspace.requestPersistentStorage}
 	onCleanup={workspace.cleanupLocalData}
+	onClearModelCache={workspace.clearModelCache}
 	onClearLocalData={workspace.clearLocalData}
 />
