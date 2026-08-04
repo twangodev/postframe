@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 
 const crate = fileURLToPath(new URL('..', import.meta.url));
-const watched = ['src', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml'].map((path) =>
+const crateFiles = ['Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'rust-toolchain.toml'];
+const watched = ['src', ...crateFiles].map((path) =>
 	fileURLToPath(new URL(`../${path}`, import.meta.url))
 );
 const standardOutput = fileURLToPath(new URL('src/lib/pf', import.meta.url));
@@ -19,7 +20,6 @@ const threadedPackage = JSON.stringify({
 	types: 'postframe.d.ts',
 	exports: { '.': './postframe.js' }
 });
-const nightly = 'nightly-2025-11-15';
 const threadedRustFlags = [
 	'-C target-feature=+simd128,+atomics,+bulk-memory',
 	'-C link-arg=--shared-memory',
@@ -32,10 +32,7 @@ const threadedRustFlags = [
 ].join(' ');
 
 const isBuildInput = (path: string) =>
-	path.endsWith('.rs') ||
-	path.endsWith('Cargo.toml') ||
-	path.endsWith('Cargo.lock') ||
-	path.endsWith('.cargo/config.toml');
+	path.endsWith('.rs') || crateFiles.some((file) => path.endsWith(file));
 
 const run = (command: string, args: string[], env = process.env) =>
 	new Promise<void>((resolve, reject) =>
@@ -67,11 +64,8 @@ const buildStandard = (optimize: boolean) =>
 
 const buildThreaded = (optimize: boolean) =>
 	run(
-		'rustup',
+		'wasm-pack',
 		[
-			'run',
-			nightly,
-			'wasm-pack',
 			...wasmPackArguments('web/src/lib/pf-threaded', 'wasm-threads', optimize),
 			'-Z',
 			'build-std=panic_abort,std'
@@ -111,9 +105,7 @@ async function artifactsAreCurrent(optimize: boolean) {
 
 async function newestSourceMtime() {
 	const sourceMtime = await newestMtime(join(crate, 'src'));
-	const fileStats = await Promise.all(
-		['Cargo.toml', 'Cargo.lock', '.cargo/config.toml'].map((path) => stat(join(crate, path)))
-	);
+	const fileStats = await Promise.all(crateFiles.map((path) => stat(join(crate, path))));
 	return Math.max(sourceMtime, ...fileStats.map((file) => file.mtimeMs));
 }
 
