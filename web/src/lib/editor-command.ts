@@ -2,9 +2,11 @@ import {
 	cloneEditDocument,
 	editDocumentSchema,
 	editMaskSchema,
+	maskComponentSchema,
 	normalizedCropSchema,
 	type EditDocument,
 	type EditMask,
+	type MaskComponent,
 	type NormalizedCrop
 } from './edit-document.ts';
 import { lightSettingsSchema, type LightControlName } from './develop-settings.ts';
@@ -15,6 +17,7 @@ export type EditorCommand =
 	| { type: 'light.set'; control: LightControlName; value: number }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.create'; mask: EditMask }
+	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
 	| { type: 'mask.delete'; maskId: string }
 	| { type: 'geometry.rotate'; rotation: number }
@@ -60,6 +63,16 @@ export function applyEditorCommand(
 			if (next.masks.some(({ id }) => id === mask.id)) throw new Error(`Mask ${mask.id} exists`);
 			next.masks.push(mask);
 			return transition(command, `created ${mask.name} mask`, 'render', next);
+		}
+		case 'mask.component.set': {
+			const mask = next.masks.find(({ id }) => id === command.maskId);
+			if (!mask) return null;
+			const component = maskComponentSchema.parse(command.component);
+			const index = mask.components.findIndex(({ id }) => id === component.id);
+			if (index === -1) mask.components.push(component);
+			else if (JSON.stringify(mask.components[index]) === JSON.stringify(component)) return null;
+			else mask.components[index] = component;
+			return transition(command, `updated ${mask.name} mask`, 'render', next);
 		}
 		case 'mask.visibility': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);

@@ -193,19 +193,26 @@ export class LibraryService {
 	}
 
 	async deletePhoto(photoId: string): Promise<CleanupResult> {
+		const document = await this.loadEditDocument(photoId).catch(() => null);
 		const deletions = await this.catalog.deletePhoto(photoId);
-		return this.flushDeletions(deletions, new Map());
+		const [library, masks] = await Promise.all([
+			this.flushDeletions(deletions, new Map()),
+			this.deleteMaskFiles(maskStorageNames(document))
+		]);
+		return mergeCleanupResults(library, masks);
 	}
 
 	async cleanup(): Promise<CleanupResult> {
-		const [references, originals, thumbnails, edits, derived, pending] = await Promise.all([
+		const [references, originals, thumbnails, edits, derived, masks, pending] = await Promise.all([
 			this.catalog.storageReferences(),
 			this.assets.listOriginals(),
 			this.assets.listThumbnails(),
 			this.assets.listEdits(),
 			this.assets.listDerived(),
+			this.assets.listMasks(),
 			this.catalog.pendingDeletions()
 		]);
+		const referencedMasks = await this.referencedMaskStorageNames(references.edits);
 		const files = new Map<string, StoredFile>();
 		for (const file of originals) files.set(deletionKey('original', file.storageName), file);
 		for (const file of thumbnails) files.set(deletionKey('thumbnail', file.storageName), file);
@@ -238,7 +245,11 @@ export class LibraryService {
 				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
 			}
 		}
-		return this.flushDeletions([...deletions.values()], files);
+		const [library, maskFiles] = await Promise.all([
+			this.flushDeletions([...deletions.values()], files),
+			this.deleteMaskFiles(masks.filter(({ storageName }) => !referencedMasks.has(storageName)))
+		]);
+		return mergeCleanupResults(library, maskFiles);
 	}
 
 	async modelCacheUsage() {
@@ -314,6 +325,62 @@ export class LibraryService {
 			reclaimedBytes
 		};
 	}
+
+	private async referencedMaskStorageNames(editStorageNames: ReadonlySet<string>) {
+		const storageNames = new Set<string>();
+		await Promise.all(
+			[...editStorageNames].map(async (editStorageName) => {
+				const file = await this.assets.readEdit(editStorageName);
+				if (!file) return;
+				const parsed = editDocumentSchema.safeParse(JSON.parse(await file.text()));
+				if (!parsed.success) return;
+				for (const storageName of maskStorageNames(parsed.data)) storageNames.add(storageName);
+			})
+		);
+		return storageNames;
+	}
+
+	private async deleteMaskFiles(files: readonly (StoredFile | string)[]): Promise<CleanupResult> {
+		const completed: (StoredFile | string)[] = [];
+		await Promise.all(
+			files.map(async (file) => {
+				const storageName = typeof file === 'string' ? file : file.storageName;
+				try {
+					await this.assets.deleteMasks([storageName]);
+					completed.push(file);
+				} catch {}
+			})
+		);
+		return {
+			deletedFiles: completed.length,
+			failedFiles: files.length - completed.length,
+			reclaimedBytes: completed.reduce(
+				(total, file) => total + (typeof file === 'string' ? 0 : file.size),
+				0
+			)
+		};
+	}
+}
+
+function maskStorageNames(document: EditDocument | null) {
+	return (
+		document?.masks.flatMap((mask) =>
+			mask.components.flatMap((component) =>
+				component.raster ? [component.raster.storageName] : []
+			)
+		) ?? []
+	);
+}
+
+function mergeCleanupResults(...results: CleanupResult[]): CleanupResult {
+	return results.reduce(
+		(total, result) => ({
+			deletedFiles: total.deletedFiles + result.deletedFiles,
+			failedFiles: total.failedFiles + result.failedFiles,
+			reclaimedBytes: total.reclaimedBytes + result.reclaimedBytes
+		}),
+		{ deletedFiles: 0, failedFiles: 0, reclaimedBytes: 0 }
+	);
 }
 
 function pendingDeletion(

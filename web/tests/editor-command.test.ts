@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createEditMask, defaultEditDocument } from '../src/lib/edit-document.ts';
+import {
+	createEditMask,
+	defaultEditDocument,
+	type MaskComponent
+} from '../src/lib/edit-document.ts';
 import { applyEditorCommand } from '../src/lib/editor-command.ts';
 
 test('applies light commands immutably with render invalidation', () => {
@@ -65,6 +69,43 @@ test('updates local light without changing global development settings', () => {
 	assert.equal(changed.invalidation, 'render');
 	assert.equal(changed.document.masks[0]?.adjustments.light.exposure, 1.25);
 	assert.equal(changed.document.adjustments.light.exposure, 0);
+});
+
+test('adds and replaces persistent mask components by id', () => {
+	const document = defaultEditDocument('photo-one');
+	document.masks.push(createEditMask('mask-one', 'object'));
+	const component = {
+		id: 'component-one',
+		type: 'ai-object',
+		operation: 'add',
+		modelVersion: 'model-one',
+		prompts: [{ label: 'foreground', points: [{ x: 0.5, y: 0.5 }] }],
+		raster: {
+			storageName: 'photo-one-component-one.mask',
+			width: 2,
+			height: 2,
+			digest: '0'.repeat(64)
+		}
+	} satisfies MaskComponent;
+	const added = applyEditorCommand(document, {
+		type: 'mask.component.set',
+		maskId: 'mask-one',
+		component
+	});
+	assert.ok(added);
+	assert.deepEqual(added.document.masks[0]?.components, [component]);
+
+	const replacement = {
+		...component,
+		prompts: [...component.prompts, { label: 'background' as const, points: [{ x: 0, y: 0 }] }]
+	};
+	const replaced = applyEditorCommand(added.document, {
+		type: 'mask.component.set',
+		maskId: 'mask-one',
+		component: replacement
+	});
+	assert.ok(replaced);
+	assert.deepEqual(replaced.document.masks[0]?.components, [replacement]);
 });
 
 test('validates geometry commands before committing them', () => {

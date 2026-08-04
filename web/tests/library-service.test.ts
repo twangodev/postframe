@@ -24,6 +24,7 @@ class MemoryAssetStore {
 	readonly thumbnails = new Map<string, Blob>();
 	readonly edits = new Map<string, Blob>();
 	readonly derived = new Map<string, Blob>();
+	readonly masks = new Map<string, Blob>();
 
 	async readEdit(storageName: string) {
 		const blob = this.edits.get(storageName);
@@ -55,6 +56,20 @@ class MemoryAssetStore {
 			this.edits.set(storageName, blob);
 		}
 		return created;
+	}
+
+	async writeMask(storageName: string, contents: FileSystemWriteChunkType) {
+		this.masks.set(storageName, new Blob([contents as BlobPart]));
+	}
+
+	async readMask(storageName: string) {
+		const blob = this.masks.get(storageName);
+		if (!blob) throw new DOMException('missing', 'NotFoundError');
+		return new File([blob], storageName);
+	}
+
+	async deleteMasks(storageNames: readonly string[]) {
+		for (const storageName of storageNames) this.masks.delete(storageName);
 	}
 
 	async deleteOriginals(storageNames: readonly string[]) {
@@ -89,11 +104,16 @@ class MemoryAssetStore {
 		return [...this.derived].map(([storageName, blob]) => ({ storageName, size: blob.size }));
 	}
 
+	async listMasks(): Promise<StoredFile[]> {
+		return [...this.masks].map(([storageName, blob]) => ({ storageName, size: blob.size }));
+	}
+
 	async clearAll() {
 		this.originals.clear();
 		this.thumbnails.clear();
 		this.edits.clear();
 		this.derived.clear();
+		this.masks.clear();
 	}
 }
 
@@ -237,15 +257,17 @@ test('cleans only unreferenced OPFS files', async () => {
 		assets.thumbnails.set('orphan.jpg', new Blob(['orphan']));
 		assets.edits.set('orphan.json', new Blob(['{}']));
 		assets.derived.set('render-v0-orphan.pfc', new Blob(['cache']));
+		assets.masks.set('orphan.mask', new Blob(['mask']));
 
 		const result = await service.cleanup();
-		assert.equal(result.deletedFiles, 4);
+		assert.equal(result.deletedFiles, 5);
 		assert.equal(result.failedFiles, 0);
-		assert.equal(result.reclaimedBytes, 19);
+		assert.equal(result.reclaimedBytes, 23);
 		assert.deepEqual([...assets.originals.keys()], ['asset-one.dng']);
 		assert.deepEqual([...assets.thumbnails.keys()], ['photo-one.jpg']);
 		assert.deepEqual([...assets.edits.keys()], []);
 		assert.deepEqual([...assets.derived.keys()], []);
+		assert.deepEqual([...assets.masks.keys()], []);
 	} finally {
 		await service.clearAll();
 	}

@@ -8,11 +8,8 @@ import {
 	type Tensor
 } from '@huggingface/transformers';
 import { OpfsModelCache } from './model-cache.ts';
-import {
-	SMART_MASK_PACK,
-	type SmartMaskRequest,
-	type SmartMaskResponse
-} from './smart-mask.ts';
+import { alphaChannel } from './mask-raster.ts';
+import { SMART_MASK_PACK, type SmartMaskRequest, type SmartMaskResponse } from './smart-mask.ts';
 
 type Device = 'webgpu' | 'wasm';
 type SamProcessor = Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> & {
@@ -23,7 +20,7 @@ type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>
 interface PreparedImage {
 	photoId: string;
 	image: RawImage;
-	embeddings: Record<string, Tensor>;
+	embeddings: Record<string, Tensor> | null;
 }
 
 let device: Device = supportsWebGpu() ? 'webgpu' : 'wasm';
@@ -65,13 +62,9 @@ self.onmessage = async (event: MessageEvent<SmartMaskRequest>) => {
 
 async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) {
 	resetPreparedImage();
-	postProgress(request.id, 'loading', null, 'loading object model');
-	await loadObjectModel(request.id);
-	postProgress(request.id, 'encoding', null, 'analyzing photo');
+	postProgress(request.id, 'loading', null, 'reading photo');
 	const image = await RawImage.fromBlob(request.image);
-	const inputs = (await objectProcessor!(image)) as Record<string, Tensor> & { pixel_values: Tensor };
-	const embeddings = (await objectModel!.get_image_embeddings(inputs)) as Record<string, Tensor>;
-	prepared = { photoId: request.photoId, image, embeddings };
+	prepared = { photoId: request.photoId, image, embeddings: null };
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 	post({ id: request.id, type: 'prepared', modelVersion: SMART_MASK_PACK.version, device });
 }
@@ -79,6 +72,15 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' }>) {
 	const active = preparedImage(request.photoId);
 	if (request.prompts.length === 0) throw new Error('Paint over an object before selecting it');
+	postProgress(request.id, 'loading', null, 'loading object model');
+	await loadObjectModel(request.id);
+	if (!active.embeddings) {
+		postProgress(request.id, 'encoding', null, 'analyzing photo');
+		const inputs = (await objectProcessor!(active.image)) as Record<string, Tensor> & {
+			pixel_values: Tensor;
+		};
+		active.embeddings = (await objectModel!.get_image_embeddings(inputs)) as Record<string, Tensor>;
+	}
 	postProgress(request.id, 'refining', null, 'refining object');
 	const inputPoints = request.prompts.map(({ point }) => [
 		point.x * active.image.width,
@@ -106,8 +108,7 @@ async function selectSubject(request: Extract<SmartMaskRequest, { type: 'subject
 	await loadSubjectModel(request.id);
 	postProgress(request.id, 'refining', null, 'finding subject');
 	const mask = await subjectModel!(active.image);
-	const alpha = new Uint8Array(mask.data.length);
-	alpha.set(mask.data);
+	const alpha = alphaChannel(mask);
 	postMask(request.id, mask.width, mask.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
@@ -185,10 +186,9 @@ function postMask(id: number, width: number, height: number, alpha: Uint8Array) 
 		alpha.byteOffset,
 		alpha.byteOffset + alpha.byteLength
 	) as ArrayBuffer;
-	post(
-		{ id, type: 'mask', modelVersion: SMART_MASK_PACK.version, width, height, alpha: buffer },
-		[buffer]
-	);
+	post({ id, type: 'mask', modelVersion: SMART_MASK_PACK.version, width, height, alpha: buffer }, [
+		buffer
+	]);
 }
 
 function postProgress(
@@ -201,7 +201,8 @@ function postProgress(
 }
 
 function preparedImage(photoId: string) {
-	if (!prepared || prepared.photoId !== photoId) throw new Error('Prepare this photo for smart masking');
+	if (!prepared || prepared.photoId !== photoId)
+		throw new Error('Prepare this photo for smart masking');
 	return prepared;
 }
 
