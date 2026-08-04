@@ -116,6 +116,7 @@ export const editDocumentSchema = z
 
 export type MaskKind = z.infer<typeof maskKindSchema>;
 export type MaskOperation = z.infer<typeof maskOperationSchema>;
+export type NormalizedPoint = z.infer<typeof normalizedPointSchema>;
 export type MaskComponent = z.infer<typeof maskComponentSchema>;
 export type MaskRaster = z.infer<typeof maskRasterSchema>;
 export type EditMask = z.infer<typeof editMaskSchema>;
@@ -152,7 +153,8 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 
 	const previous = previousEditDocumentSchema.safeParse(value);
 	if (previous.success) {
-		if (previous.data.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
+		if (previous.data.photoId !== photoId)
+			throw new Error(`Edit document belongs to another photo`);
 		return {
 			...previous.data,
 			version: EDIT_DOCUMENT_VERSION,

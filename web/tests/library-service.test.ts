@@ -253,6 +253,19 @@ test('cleans only unreferenced OPFS files', async () => {
 		const photo = storedPhoto('photo-one', 'asset-one', '0'.repeat(64));
 		const photoWrites = writes(photo);
 		await service.importPhotos(1, [photo], photoWrites.originals, photoWrites.thumbnails);
+		const document = defaultEditDocument(photo.id);
+		const mask = createEditMask('mask-one', 'subject');
+		const storageName = await service.saveMaskRaster(photo.id, 'component-one', Uint8Array.of(255));
+		mask.components.push({
+			id: 'component-one',
+			type: 'ai-subject',
+			operation: 'add',
+			inverted: false,
+			modelVersion: 'model-one',
+			raster: { storageName, width: 1, height: 1, digest: '0'.repeat(64) }
+		});
+		document.masks.push(mask);
+		await service.saveEditDocument(photo.id, document);
 		assets.originals.set('orphan.dng', new File(['orphan'], 'orphan.dng'));
 		assets.thumbnails.set('orphan.jpg', new Blob(['orphan']));
 		assets.edits.set('orphan.json', new Blob(['{}']));
@@ -265,9 +278,9 @@ test('cleans only unreferenced OPFS files', async () => {
 		assert.equal(result.reclaimedBytes, 23);
 		assert.deepEqual([...assets.originals.keys()], ['asset-one.dng']);
 		assert.deepEqual([...assets.thumbnails.keys()], ['photo-one.jpg']);
-		assert.deepEqual([...assets.edits.keys()], []);
+		assert.deepEqual([...assets.edits.keys()], ['photo-one.json']);
 		assert.deepEqual([...assets.derived.keys()], []);
-		assert.deepEqual([...assets.masks.keys()], []);
+		assert.deepEqual([...assets.masks.keys()], [storageName]);
 	} finally {
 		await service.clearAll();
 	}

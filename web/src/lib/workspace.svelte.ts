@@ -43,17 +43,31 @@ import {
 	defaultEditDocument,
 	type EditDocument,
 	type EditMask,
-	type MaskKind
+	type MaskComponent,
+	type MaskKind,
+	type NormalizedPoint
 } from './edit-document';
 import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
 import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
+import { SmartMaskClient } from './smart-mask-client';
+import type { SmartMaskProgress, SmartMaskRaster } from './smart-mask';
+import {
+	composeMaskRasters,
+	maskDigest,
+	type MaskRasterData,
+	type MaskRasterLayer
+} from './mask-raster';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 export type { MaskKind } from './edit-document';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 export type DevelopPreviewPhase = 'applying' | 'refining';
+export type SmartMaskStatus = SmartMaskProgress & { error: string | null };
+export interface SelectedMaskRaster extends MaskRasterData {
+	maskId: string;
+}
 export type DocumentStatus =
 	| { kind: 'idle' }
 	| {
@@ -156,6 +170,7 @@ export class WorkspaceState {
 	private readonly browserStorage = new BrowserStorageService();
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
+	private readonly smartMaskClient = typeof Worker === 'undefined' ? null : new SmartMaskClient();
 	private readonly rawExtensions = new Set<string>();
 	private capabilityLoading: Promise<void> | null = null;
 	private libraryRevision = 0;
@@ -174,6 +189,14 @@ export class WorkspaceState {
 	private refinementRevision: number | null = null;
 	private readonly editorHistory = new EditorHistory();
 	private removeProgressListener: (() => void) | null = null;
+	private removeSmartMaskProgressListener: (() => void) | null = null;
+	private preparedSmartMaskPhotoId: string | null = null;
+	private preparingSmartMask: { photoId: string; promise: Promise<void> } | null = null;
+	private smartMaskRevision = 0;
+	private activeSmartMaskPhotoId: string | null = null;
+	private maskRenderRevision = 0;
+	private maskRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly maskRasterCache = new Map<string, MaskRasterData>();
 
 	mode = $state<WorkspaceMode>('welcome');
 	photos = $state<Photo[]>([]);
@@ -206,6 +229,13 @@ export class WorkspaceState {
 		phase: DevelopPreviewPhase;
 	} | null>(null);
 	imageScope = $state<ImageScopeData | null>(null);
+	smartMaskStatus = $state<SmartMaskStatus>({
+		phase: 'idle',
+		progress: null,
+		detail: '',
+		error: null
+	});
+	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
 	renderSettings = $state({ settings: defaultLightSettings(), revision: 0 });
 	history = $state<string[]>(['imported']);
@@ -238,6 +268,11 @@ export class WorkspaceState {
 					...this.documentStatus,
 					...developProgress(progress)
 				};
+			}) ?? null;
+		this.removeSmartMaskProgressListener =
+			this.smartMaskClient?.onProgress((progress) => {
+				if (!this.activeSmartMaskPhotoId) return;
+				this.smartMaskStatus = { ...progress, error: null };
 			}) ?? null;
 		void this.initialize();
 	}
@@ -367,6 +402,8 @@ export class WorkspaceState {
 		if (!store) return;
 		await this.persistence;
 		this.storageCleanupResult = await store.cleanup();
+		this.editorHistory.reset();
+		this.syncHistory();
 		await this.refreshBrowserStorage();
 	};
 
@@ -431,6 +468,31 @@ export class WorkspaceState {
 		if (!this.canAdjustLight || !this.selectedPhoto) return;
 		if (!this.dispatchEditorCommand({ type: 'light.set', control, value })) {
 			this.releaseDevelopPreview();
+		}
+	};
+
+	previewMaskLight = (control: LightControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedPhoto || !this.selectedMaskId) return;
+		const document = cloneEditDocument(this.selectedPhoto.edit);
+		const mask = document.masks.find(({ id }) => id === this.selectedMaskId);
+		if (!mask) return;
+		mask.adjustments.light = { ...mask.adjustments.light, [control]: value };
+		this.masks = document.masks.map((candidate) => structuredClone(candidate));
+		this.scheduleMaskRender(document);
+	};
+
+	commitMaskLight = (control: LightControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedMaskId) return;
+		this.clearMaskRenderTimer();
+		if (
+			!this.dispatchEditorCommand({
+				type: 'mask.light.set',
+				maskId: this.selectedMaskId,
+				control,
+				value
+			})
+		) {
+			this.resetMaskPreview();
 		}
 	};
 
@@ -558,15 +620,79 @@ export class WorkspaceState {
 	}
 
 	createMask(kind: MaskKind) {
-		// TODO(WASM_TODOS.masks): create the actual mask raster in the Wasm document.
+		if (kind === 'subject' || kind === 'background') {
+			void this.createSemanticMask(kind);
+			return;
+		}
+		// TODO(WASM_TODOS.masks): rasterize brush and gradient mask components.
 		const mask = createEditMask(id('mask'), kind);
 		if (this.dispatchEditorCommand({ type: 'mask.create', mask })) {
-			this.selectedMaskId = mask.id;
+			this.selectMask(mask.id);
 		}
 	}
 
+	selectMask = (maskId: string | null) => {
+		this.selectedMaskId = maskId;
+		void this.refreshSelectedMaskRaster();
+	};
+
+	paintObjectMask = async (
+		points: NormalizedPoint[],
+		label: 'foreground' | 'background' = 'foreground'
+	) => {
+		const photo = this.smartMaskPhoto();
+		if (!photo || points.length === 0) return;
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+
+			const existing = this.masks.find(
+				(mask) => mask.id === this.selectedMaskId && mask.kind === 'object'
+			);
+			const previous = existing?.components.find(
+				(component): component is Extract<MaskComponent, { type: 'ai-object' }> =>
+					component.type === 'ai-object'
+			);
+			const prompts = [...(previous?.prompts ?? []), { label, points }];
+			if (!prompts.some((prompt) => prompt.label === 'foreground')) {
+				throw new Error('Paint over the object before subtracting from it');
+			}
+			const raster = await this.smartMaskClient!.selectObject(
+				photo.id,
+				prompts.flatMap((prompt) => prompt.points.map((point) => ({ label: prompt.label, point })))
+			);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+
+			const mask = existing ?? createEditMask(id('mask'), 'object');
+			const componentId = previous?.id ?? id('component');
+			const component = {
+				id: componentId,
+				type: 'ai-object',
+				operation: 'add',
+				modelVersion: this.smartMaskClient!.modelVersion,
+				prompts,
+				raster: await this.persistMaskRaster(photo.id, componentId, raster)
+			} satisfies MaskComponent;
+			if (existing) {
+				this.dispatchEditorCommand({
+					type: 'mask.component.set',
+					maskId: existing.id,
+					component
+				});
+			} else {
+				mask.components.push(component);
+				this.dispatchEditorCommand({ type: 'mask.create', mask });
+			}
+			this.selectMask(mask.id);
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	};
+
 	toggleMask(maskId: string) {
-		// TODO(WASM_TODOS.masks): mirror visibility into the render graph.
 		const mask = this.masks.find((candidate) => candidate.id === maskId);
 		if (mask) {
 			this.dispatchEditorCommand({
@@ -578,9 +704,8 @@ export class WorkspaceState {
 	}
 
 	deleteMask(maskId: string) {
-		// TODO(WASM_TODOS.masks): delete the mask raster and its adjustment node.
 		if (this.dispatchEditorCommand({ type: 'mask.delete', maskId })) {
-			this.selectedMaskId = this.masks.at(-1)?.id ?? null;
+			this.selectMask(this.masks.at(-1)?.id ?? null);
 		}
 	}
 
@@ -592,21 +717,29 @@ export class WorkspaceState {
 
 	destroy = () => {
 		this.documentRevision += 1;
+		this.clearMaskRenderTimer();
 		this.releaseDevelopPreview();
 		this.removeProgressListener?.();
 		this.removeProgressListener = null;
+		this.removeSmartMaskProgressListener?.();
+		this.removeSmartMaskProgressListener = null;
 		this.clearFiles();
 		this.workerClient?.destroy();
+		this.smartMaskClient?.destroy();
 		this.libraryService?.close();
 	};
 
 	private resetEditState(document: EditDocument | null = null) {
 		this.releaseDevelopPreview();
+		this.clearMaskRenderTimer();
+		this.maskRenderRevision += 1;
 		this.imageScope = null;
 		this.editorHistory.reset();
 		const light = document?.adjustments.light ?? defaultLightSettings();
 		this.masks = document?.masks.map((mask) => structuredClone(mask)) ?? [];
 		this.selectedMaskId = null;
+		this.selectedMaskRaster = null;
+		this.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
 		this.adjustments = { ...defaultAdjustments, ...light };
 		this.renderSettings = {
 			settings: { ...light },
@@ -659,7 +792,8 @@ export class WorkspaceState {
 				photo.edit.adjustments.light
 			);
 			if (revision !== this.documentRevision) return;
-
+			await this.installMaskCompositors(photo.edit, revision);
+			if (revision !== this.documentRevision) return;
 			this.installOpenedDocument(photoId, result);
 		} catch (error) {
 			if (revision !== this.documentRevision) return;
@@ -682,6 +816,8 @@ export class WorkspaceState {
 			previewDimension(),
 			photo.edit.adjustments.light
 		);
+		if (revision !== this.documentRevision) return;
+		await this.installMaskCompositors(photo.edit, revision);
 		if (revision !== this.documentRevision) return;
 		this.installOpenedDocument(photo.id, result);
 	}
@@ -715,10 +851,16 @@ export class WorkspaceState {
 
 	private closeDocument() {
 		this.documentRevision += 1;
+		this.smartMaskRevision += 1;
+		this.activeSmartMaskPhotoId = null;
+		this.maskRenderRevision += 1;
+		this.clearMaskRenderTimer();
 		this.releaseDevelopPreview();
 		const hadDocument = this.documentStatus.kind !== 'idle';
 		this.releaseEditPreview();
 		this.imageScope = null;
+		this.selectedMaskRaster = null;
+		this.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
 		this.documentStatus = { kind: 'idle' };
 		if (hadDocument) this.workerClient?.restart('Document closed');
 	}
@@ -737,15 +879,6 @@ export class WorkspaceState {
 			this.developPreviewTimer = null;
 			this.requestDevelopPreview(settings, 'applying');
 		}, 40);
-	}
-
-	private applyDevelopRender(settings: LightSettings) {
-		if (LIGHT_CONTROL_NAMES.every((name) => this.renderSettings.settings[name] === settings[name]))
-			return;
-		this.renderSettings = {
-			settings: { ...settings },
-			revision: this.renderSettings.revision + 1
-		};
 	}
 
 	private requestDevelopPreview(settings: LightSettings, phase: DevelopPreviewPhase) {
@@ -850,6 +983,9 @@ export class WorkspaceState {
 	private applyEditDocument(document: EditDocument, invalidation: EditorInvalidation) {
 		if (!this.selectedPhoto || document.photoId !== this.selectedPhoto.id) return;
 		const next = cloneEditDocument(document);
+		const globalLightChanged = LIGHT_CONTROL_NAMES.some(
+			(control) => this.renderSettings.settings[control] !== next.adjustments.light[control]
+		);
 		this.selectedPhoto.edit = next;
 		this.masks = next.masks.map((mask) => structuredClone(mask));
 		if (this.selectedMaskId && !this.masks.some(({ id }) => id === this.selectedMaskId)) {
@@ -860,12 +996,242 @@ export class WorkspaceState {
 		}
 
 		if (invalidation === 'render') {
-			this.requestDevelopPreview(next.adjustments.light, 'refining');
-			this.applyDevelopRender(next.adjustments.light);
-			this.refinementRevision = this.renderSettings.revision;
+			if (globalLightChanged) this.requestDevelopPreview(next.adjustments.light, 'refining');
+			this.renderEditDocument(next);
 		}
+		void this.refreshSelectedMaskRaster();
 		// TODO(WASM_TODOS.documentGeometry): invalidate transformed bounds and render tiles.
 		void this.queueCatalogMutation((store) => store.saveEditDocument(next.photoId, next));
+	}
+
+	private scheduleMaskRender(document: EditDocument) {
+		this.clearMaskRenderTimer();
+		this.maskRenderTimer = setTimeout(() => {
+			this.maskRenderTimer = null;
+			this.renderEditDocument(document);
+		}, 40);
+	}
+
+	private clearMaskRenderTimer() {
+		if (this.maskRenderTimer === null) return;
+		clearTimeout(this.maskRenderTimer);
+		this.maskRenderTimer = null;
+	}
+
+	private resetMaskPreview() {
+		if (!this.selectedPhoto) return;
+		this.masks = this.selectedPhoto.edit.masks.map((mask) => structuredClone(mask));
+		this.renderEditDocument(this.selectedPhoto.edit);
+	}
+
+	private renderEditDocument(document: EditDocument) {
+		const revision = ++this.maskRenderRevision;
+		void this.renderMasks(document)
+			.then(async (masks) => {
+				if (revision !== this.maskRenderRevision) return;
+				await this.workerClient?.setMasks(masks);
+				if (revision !== this.maskRenderRevision) return;
+				this.renderSettings = {
+					settings: { ...document.adjustments.light },
+					revision: this.renderSettings.revision + 1
+				};
+				this.refinementRevision = this.renderSettings.revision;
+			})
+			.catch(async (error) => {
+				if (revision !== this.maskRenderRevision) return;
+				await this.workerClient?.setMasks([]).catch(() => {});
+				if (revision !== this.maskRenderRevision) return;
+				this.renderSettings = {
+					settings: { ...document.adjustments.light },
+					revision: this.renderSettings.revision + 1
+				};
+				this.refinementRevision = this.renderSettings.revision;
+				this.failSmartMask(error);
+			});
+	}
+
+	private async installMaskCompositors(document: EditDocument, documentRevision: number) {
+		try {
+			const masks = await this.renderMasks(document);
+			if (documentRevision !== this.documentRevision) return;
+			await this.workerClient?.setMasks(masks);
+		} catch (error) {
+			if (documentRevision !== this.documentRevision) return;
+			await this.workerClient?.setMasks([]).catch(() => {});
+			this.failSmartMask(error);
+		}
+	}
+
+	private async renderMasks(document: EditDocument) {
+		const masks = await Promise.all(
+			document.masks.map(async (mask) => {
+				if (!mask.visible || neutralLight(mask.adjustments.light)) return null;
+				const raster = await this.composedMaskRaster(mask);
+				if (!raster) return null;
+				return {
+					id: mask.id,
+					width: raster.width,
+					height: raster.height,
+					alpha: raster.alpha.slice().buffer as ArrayBuffer,
+					settings: { ...mask.adjustments.light }
+				};
+			})
+		);
+		return masks.filter((mask): mask is NonNullable<typeof mask> => mask !== null);
+	}
+
+	private async composedMaskRaster(mask: EditMask) {
+		const layers = await Promise.all(
+			mask.components.map(async (component): Promise<MaskRasterLayer | null> => {
+				if (!component.raster) return null;
+				return {
+					operation: component.operation,
+					inverted: component.type === 'ai-subject' && component.inverted,
+					raster: await this.maskRaster(component.raster)
+				};
+			})
+		);
+		return composeMaskRasters(layers.filter((layer): layer is MaskRasterLayer => layer !== null));
+	}
+
+	private async maskRaster(reference: NonNullable<MaskComponent['raster']>) {
+		const key = `${reference.storageName}:${reference.digest}`;
+		const cached = this.maskRasterCache.get(key);
+		if (cached) return cached;
+		if (!this.libraryService) throw new Error('Mask storage is unavailable');
+		const alpha = new Uint8Array(await this.libraryService.readMaskRaster(reference.storageName));
+		if (alpha.length !== reference.width * reference.height) {
+			throw new Error(`Mask ${reference.storageName} has invalid dimensions`);
+		}
+		if ((await maskDigest(alpha)) !== reference.digest) {
+			throw new Error(`Mask ${reference.storageName} failed validation`);
+		}
+		const raster = { width: reference.width, height: reference.height, alpha };
+		this.maskRasterCache.set(key, raster);
+		return raster;
+	}
+
+	private async persistMaskRaster(photoId: string, componentId: string, raster: SmartMaskRaster) {
+		if (!this.libraryService) throw new Error('Mask storage is unavailable');
+		const digest = await maskDigest(raster.alpha);
+		const storageName = await this.libraryService.saveMaskRaster(
+			photoId,
+			`${componentId}-${digest.slice(0, 16)}`,
+			raster.alpha
+		);
+		this.maskRasterCache.set(`${storageName}:${digest}`, {
+			width: raster.width,
+			height: raster.height,
+			alpha: raster.alpha.slice()
+		});
+		return { storageName, width: raster.width, height: raster.height, digest };
+	}
+
+	private async createSemanticMask(kind: 'subject' | 'background') {
+		const photo = this.smartMaskPhoto();
+		if (!photo) return;
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const raster = await this.smartMaskClient!.selectSubject(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const mask = createEditMask(id('mask'), kind);
+			const componentId = id('component');
+			mask.components.push({
+				id: componentId,
+				type: 'ai-subject',
+				operation: 'add',
+				inverted: kind === 'background',
+				modelVersion: this.smartMaskClient!.modelVersion,
+				raster: await this.persistMaskRaster(photo.id, componentId, raster)
+			});
+			this.dispatchEditorCommand({ type: 'mask.create', mask });
+			this.selectMask(mask.id);
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	}
+
+	private smartMaskPhoto() {
+		if (!this.smartMaskClient || !this.libraryService) {
+			this.failSmartMask(new Error('Smart masking needs local browser storage'));
+			return null;
+		}
+		if (!this.selectedPhoto || !this.canAdjustLight || !this.editPreview) {
+			this.failSmartMask(new Error('Photo is not ready for smart masking'));
+			return null;
+		}
+		return this.selectedPhoto;
+	}
+
+	private async ensureSmartMaskPrepared(photoId: string) {
+		if (this.preparedSmartMaskPhotoId === photoId) return;
+		if (this.preparingSmartMask?.photoId === photoId) return this.preparingSmartMask.promise;
+		const preview = this.editPreview;
+		if (!preview || this.selectedPhoto?.id !== photoId) {
+			throw new Error('Photo is not ready for smart masking');
+		}
+		const promise = fetch(preview.src)
+			.then((response) => {
+				if (!response.ok) throw new Error('Unable to read the developed preview');
+				return response.blob();
+			})
+			.then((image) => this.smartMaskClient!.prepare(photoId, image))
+			.then(() => {
+				this.preparedSmartMaskPhotoId = photoId;
+			});
+		this.preparingSmartMask = { photoId, promise };
+		try {
+			await promise;
+		} finally {
+			if (this.preparingSmartMask?.promise === promise) this.preparingSmartMask = null;
+		}
+	}
+
+	private async refreshSelectedMaskRaster() {
+		const maskId = this.selectedMaskId;
+		const mask = this.masks.find(({ id }) => id === maskId);
+		if (!maskId || !mask) {
+			this.selectedMaskRaster = null;
+			return;
+		}
+		try {
+			const raster = await this.composedMaskRaster(mask);
+			if (this.selectedMaskId !== maskId) return;
+			this.selectedMaskRaster = raster ? { maskId, ...raster } : null;
+		} catch (error) {
+			if (this.selectedMaskId === maskId) this.selectedMaskRaster = null;
+			this.failSmartMask(error);
+		}
+	}
+
+	private finishSmartMask() {
+		this.activeSmartMaskPhotoId = null;
+		this.smartMaskStatus = {
+			phase: 'ready',
+			progress: 100,
+			detail: 'mask ready',
+			error: null
+		};
+	}
+
+	private failSmartMask(error: unknown) {
+		this.activeSmartMaskPhotoId = null;
+		const message = error instanceof Error ? error.message : 'Smart masking failed';
+		this.smartMaskStatus = { phase: 'error', progress: null, detail: message, error: message };
+	}
+
+	private beginSmartMask(photoId: string) {
+		this.activeSmartMaskPhotoId = photoId;
+		this.smartMaskStatus = {
+			phase: 'loading',
+			progress: null,
+			detail: 'preparing smart mask',
+			error: null
+		};
 	}
 
 	private syncHistory() {
@@ -879,6 +1245,7 @@ export class WorkspaceState {
 		for (const url of this.objectUrls) URL.revokeObjectURL(url);
 		this.objectUrls.clear();
 		this.thumbnailLoads.clear();
+		this.maskRasterCache.clear();
 		this.editPreview = null;
 	}
 
@@ -1421,6 +1788,10 @@ function developProgress(progress: DevelopProgress) {
 		totalFrames: progress.totalFrames,
 		activeFrame: progress.activeFrame
 	};
+}
+
+function neutralLight(settings: LightSettings) {
+	return LIGHT_CONTROL_NAMES.every((control) => settings[control] === 0);
 }
 
 export function formatBytes(bytes: number) {

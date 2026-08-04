@@ -27,6 +27,8 @@
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import PhotoPyramidLayer from './PhotoPyramidLayer.svelte';
+	import MaskOverlay from './MaskOverlay.svelte';
+	import MaskPromptOverlay from './MaskPromptOverlay.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
@@ -48,6 +50,7 @@
 		nextZoomScale,
 		panBy,
 		pixelGridOpacity,
+		screenToImage,
 		surfaceTransform,
 		visibleImageRect,
 		wheelNavigation,
@@ -56,6 +59,7 @@
 		type Size,
 		type ViewportTransform
 	} from '$lib/photo-viewport';
+	import type { NormalizedPoint } from '$lib/edit-document';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -66,12 +70,15 @@
 		workspace.previewLight(control, value);
 	const commitLight = (control: LightControlName) => (value: number) =>
 		workspace.commitLight(control, value);
+	const previewMaskLight = (control: LightControlName) => (value: number) =>
+		workspace.previewMaskLight(control, value);
+	const commitMaskLight = (control: LightControlName) => (value: number) =>
+		workspace.commitMaskLight(control, value);
 	let activeTool = $state('move');
 	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
 	let before = $state(false);
 	let maskOverlay = $state(true);
-	let maskAdjustments = $state({ exposure: 0, highlights: 0, shadows: 0, saturation: 0 });
 	let viewportElement = $state<HTMLDivElement | null>(null);
 	let viewportSize = $state<Size>({ width: 1, height: 1 });
 	let viewportTransform = $state<ViewportTransform>({ scale: 1, pan: { x: 0, y: 0 } });
@@ -80,6 +87,11 @@
 	let spaceHeld = $state(false);
 	let fittedPhotoKey = '';
 	let drag: { pointerId: number; origin: Point; transform: ViewportTransform } | null = null;
+	let objectStroke = $state<{
+		pointerId: number;
+		label: 'foreground' | 'background';
+		points: NormalizedPoint[];
+	} | null>(null);
 	let pinch: {
 		origin: Point;
 		distance: number;
@@ -97,6 +109,9 @@
 	const pixelGridStrength = $derived(pixelGridOpacity(viewportTransform.scale));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
+	);
+	const smartMaskWorking = $derived(
+		['downloading', 'loading', 'encoding', 'refining'].includes(workspace.smartMaskStatus.phase)
 	);
 	type LoadingDocument = Extract<DocumentStatus, { kind: 'loading' }>;
 	const selectionTools = new Set([
@@ -243,6 +258,19 @@
 		return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
 	}
 
+	function normalizedImagePoint(point: Point) {
+		const imagePoint = screenToImage(point, viewportSize, imageSize, viewportTransform);
+		if (
+			imagePoint.x < 0 ||
+			imagePoint.y < 0 ||
+			imagePoint.x > imageSize.width ||
+			imagePoint.y > imageSize.height
+		) {
+			return null;
+		}
+		return { x: imagePoint.x / imageSize.width, y: imagePoint.y / imageSize.height };
+	}
+
 	function handleWheel(event: WheelEvent) {
 		if (!active) return;
 		event.preventDefault();
@@ -285,6 +313,19 @@
 			return;
 		}
 
+		if (activeTool === 'object-select' && event.button === 0) {
+			const imagePoint = normalizedImagePoint(point);
+			if (!imagePoint) return;
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			objectStroke = {
+				pointerId: event.pointerId,
+				label: event.altKey ? 'background' : 'foreground',
+				points: [imagePoint]
+			};
+			return;
+		}
+
 		if (activeTool === 'hand' || spaceHeld || event.button === 1) {
 			event.preventDefault();
 			viewportElement.setPointerCapture(event.pointerId);
@@ -294,6 +335,18 @@
 
 	function handlePointerMove(event: PointerEvent) {
 		const point = viewportPoint(event);
+		if (objectStroke?.pointerId === event.pointerId) {
+			event.preventDefault();
+			const imagePoint = normalizedImagePoint(point);
+			const previous = objectStroke.points.at(-1);
+			if (
+				imagePoint &&
+				(!previous || Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) > 0.003)
+			) {
+				objectStroke = { ...objectStroke, points: [...objectStroke.points, imagePoint] };
+			}
+			return;
+		}
 		if (pointers.has(event.pointerId)) pointers.set(event.pointerId, point);
 
 		if (pinch && pointers.size >= 2) {
@@ -324,6 +377,14 @@
 	}
 
 	function handlePointerUp(event: PointerEvent) {
+		if (objectStroke?.pointerId === event.pointerId) {
+			const completed = objectStroke;
+			objectStroke = null;
+			if (event.type === 'pointerup') {
+				void workspace.paintObjectMask(completed.points, completed.label);
+			}
+			return;
+		}
 		const wasPinching = pinch !== null;
 		pointers.delete(event.pointerId);
 		if (drag?.pointerId === event.pointerId) drag = null;
@@ -337,7 +398,7 @@
 	}
 
 	function handleDoubleClick(event: MouseEvent) {
-		if (!active || activeTool === 'zoom') return;
+		if (!active || activeTool === 'zoom' || activeTool === 'object-select') return;
 		event.preventDefault();
 		if (viewportMode === 'fit') setZoom(1, viewportPoint(event));
 		else fitPhoto();
@@ -529,10 +590,15 @@
 	}
 
 	function addMask(kind: MaskKind) {
-		// TODO(WASM_TODOS.masks): replace the visual-only mask with a rendered mask.
 		workspace.createMask(kind);
 		activeTool = 'mask';
 		activeToolLabel = 'mask brush';
+		inspectorTab = 'mask';
+		maskOverlay = true;
+	}
+
+	function beginObjectMask() {
+		chooseTool('object-select', 'object selection');
 		inspectorTab = 'mask';
 		maskOverlay = true;
 	}
@@ -682,11 +748,16 @@
 			<div
 				class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[10px]"
 			>
-				<!-- TODO(WASM_TODOS.editorTools): bind these option controls to the active Wasm tool. -->
 				<span class="text-text shrink-0 font-medium">{activeToolLabel}</span>
 				<span class="bg-subtle h-4 w-px shrink-0"></span>
 
-				{#if selectionTools.has(activeTool)}
+				{#if activeTool === 'object-select'}
+					<span class="shrink-0">paint to include</span>
+					<span class="text-muted shrink-0">
+						<kbd class="text-text font-mono">alt</kbd> paint to exclude
+					</span>
+				{:else if selectionTools.has(activeTool)}
+					<!-- TODO(WASM_TODOS.editorTools): implement remaining pixel selection tools. -->
 					<div class="border-subtle bg-surface flex h-6 shrink-0 rounded border p-0.5">
 						{#each ['new', 'add', 'subtract', 'intersect'] as mode, index}
 							<button
@@ -796,7 +867,9 @@
 						? 'cursor-grab'
 						: activeTool === 'zoom'
 							? 'cursor-zoom-in'
-							: 'cursor-default'}"
+							: activeTool === 'object-select'
+								? 'cursor-crosshair'
+								: 'cursor-default'}"
 				onwheel={handleWheel}
 				onpointerdown={handlePointerDown}
 				onpointermove={handlePointerMove}
@@ -897,7 +970,7 @@
 									class="viewport-hairline pointer-events-none absolute top-[46%] left-[58%] rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
 									style="width: calc(40px / var(--viewport-scale)); height: calc(40px / var(--viewport-scale));"
 								></div>
-							{:else if selectionTools.has(activeTool)}
+							{:else if selectionTools.has(activeTool) && activeTool !== 'object-select'}
 								<div
 									class="viewport-hairline pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
 								></div>
@@ -910,19 +983,17 @@
 									>
 								</div>
 							{/if}
-							{#if selectedMask?.visible && maskOverlay}
-								<div
-									class="motion-mask pointer-events-none absolute inset-0 opacity-55 mix-blend-screen {selectedMask.kind ===
-									'linear'
-										? 'bg-[linear-gradient(135deg,rgba(22,123,255,0.95),transparent_62%)]'
-										: selectedMask.kind === 'sky'
-											? 'bg-[linear-gradient(to_bottom,rgba(22,123,255,0.95),transparent_52%)]'
-											: selectedMask.kind === 'radial' || selectedMask.kind === 'subject'
-												? 'bg-[radial-gradient(ellipse_at_center,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.5)_35%,transparent_68%)]'
-												: selectedMask.kind === 'background'
-													? 'bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(22,123,255,0.85)_72%)]'
-													: 'bg-[radial-gradient(circle_at_58%_46%,rgba(22,123,255,0.9)_0%,rgba(22,123,255,0.55)_12%,transparent_28%)]'}"
-								></div>
+							{#if selectedMask?.visible && maskOverlay && workspace.selectedMaskRaster?.maskId === selectedMask.id}
+								<MaskOverlay raster={workspace.selectedMaskRaster} />
+							{/if}
+							{#if objectStroke}
+								<MaskPromptOverlay
+									points={objectStroke.points}
+									label={objectStroke.label}
+									imageWidth={imageSize.width}
+									imageHeight={imageSize.height}
+									viewportScale={viewportTransform.scale}
+								/>
 							{/if}
 						</div>
 					{/key}
@@ -1274,7 +1345,32 @@
 							<button type="button" class="mask-choice" onclick={() => addMask('background')}
 								><Mountain size={15} /><span>background</span></button
 							>
+							<button type="button" class="mask-choice" onclick={beginObjectMask}
+								><Scan size={15} /><span>object</span></button
+							>
 						</div>
+						{#if smartMaskWorking || workspace.smartMaskStatus.error}
+							<div class="border-subtle bg-surface mt-2 overflow-hidden rounded border px-2 py-1.5">
+								<p
+									class="truncate text-[9px] {workspace.smartMaskStatus.error
+										? 'text-negative'
+										: 'text-muted'}"
+								>
+									{workspace.smartMaskStatus.detail}
+								</p>
+								{#if smartMaskWorking}
+									<div class="bg-subtle mt-1 h-px overflow-hidden">
+										<div
+											class="bg-text h-full transition-[width] duration-200"
+											class:develop-progress-sweep={workspace.smartMaskStatus.progress === null}
+											style:width={workspace.smartMaskStatus.progress === null
+												? '33%'
+												: `${workspace.smartMaskStatus.progress}%`}
+										></div>
+									</div>
+								{/if}
+							</div>
+						{/if}
 					</div>
 
 					<div class="border-subtle border-b p-3">
@@ -1298,9 +1394,8 @@
 									mask.id
 										? 'border-accent bg-surface'
 										: 'hover:bg-surface/65 border-transparent'}"
-									onclick={() => (workspace.selectedMaskId = mask.id)}
-									onkeydown={(event) =>
-										event.key === 'Enter' && (workspace.selectedMaskId = mask.id)}
+									onclick={() => workspace.selectMask(mask.id)}
+									onkeydown={(event) => event.key === 'Enter' && workspace.selectMask(mask.id)}
 								>
 									<span
 										class="bg-elevated text-muted flex size-7 items-center justify-center rounded-sm"
@@ -1341,34 +1436,63 @@
 					</div>
 
 					{#if selectedMask}
-						<!-- TODO(WASM_TODOS.adjustments): apply these values to the selected mask node. -->
 						<Panel title="Mask adjustments" meta={selectedMask.name}>
 							<AdjustmentSlider
 								label="Exposure"
-								bind:value={maskAdjustments.exposure}
+								value={selectedMask.adjustments.light.exposure}
 								min={-4}
 								max={4}
 								step={0.05}
 								decimals={2}
 								suffix=" EV"
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('exposure')}
+								onValueCommit={commitMaskLight('exposure')}
+							/>
+							<AdjustmentSlider
+								label="Contrast"
+								value={selectedMask.adjustments.light.contrast}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('contrast')}
+								onValueCommit={commitMaskLight('contrast')}
 							/>
 							<AdjustmentSlider
 								label="Highlights"
-								bind:value={maskAdjustments.highlights}
+								value={selectedMask.adjustments.light.highlights}
 								min={-100}
 								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('highlights')}
+								onValueCommit={commitMaskLight('highlights')}
 							/>
 							<AdjustmentSlider
 								label="Shadows"
-								bind:value={maskAdjustments.shadows}
+								value={selectedMask.adjustments.light.shadows}
 								min={-100}
 								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('shadows')}
+								onValueCommit={commitMaskLight('shadows')}
 							/>
 							<AdjustmentSlider
-								label="Saturation"
-								bind:value={maskAdjustments.saturation}
+								label="Whites"
+								value={selectedMask.adjustments.light.whites}
 								min={-100}
 								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('whites')}
+								onValueCommit={commitMaskLight('whites')}
+							/>
+							<AdjustmentSlider
+								label="Blacks"
+								value={selectedMask.adjustments.light.blacks}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskLight('blacks')}
+								onValueCommit={commitMaskLight('blacks')}
 							/>
 						</Panel>
 					{/if}
