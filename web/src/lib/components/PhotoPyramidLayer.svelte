@@ -35,6 +35,16 @@
 		fullyLoaded: boolean;
 	}
 
+	interface TileReplacement {
+		item: OpenSeadragon.TiledImage;
+		previous: OpenSeadragon.TiledImage | null;
+		generation: number;
+		revision: number;
+		exposed: boolean;
+		drawn: boolean;
+		fullyLoaded: boolean;
+	}
+
 	let {
 		photoId,
 		enabled,
@@ -59,7 +69,7 @@
 	let renderedRevision = -1;
 	let generation = 0;
 	let activeItem: OpenSeadragon.TiledImage | null = null;
-	let pendingItem: OpenSeadragon.TiledImage | null = null;
+	let replacement: TileReplacement | null = null;
 	const tilePhases = new Map<string, PyramidTilePhase>();
 
 	onMount(() => {
@@ -78,7 +88,7 @@
 				blendTime: 0.12,
 				alwaysBlend: false,
 				drawer: ['webgl', 'canvas'],
-				imageLoaderLimit: 1,
+				imageLoaderLimit: 2,
 				maxImageCacheCount: 128,
 				maxTilesPerFrame: 4,
 				timeout: 30_000,
@@ -91,7 +101,7 @@
 			});
 			viewer.addHandler('open', () => {
 				activeItem = viewer?.world.getItemAt(0) ?? null;
-				pendingItem = null;
+				replacement = null;
 				resizedViewport = null;
 				imageSmoothingEnabled = null;
 				opened = true;
@@ -99,8 +109,12 @@
 			viewer.addHandler('fully-loaded-change', (event) => {
 				diagnostics = { ...diagnostics, fullyLoaded: event.fullyLoaded };
 			});
+			viewer.addHandler('tile-loaded', (event) => exposeReplacement(event.tiledImage));
+			viewer.addHandler('update-viewport', presentExposedReplacement);
 			viewer.addHandler('tile-load-failed', (event) => {
 				console.warn(`Tile ${event.tile.toString()} failed: ${event.message}`);
+				const failed = event as typeof event & { maxReached?: boolean };
+				if (failed.maxReached !== false) rollbackReplacement(event.tiledImage);
 			});
 		});
 
@@ -119,7 +133,7 @@
 			sourceKey = null;
 			renderedRevision = -1;
 			activeItem = null;
-			pendingItem = null;
+			replacement = null;
 			opened = false;
 			resetDiagnostics();
 			viewer.close();
@@ -131,7 +145,7 @@
 			sourceKey = nextSourceKey;
 			renderedRevision = renderRevision;
 			activeItem = null;
-			pendingItem = null;
+			replacement = null;
 			opened = false;
 			resetDiagnostics();
 			viewer.open({ tileSource: tileSource(renderRevision, settings, tone) });
@@ -203,10 +217,7 @@
 	function queueReplacement(revision: number, light: LightSettings, toneMapping: boolean) {
 		if (!viewer) return;
 		const nextGeneration = ++generation;
-		if (pendingItem && viewer.world.getIndexOfItem(pendingItem) >= 0) {
-			viewer.world.removeItem(pendingItem);
-		}
-		pendingItem = null;
+		discardReplacement();
 		resetDiagnostics();
 
 		viewer.addTiledImage({
@@ -219,27 +230,73 @@
 					viewer?.world.removeItem(item);
 					return;
 				}
-				pendingItem = item;
-				item.whenFullyLoaded(() => publishReplacement(item, nextGeneration, revision));
+				replacement = {
+					item,
+					previous: activeItem,
+					generation: nextGeneration,
+					revision,
+					exposed: false,
+					drawn: false,
+					fullyLoaded: item.getFullyLoaded()
+				};
+				item.addHandler('fully-loaded-change', (loaded) => {
+					if (loaded.fullyLoaded) markReplacementFullyLoaded(item, nextGeneration);
+				});
+				if (item.getFullyLoaded()) exposeReplacement(item);
 			}
 		});
 	}
 
-	function publishReplacement(
-		item: OpenSeadragon.TiledImage,
-		itemGeneration: number,
-		revision: number
-	) {
-		if (!viewer || itemGeneration !== generation || viewer.world.getIndexOfItem(item) < 0) return;
-		const previous = activeItem;
+	function exposeReplacement(item: OpenSeadragon.TiledImage) {
+		const next = replacement;
+		if (!viewer || !next || next.item !== item || next.generation !== generation || next.exposed) {
+			return;
+		}
+		next.exposed = true;
 		item.setOpacity(1);
-		activeItem = item;
-		pendingItem = null;
-		requestAnimationFrame(() => {
-			if (!viewer || !previous || previous === activeItem) return;
-			if (viewer.world.getIndexOfItem(previous) >= 0) viewer.world.removeItem(previous);
-			onRenderSettled(revision);
-		});
+		viewer.forceRedraw();
+	}
+
+	function presentExposedReplacement() {
+		const next = replacement;
+		if (!viewer || !next || !next.exposed) return;
+		if (!next.drawn) {
+			next.drawn = true;
+			onRenderSettled(next.revision);
+		}
+		if (next.fullyLoaded) finishReplacement(next);
+	}
+
+	function markReplacementFullyLoaded(item: OpenSeadragon.TiledImage, itemGeneration: number) {
+		const next = replacement;
+		if (!next || next.item !== item || next.generation !== itemGeneration) return;
+		next.fullyLoaded = true;
+		exposeReplacement(item);
+		viewer?.forceRedraw();
+	}
+
+	function finishReplacement(next: TileReplacement) {
+		if (!viewer || replacement !== next || next.generation !== generation) return;
+		activeItem = next.item;
+		replacement = null;
+		if (next.previous && viewer.world.getIndexOfItem(next.previous) >= 0) {
+			viewer.world.removeItem(next.previous);
+		}
+	}
+
+	function rollbackReplacement(item: OpenSeadragon.TiledImage) {
+		const next = replacement;
+		if (!viewer || !next || next.item !== item || next.generation !== generation) return;
+		replacement = null;
+		if (viewer.world.getIndexOfItem(item) >= 0) viewer.world.removeItem(item);
+		onRenderSettled(next.revision);
+	}
+
+	function discardReplacement() {
+		if (!viewer || !replacement) return;
+		const item = replacement.item;
+		replacement = null;
+		if (viewer.world.getIndexOfItem(item) >= 0) viewer.world.removeItem(item);
 	}
 
 	function countPhase(phase: PyramidTilePhase) {
