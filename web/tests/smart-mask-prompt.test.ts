@@ -20,8 +20,13 @@ test('condenses painted strokes into a bounded foreground and background prompt'
 
 	assert.equal(prompt.points.filter(({ label }) => label === 'foreground').length, 4);
 	assert.equal(prompt.points.filter(({ label }) => label === 'background').length, 4);
-	assert.deepEqual(prompt.inputLabels, [1, 1, 1, 1, 0, 0, 0, 0]);
-	assert.ok(prompt.inputPoints.every(([x, y]) => x >= 0 && x <= 100 && y >= 0 && y <= 50));
+	assert.equal(prompt.proposals.length, 4);
+	assert.ok(prompt.proposals.every(({ inputLabels }) => inputLabels.join() === '1,0,0,0,0'));
+	assert.ok(
+		prompt.proposals.every(({ inputPoints }) =>
+			inputPoints.every(([x, y]) => x >= 0 && x <= 100 && y >= 0 && y <= 50)
+		)
+	);
 });
 
 test('prefers a candidate that follows foreground and background guidance', () => {

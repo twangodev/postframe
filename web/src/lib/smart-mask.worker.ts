@@ -89,32 +89,47 @@ async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' 
 	}
 	postProgress(request.id, 'refining', null, 'refining object');
 	const prompt = prepareSmartMaskPrompt(request.strokes, active.image.width, active.image.height);
-	const promptInputs = (await objectProcessor!(active.image, {
-		input_points: [[prompt.inputPoints]],
-		input_labels: [[prompt.inputLabels]]
-	})) as Record<string, Tensor>;
 	const previousMask =
 		active.selection?.id === request.selectionId ? active.selection.maskInput : undefined;
-	const outputs = await objectModel!({
-		...promptInputs,
-		...active.embeddings,
-		...(previousMask ? { input_masks: previousMask } : {})
-	});
+	let selected: { outputs: Awaited<ReturnType<Sam2Model['_call']>>; score: number } | null = null;
+	let promptInputs: Record<string, Tensor> | null = null;
+	for (const proposal of prompt.proposals) {
+		const inputs = (await objectProcessor!(active.image, {
+			input_points: [[proposal.inputPoints]],
+			input_labels: [[proposal.inputLabels]]
+		})) as Record<string, Tensor>;
+		const outputs = await objectModel!({
+			...inputs,
+			...active.embeddings,
+			...(previousMask ? { input_masks: previousMask } : {})
+		});
+		const candidate = selectPromptedMask(
+			outputs.pred_masks.data as ArrayLike<number>,
+			outputs.pred_masks.dims,
+			outputs.iou_scores.data as ArrayLike<number>,
+			prompt
+		);
+		if (candidate && (!selected || candidate.score > selected.score)) {
+			selected = { outputs, score: candidate.score };
+			promptInputs = inputs;
+		}
+	}
+	if (!selected || !promptInputs) throw new Error('No object was found under the painted area');
 	const masks = await objectProcessor!.post_process_masks(
-		outputs.pred_masks,
+		selected.outputs.pred_masks,
 		promptInputs.original_sizes,
 		promptInputs.reshaped_input_sizes
 	);
 	const mask = selectPromptedMask(
 		masks[0].data as ArrayLike<number>,
 		masks[0].dims,
-		outputs.iou_scores.data as ArrayLike<number>,
+		selected.outputs.iou_scores.data as ArrayLike<number>,
 		prompt
 	);
 	if (!mask) throw new Error('No object was found under the painted area');
 	const maskInput = selectedMaskInput(
-		outputs.pred_masks.data as ArrayLike<number>,
-		outputs.pred_masks.dims,
+		selected.outputs.pred_masks.data as ArrayLike<number>,
+		selected.outputs.pred_masks.dims,
 		mask.index
 	);
 	active.selection = {

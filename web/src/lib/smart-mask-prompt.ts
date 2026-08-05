@@ -3,6 +3,7 @@ import type { SmartMaskStroke } from './smart-mask.ts';
 
 const MODEL_POINTS_PER_STROKE = 4;
 const MODEL_POINTS_PER_LABEL = 8;
+const MODEL_PROPOSALS = 4;
 const MASK_THRESHOLD = 0;
 
 export interface SmartMaskModelPoint {
@@ -10,10 +11,14 @@ export interface SmartMaskModelPoint {
 	point: NormalizedPoint;
 }
 
-export interface SmartMaskModelPrompt {
-	points: SmartMaskModelPoint[];
+export interface SmartMaskModelProposal {
 	inputPoints: [number, number][];
 	inputLabels: number[];
+}
+
+export interface SmartMaskModelPrompt {
+	points: SmartMaskModelPoint[];
+	proposals: SmartMaskModelProposal[];
 }
 
 export interface PromptedMaskSelection {
@@ -21,6 +26,7 @@ export interface PromptedMaskSelection {
 	width: number;
 	height: number;
 	alpha: Uint8Array;
+	score: number;
 }
 
 interface CandidateMask {
@@ -42,13 +48,14 @@ export function prepareSmartMaskPrompt(
 	if (!points.some(({ label }) => label === 'foreground')) {
 		throw new Error('Paint over an object before selecting it');
 	}
+	const foreground = points.filter(({ label }) => label === 'foreground');
+	const background = points.filter(({ label }) => label === 'background');
 	return {
 		points,
-		inputPoints: points.map(({ point }) => [
-			point.x * Math.max(0, width - 1),
-			point.y * Math.max(0, height - 1)
-		]),
-		inputLabels: points.map(({ label }) => (label === 'foreground' ? 1 : 0))
+		proposals: sampleEvenly(foreground, MODEL_PROPOSALS).map((seed) => ({
+			inputPoints: [seed, ...background].map(({ point }) => imagePoint(point, width, height)),
+			inputLabels: [1, ...background.map(() => 0)]
+		}))
 	};
 }
 
@@ -60,8 +67,8 @@ export function selectPromptedMask(
 ): PromptedMaskSelection | null {
 	const width = dimensions.at(-1) ?? 0;
 	const height = dimensions.at(-2) ?? 0;
-	const candidateCount = dimensions.at(-3) ?? 0;
 	const size = width * height;
+	const candidateCount = size > 0 ? Math.min(scores.length, Math.floor(data.length / size)) : 0;
 	if (width < 1 || height < 1 || candidateCount < 1 || data.length < size * candidateCount) {
 		throw new Error('The object model returned invalid masks');
 	}
@@ -87,7 +94,7 @@ export function selectPromptedMask(
 	}
 
 	return selected && selected.positiveCoverage > 0
-		? { index: selected.index, width, height, alpha: selected.alpha }
+		? { index: selected.index, width, height, alpha: selected.alpha, score: selected.score }
 		: null;
 }
 
@@ -245,4 +252,8 @@ function pixelCoordinates(point: NormalizedPoint, width: number, height: number)
 		x: Math.min(width - 1, Math.max(0, Math.round(point.x * (width - 1)))),
 		y: Math.min(height - 1, Math.max(0, Math.round(point.y * (height - 1))))
 	};
+}
+
+function imagePoint(point: NormalizedPoint, width: number, height: number): [number, number] {
+	return [point.x * Math.max(0, width - 1), point.y * Math.max(0, height - 1)];
 }
