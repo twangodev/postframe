@@ -655,14 +655,11 @@ export class WorkspaceState {
 			if (!prompts.some((prompt) => prompt.label === 'foreground')) {
 				throw new Error('Paint over the object before subtracting from it');
 			}
-			const raster = await this.smartMaskClient!.selectObject(
-				photo.id,
-				prompts.flatMap((prompt) => prompt.points.map((point) => ({ label: prompt.label, point })))
-			);
+			const componentId = previous?.id ?? id('component');
+			const raster = await this.smartMaskClient!.selectObject(photo.id, componentId, prompts);
 			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
 
 			const mask = existing ?? createEditMask(id('mask'), 'object');
-			const componentId = previous?.id ?? id('component');
 			const component = {
 				id: componentId,
 				type: 'ai-object',

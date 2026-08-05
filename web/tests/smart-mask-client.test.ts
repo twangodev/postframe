@@ -37,9 +37,7 @@ test('prepares a photo before requesting prompted masks', async () => {
 	client.onProgress(({ detail }) => progress.push(detail));
 	const image = new Blob(['preview'], { type: 'image/jpeg' });
 	const preparing = client.prepare('photo-one', image);
-	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'prepare', photoId: 'photo-one', image }
-	]);
+	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'prepare', photoId: 'photo-one', image }]);
 	workers[0]?.respond({
 		id: 1,
 		type: 'progress',
@@ -56,14 +54,15 @@ test('prepares a photo before requesting prompted masks', async () => {
 	assert.equal((await preparing).device, 'wasm');
 	assert.deepEqual(progress, ['analyzing photo']);
 
-	const selecting = client.selectObject('photo-one', [
-		{ label: 'foreground', point: { x: 0.25, y: 0.75 } }
+	const selecting = client.selectObject('photo-one', 'selection-one', [
+		{ label: 'foreground', points: [{ x: 0.25, y: 0.75 }] }
 	]);
 	assert.deepEqual(workers[0]?.messages[1], {
 		id: 2,
 		type: 'object',
 		photoId: 'photo-one',
-		prompts: [{ label: 'foreground', point: { x: 0.25, y: 0.75 } }]
+		selectionId: 'selection-one',
+		strokes: [{ label: 'foreground', points: [{ x: 0.25, y: 0.75 }] }]
 	});
 	workers[0]?.respond({
 		id: 2,

@@ -32,10 +32,12 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 	}
 });
 
-export const smartMaskPromptSchema = z.object({
+export const smartMaskStrokeSchema = z.object({
 	label: maskPromptLabelSchema,
-	point: normalizedPointSchema
+	points: z.array(normalizedPointSchema).min(1)
 });
+
+export type SmartMaskStroke = z.infer<typeof smartMaskStrokeSchema>;
 
 export interface SmartMaskRaster {
 	width: number;
@@ -58,7 +60,8 @@ export type SmartMaskRequest =
 			id: number;
 			type: 'object';
 			photoId: string;
-			prompts: z.infer<typeof smartMaskPromptSchema>[];
+			selectionId: string;
+			strokes: SmartMaskStroke[];
 	  }
 	| { id: number; type: 'subject'; photoId: string }
 	| { id: number; type: 'reset' };

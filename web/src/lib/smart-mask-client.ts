@@ -1,10 +1,11 @@
 import {
 	SMART_MASK_PACK,
-	smartMaskPromptSchema,
+	smartMaskStrokeSchema,
 	type SmartMaskProgress,
 	type SmartMaskRaster,
 	type SmartMaskRequest,
-	type SmartMaskResponse
+	type SmartMaskResponse,
+	type SmartMaskStroke
 } from './smart-mask.ts';
 
 type Completion = Exclude<SmartMaskResponse, { type: 'progress' | 'error' }>;
@@ -39,13 +40,10 @@ export class SmartMaskClient {
 		return this.send((id) => ({ id, type: 'prepare', photoId, image }), 'prepared');
 	}
 
-	async selectObject(
-		photoId: string,
-		prompts: { label: 'foreground' | 'background'; point: { x: number; y: number } }[]
-	) {
-		const parsed = prompts.map((prompt) => smartMaskPromptSchema.parse(prompt));
+	async selectObject(photoId: string, selectionId: string, strokes: SmartMaskStroke[]) {
+		const parsed = strokes.map((stroke) => smartMaskStrokeSchema.parse(stroke));
 		const response = await this.send(
-			(id) => ({ id, type: 'object', photoId, prompts: parsed }),
+			(id) => ({ id, type: 'object', photoId, selectionId, strokes: parsed }),
 			'mask'
 		);
 		return raster(response);

@@ -2,13 +2,18 @@ import {
 	AutoProcessor,
 	RawImage,
 	Sam2Model,
+	Tensor,
 	env,
 	pipeline,
-	type ProgressInfo,
-	type Tensor
+	type ProgressInfo
 } from '@huggingface/transformers';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
+import {
+	prepareSmartMaskPrompt,
+	selectedMaskInput,
+	selectPromptedMask
+} from './smart-mask-prompt.ts';
 import { SMART_MASK_PACK, type SmartMaskRequest, type SmartMaskResponse } from './smart-mask.ts';
 
 type Device = 'webgpu' | 'wasm';
@@ -21,6 +26,7 @@ interface PreparedImage {
 	photoId: string;
 	image: RawImage;
 	embeddings: Record<string, Tensor> | null;
+	selection: { id: string; maskInput: Tensor } | null;
 }
 
 let device: Device = supportsWebGpu() ? 'webgpu' : 'wasm';
@@ -64,14 +70,14 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 	resetPreparedImage();
 	postProgress(request.id, 'loading', null, 'reading photo');
 	const image = await RawImage.fromBlob(request.image);
-	prepared = { photoId: request.photoId, image, embeddings: null };
+	prepared = { photoId: request.photoId, image, embeddings: null, selection: null };
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 	post({ id: request.id, type: 'prepared', modelVersion: SMART_MASK_PACK.version, device });
 }
 
 async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' }>) {
 	const active = preparedImage(request.photoId);
-	if (request.prompts.length === 0) throw new Error('Paint over an object before selecting it');
+	if (request.strokes.length === 0) throw new Error('Paint over an object before selecting it');
 	postProgress(request.id, 'loading', null, 'loading object model');
 	await loadObjectModel(request.id);
 	if (!active.embeddings) {
@@ -82,22 +88,39 @@ async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' 
 		active.embeddings = (await objectModel!.get_image_embeddings(inputs)) as Record<string, Tensor>;
 	}
 	postProgress(request.id, 'refining', null, 'refining object');
-	const inputPoints = request.prompts.map(({ point }) => [
-		point.x * active.image.width,
-		point.y * active.image.height
-	]);
-	const inputLabels = request.prompts.map(({ label }) => (label === 'foreground' ? 1 : 0));
+	const prompt = prepareSmartMaskPrompt(request.strokes, active.image.width, active.image.height);
 	const promptInputs = (await objectProcessor!(active.image, {
-		input_points: [[inputPoints]],
-		input_labels: [[inputLabels]]
+		input_points: [[prompt.inputPoints]],
+		input_labels: [[prompt.inputLabels]]
 	})) as Record<string, Tensor>;
-	const outputs = await objectModel!({ ...promptInputs, ...active.embeddings });
+	const previousMask =
+		active.selection?.id === request.selectionId ? active.selection.maskInput : undefined;
+	const outputs = await objectModel!({
+		...promptInputs,
+		...active.embeddings,
+		...(previousMask ? { input_masks: previousMask } : {})
+	});
 	const masks = await objectProcessor!.post_process_masks(
 		outputs.pred_masks,
 		promptInputs.original_sizes,
 		promptInputs.reshaped_input_sizes
 	);
-	const mask = bestMask(masks[0], outputs.iou_scores);
+	const mask = selectPromptedMask(
+		masks[0].data as ArrayLike<number>,
+		masks[0].dims,
+		outputs.iou_scores.data as ArrayLike<number>,
+		prompt
+	);
+	if (!mask) throw new Error('No object was found under the painted area');
+	const maskInput = selectedMaskInput(
+		outputs.pred_masks.data as ArrayLike<number>,
+		outputs.pred_masks.dims,
+		mask.index
+	);
+	active.selection = {
+		id: request.selectionId,
+		maskInput: new Tensor('float32', maskInput.data, maskInput.dimensions)
+	};
 	postMask(request.id, mask.width, mask.height, mask.alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
@@ -162,23 +185,6 @@ function modelOptions(
 function reportDownload(requestId: number, progress: ProgressInfo) {
 	if (progress.status !== 'progress') return;
 	postProgress(requestId, 'downloading', progress.progress, progress.file);
-}
-
-function bestMask(mask: Tensor, scores: Tensor) {
-	const width = mask.dims.at(-1) ?? 0;
-	const height = mask.dims.at(-2) ?? 0;
-	if (width <= 0 || height <= 0) throw new Error('The object model returned an empty mask');
-	let selected = 0;
-	for (let index = 1; index < scores.data.length; index += 1) {
-		if (Number(scores.data[index]) > Number(scores.data[selected])) selected = index;
-	}
-	const size = width * height;
-	const start = selected * size;
-	const alpha = new Uint8Array(size);
-	for (let index = 0; index < size; index += 1) {
-		alpha[index] = Number(mask.data[start + index]) > 0 ? 255 : 0;
-	}
-	return { width, height, alpha };
 }
 
 function postMask(id: number, width: number, height: number, alpha: Uint8Array) {
