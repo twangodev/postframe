@@ -23,5 +23,5 @@ rustc-ice-*.txt
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
-# Locally exported browser models
-web/static/models/**/*.onnx
+# Local model repositories
+/models/
