@@ -39,6 +39,7 @@ import {
 } from './develop-settings';
 import {
 	cloneEditDocument,
+	cloneEditMask,
 	createEditMask,
 	defaultEditDocument,
 	type EditDocument,
@@ -472,7 +473,7 @@ export class WorkspaceState {
 		const mask = document.masks.find(({ id }) => id === this.selectedMaskId);
 		if (!mask) return;
 		mask.adjustments.light = { ...mask.adjustments.light, [control]: value };
-		this.masks = document.masks.map((candidate) => structuredClone(candidate));
+		this.masks = document.masks.map(cloneEditMask);
 		this.scheduleMaskRender(document);
 	};
 
@@ -731,7 +732,7 @@ export class WorkspaceState {
 		this.imageScope = null;
 		this.editorHistory.reset();
 		const light = document?.adjustments.light ?? defaultLightSettings();
-		this.masks = document?.masks.map((mask) => structuredClone(mask)) ?? [];
+		this.masks = document?.masks.map(cloneEditMask) ?? [];
 		this.selectedMaskId = null;
 		this.selectedMaskRaster = null;
 		this.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
@@ -982,7 +983,7 @@ export class WorkspaceState {
 			(control) => this.renderSettings.settings[control] !== next.adjustments.light[control]
 		);
 		this.selectedPhoto.edit = next;
-		this.masks = next.masks.map((mask) => structuredClone(mask));
+		this.masks = next.masks.map(cloneEditMask);
 		if (this.selectedMaskId && !this.masks.some(({ id }) => id === this.selectedMaskId)) {
 			this.selectedMaskId = this.masks.at(-1)?.id ?? null;
 		}
@@ -1015,7 +1016,7 @@ export class WorkspaceState {
 
 	private resetMaskPreview() {
 		if (!this.selectedPhoto) return;
-		this.masks = this.selectedPhoto.edit.masks.map((mask) => structuredClone(mask));
+		this.masks = this.selectedPhoto.edit.masks.map(cloneEditMask);
 		this.renderEditDocument(this.selectedPhoto.edit);
 	}
 

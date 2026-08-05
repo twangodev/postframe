@@ -1,5 +1,10 @@
 import { cloneEditDocument, type EditDocument } from './edit-document.ts';
-import type { EditorCommand, EditorInvalidation, EditorTransition } from './editor-command.ts';
+import {
+	cloneEditorCommand,
+	type EditorCommand,
+	type EditorInvalidation,
+	type EditorTransition
+} from './editor-command.ts';
 
 export interface EditorHistoryEntry {
 	command: EditorCommand;
@@ -32,7 +37,7 @@ export class EditorHistory {
 
 	commit(before: EditDocument, transition: EditorTransition) {
 		this.past.push({
-			command: structuredClone(transition.command),
+			command: cloneEditorCommand(transition.command),
 			label: transition.label,
 			invalidation: transition.invalidation,
 			before: cloneEditDocument(before),

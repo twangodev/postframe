@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { defaultEditDocument } from '../src/lib/edit-document.ts';
+import {
+	createEditMask,
+	defaultEditDocument,
+	type MaskComponent
+} from '../src/lib/edit-document.ts';
 import { applyEditorCommand } from '../src/lib/editor-command.ts';
 import { EditorHistory } from '../src/lib/editor-history.ts';
 
@@ -48,4 +52,30 @@ test('clears redo after a new command', () => {
 	history.commit(neutral, lowered);
 	assert.equal(history.canRedo, false);
 	assert.deepEqual(history.labels, ['shadows -30']);
+});
+
+test('records commands containing reactive mask arrays as plain history data', () => {
+	const history = new EditorHistory();
+	const before = defaultEditDocument('photo-one');
+	const mask = createEditMask('mask-one', 'object');
+	const component = {
+		id: 'component-one',
+		type: 'ai-object',
+		operation: 'add',
+		modelVersion: 'model-one',
+		prompts: [
+			{
+				label: 'foreground',
+				points: new Proxy([{ x: 0.5, y: 0.5 }], {})
+			}
+		],
+		raster: null
+	} satisfies MaskComponent;
+	mask.components = new Proxy([component], {});
+	const transition = applyEditorCommand(before, { type: 'mask.create', mask });
+	assert.ok(transition);
+
+	history.commit(before, transition);
+	assert.deepEqual(history.redo(), null);
+	assert.deepEqual(history.undo(), { document: before, invalidation: 'render' });
 });

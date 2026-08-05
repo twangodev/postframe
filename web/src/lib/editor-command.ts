@@ -31,6 +31,22 @@ export interface EditorTransition {
 	document: EditDocument;
 }
 
+export function cloneEditorCommand(command: EditorCommand): EditorCommand {
+	switch (command.type) {
+		case 'mask.create':
+			return { ...command, mask: editMaskSchema.parse(command.mask) };
+		case 'mask.component.set':
+			return { ...command, component: maskComponentSchema.parse(command.component) };
+		case 'geometry.crop':
+			return {
+				...command,
+				crop: command.crop ? normalizedCropSchema.parse(command.crop) : null
+			};
+		default:
+			return { ...command };
+	}
+}
+
 export function applyEditorCommand(
 	document: EditDocument,
 	command: EditorCommand

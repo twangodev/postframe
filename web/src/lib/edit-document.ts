@@ -168,6 +168,10 @@ export function cloneEditDocument(document: EditDocument): EditDocument {
 	return editDocumentSchema.parse(document);
 }
 
+export function cloneEditMask(mask: EditMask): EditMask {
+	return editMaskSchema.parse(mask);
+}
+
 export function createEditMask(id: string, kind: MaskKind): EditMask {
 	const names: Record<MaskKind, string> = {
 		brush: 'brush',
