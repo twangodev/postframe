@@ -75,6 +75,10 @@ test('renders and persists every light control for a display photo', async ({ pa
 		await expect(value).toHaveValue(formatted);
 		await expect.poll(histogramSignature).not.toBe(before);
 	}
+	await expect(page.getByText(/refining tiles|applying light/)).toHaveCount(0, {
+		timeout: 20_000
+	});
+	await expect(page.locator('[data-photo-pyramid] canvas')).toBeVisible();
 
 	const value = page.getByRole('textbox', { name: 'Contrast value' });
 	await page.getByRole('slider', { name: 'Contrast' }).dblclick();
