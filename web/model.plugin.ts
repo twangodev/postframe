@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 
 const MODEL_ROUTE = '/models/segnext/';
-const MODEL_FILES = new Set(['encoder.fp16.onnx', 'decoder.fp16.onnx']);
+const MODEL_FILES = new Set(['encoder.fp32.onnx', 'decoder.fp32.onnx']);
 const MODEL_DIRECTORY = new URL('../models/postframe-segnext/', import.meta.url);
 
 export function postframeModels(): Plugin {

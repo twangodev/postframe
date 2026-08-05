@@ -12,7 +12,7 @@ const segNextModelSchema = z.object({
 	source: z.string().url(),
 	revision: z.string().min(1),
 	license: z.literal('MIT'),
-	precision: z.literal('fp16'),
+	precision: z.literal('fp32'),
 	inputSize: z.number().int().positive(),
 	files: z.object({
 		encoder: z.string().min(1),
@@ -28,17 +28,17 @@ export const smartMaskPackSchema = z.object({
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'segnext-vitb-4c45ce8-rgb-edge-v2-ormbg-main',
+	version: 'segnext-vitb-4c45ce8-fp32-rgb-edge-v2-ormbg-main',
 	subjectHost: 'https://huggingface.co/',
 	object: {
 		source: 'https://github.com/uncbiag/SegNext',
 		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
 		license: 'MIT',
-		precision: 'fp16',
+		precision: 'fp32',
 		inputSize: 1024,
 		files: {
-			encoder: 'encoder.fp16.onnx',
-			decoder: 'decoder.fp16.onnx'
+			encoder: 'encoder.fp32.onnx',
+			decoder: 'decoder.fp32.onnx'
 		}
 	},
 	subject: {

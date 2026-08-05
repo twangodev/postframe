@@ -8,11 +8,11 @@ test('pins the interactive object model to the validated SegNext export', () => 
 		source: 'https://github.com/uncbiag/SegNext',
 		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
 		license: 'MIT',
-		precision: 'fp16',
+		precision: 'fp32',
 		inputSize: 1024,
 		files: {
-			encoder: 'encoder.fp16.onnx',
-			decoder: 'decoder.fp16.onnx'
+			encoder: 'encoder.fp32.onnx',
+			decoder: 'decoder.fp32.onnx'
 		}
 	});
 	assert.match(SMART_MASK_PACK.version, /^segnext-vitb-/);
