@@ -34,7 +34,11 @@ interface TileSourceOptions {
 	photoId: string;
 	revision: number;
 	image: Size;
-	renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ImageBitmap>;
+	renderTile: (
+		photoId: string,
+		tile: RenderTileRequest,
+		signal: AbortSignal
+	) => Promise<ImageBitmap>;
 	settings: LightSettings;
 	tone: boolean;
 	onTileEvent?: (event: PyramidTileEvent) => void;
@@ -52,6 +56,7 @@ export function pyramidTileUrl(
 
 interface TileJobState {
 	cancelled: boolean;
+	controller: AbortController;
 	bitmap?: ImageBitmap;
 }
 
@@ -123,21 +128,25 @@ export function createPostframeTileSource(
 	source.downloadTileStart = (job) => {
 		const { level, x: column, y: row } = job.tile;
 		const key = `${options.revision}:${level}:${column}:${row}`;
-		const state: TileJobState = { cancelled: false };
+		const state: TileJobState = { cancelled: false, controller: new AbortController() };
 		job.userData.postframe = state;
 		options.onTileEvent?.({ key, phase: 'rendering' });
 
 		const region = pyramidTileRegion(options.image, levels.maxLevel, level, column, row);
 		void options
-			.renderTile(options.photoId, {
-				x: region.x,
-				y: region.y,
-				width: region.width,
-				height: region.height,
-				bin: region.bin,
-				settings: options.settings,
-				tone: options.tone
-			})
+			.renderTile(
+				options.photoId,
+				{
+					x: region.x,
+					y: region.y,
+					width: region.width,
+					height: region.height,
+					bin: region.bin,
+					settings: options.settings,
+					tone: options.tone
+				},
+				state.controller.signal
+			)
 			.then((bitmap) => {
 				state.bitmap = bitmap;
 				if (state.cancelled) {
@@ -161,6 +170,7 @@ export function createPostframeTileSource(
 		const state = job.userData.postframe as TileJobState | undefined;
 		if (!state) return;
 		state.cancelled = true;
+		state.controller.abort();
 		state.bitmap?.close();
 		state.bitmap = undefined;
 	};

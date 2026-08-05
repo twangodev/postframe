@@ -1,16 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type OpenSeadragon from 'openseadragon';
 import {
 	PYRAMID_MAX_BIN,
 	PYRAMID_TILE_OVERLAP,
 	PYRAMID_TILE_SIZE,
+	createPostframeTileSource,
 	pyramidLevels,
 	pyramidTileRegion,
 	pyramidTileUrl
 } from '../src/lib/postframe-tile-source.ts';
 
 const image = { width: 6001, height: 4003 };
+const settings = {
+	exposure: 0,
+	contrast: 0,
+	highlights: 0,
+	shadows: 0,
+	whites: 0,
+	blacks: 0
+};
 
 test('limits the client-rendered pyramid to supported power-of-two bins', () => {
 	const levels = pyramidLevels(image);
@@ -63,4 +73,85 @@ test('rejects levels outside the supported render pyramid', () => {
 
 test('keys tile caches by photo and render revision', () => {
 	assert.equal(pyramidTileUrl('photo one', 7, 13, 2, 4), 'postframe://photo%20one/7/13/2/4.bitmap');
+});
+
+class FakeTileSource {
+	constructor(options: object) {
+		Object.assign(this, options);
+	}
+}
+
+function tileSource(renderTile: Parameters<typeof createPostframeTileSource>[1]['renderTile']) {
+	return createPostframeTileSource(
+		{ TileSource: FakeTileSource } as unknown as typeof OpenSeadragon,
+		{
+			photoId: 'photo-one',
+			revision: 3,
+			image,
+			renderTile,
+			settings,
+			tone: true
+		}
+	) as OpenSeadragon.TileSource & {
+		downloadTileStart: (job: OpenSeadragon.ImageJob) => void;
+		downloadTileAbort: (job: OpenSeadragon.ImageJob) => void;
+	};
+}
+
+function tileJob() {
+	const calls = { finish: 0, fail: 0 };
+	const job = {
+		tile: { level: pyramidLevels(image).maxLevel, x: 0, y: 0 },
+		userData: {},
+		finish: () => {
+			calls.finish += 1;
+		},
+		fail: () => {
+			calls.fail += 1;
+		}
+	} as unknown as OpenSeadragon.ImageJob;
+	return { calls, job };
+}
+
+test('aborting a tile job cancels its renderer and discards late output', async () => {
+	let resolveTile: (bitmap: ImageBitmap) => void = () => {};
+	const capturedSignal: { current?: AbortSignal } = {};
+	const source = tileSource(
+		(_photoId, _request, requestSignal) =>
+			new Promise((resolve) => {
+				capturedSignal.current = requestSignal;
+				resolveTile = resolve;
+			})
+	);
+	const { calls, job } = tileJob();
+
+	source.downloadTileStart(job);
+	source.downloadTileAbort(job);
+	assert.equal(capturedSignal.current?.aborted, true);
+
+	let closed = false;
+	resolveTile({
+		width: 512,
+		height: 512,
+		close: () => {
+			closed = true;
+		}
+	} as ImageBitmap);
+	await Promise.resolve();
+	await Promise.resolve();
+
+	assert.equal(closed, true);
+	assert.deepEqual(calls, { finish: 0, fail: 0 });
+});
+
+test('a completed tile job publishes its bitmap exactly once', async () => {
+	const bitmap = { close: () => {} } as ImageBitmap;
+	const source = tileSource(async () => bitmap);
+	const { calls, job } = tileJob();
+
+	source.downloadTileStart(job);
+	await Promise.resolve();
+	await Promise.resolve();
+
+	assert.deepEqual(calls, { finish: 1, fail: 0 });
 });

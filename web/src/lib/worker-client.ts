@@ -24,6 +24,7 @@ interface PendingRequest {
 	expected: CompletionType;
 	resolve: (response: CompletionResponse) => void;
 	reject: (error: Error) => void;
+	cleanup?: () => void;
 }
 
 interface PreviewWaiter {
@@ -119,9 +120,14 @@ export class PostframeWorkerClient {
 		return openedDocument(response);
 	}
 
-	async renderTile(tile: RenderTileRequest) {
+	async renderTile(tile: RenderTileRequest, signal?: AbortSignal) {
 		const request = { ...tile, settings: { ...tile.settings } };
-		const response = await this.send((id) => ({ id, type: 'tile', ...request }), 'tile');
+		const response = await this.send(
+			(id) => ({ id, type: 'tile', ...request }),
+			'tile',
+			[],
+			signal
+		);
 		return response.bitmap;
 	}
 
@@ -224,20 +230,33 @@ export class PostframeWorkerClient {
 	private send<Type extends CompletionType>(
 		request: (id: number) => Request,
 		expected: Type,
-		transfer: Transferable[] = []
+		transfer: Transferable[] = [],
+		signal?: AbortSignal
 	): Promise<CompletionOf<Type>> {
 		if (this.destroyed) return Promise.reject(new Error('Postframe worker closed'));
+		if (signal?.aborted) return Promise.reject(new Error('Tile rendering cancelled'));
 		const id = this.nextRequestId++;
 		return new Promise((resolve, reject) => {
-			this.pending.set(id, {
+			const pending: PendingRequest = {
 				expected,
 				resolve: (response) => resolve(response as CompletionOf<Type>),
 				reject
-			});
+			};
+			if (signal) {
+				const cancel = () => {
+					if (!this.pending.delete(id)) return;
+					pending.cleanup?.();
+					reject(new Error('Tile rendering cancelled'));
+				};
+				signal.addEventListener('abort', cancel, { once: true });
+				pending.cleanup = () => signal.removeEventListener('abort', cancel);
+			}
+			this.pending.set(id, pending);
 			try {
 				this.worker.postMessage(request(id), transfer);
 			} catch (error) {
 				this.pending.delete(id);
+				pending.cleanup?.();
 				reject(error instanceof Error ? error : new Error('Unable to message Postframe worker'));
 			}
 		});
@@ -282,8 +301,12 @@ export class PostframeWorkerClient {
 		}
 
 		const pending = this.pending.get(response.id);
-		if (!pending) return;
+		if (!pending) {
+			if (response.type === 'tile') response.bitmap.close();
+			return;
+		}
 		this.pending.delete(response.id);
+		pending.cleanup?.();
 
 		if (response.type === 'error') {
 			pending.reject(new Error(response.message));
@@ -330,7 +353,10 @@ export class PostframeWorkerClient {
 	}
 
 	private rejectPending(error: Error) {
-		for (const pending of this.pending.values()) pending.reject(error);
+		for (const pending of this.pending.values()) {
+			pending.cleanup?.();
+			pending.reject(error);
+		}
 		this.pending.clear();
 	}
 

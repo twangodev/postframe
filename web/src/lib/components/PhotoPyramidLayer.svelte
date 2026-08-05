@@ -17,7 +17,11 @@
 		viewport: Size;
 		image: Size;
 		transform: ViewportTransform;
-		renderTile: (photoId: string, tile: RenderTileRequest) => Promise<ImageBitmap>;
+		renderTile: (
+			photoId: string,
+			tile: RenderTileRequest,
+			signal: AbortSignal
+		) => Promise<ImageBitmap>;
 		renderRevision: number;
 		onRenderSettled?: (revision: number) => void;
 		settings: LightSettings;

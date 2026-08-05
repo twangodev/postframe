@@ -511,7 +511,7 @@ export class WorkspaceState {
 		this.releaseDevelopPreview();
 	};
 
-	renderTile = async (photoId: string, tile: RenderTileRequest) => {
+	renderTile = async (photoId: string, tile: RenderTileRequest, signal: AbortSignal) => {
 		if (
 			!this.workerClient ||
 			this.documentStatus.kind !== 'ready' ||
@@ -519,7 +519,7 @@ export class WorkspaceState {
 		) {
 			throw new Error('Document is not ready for tile rendering');
 		}
-		return this.workerClient.renderTile(tile);
+		return this.workerClient.renderTile(tile, signal);
 	};
 
 	loadThumbnail = (photoId: string) => {

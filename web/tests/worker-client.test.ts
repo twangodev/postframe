@@ -190,6 +190,36 @@ test('requests a lossless source tile at the selected bin', async () => {
 	client.destroy();
 });
 
+test('cancels stale tile requests and closes their late bitmaps', async () => {
+	const { client, workers } = setup();
+	const controller = new AbortController();
+	const request = {
+		x: 0,
+		y: 0,
+		width: 512,
+		height: 512,
+		bin: 1,
+		settings: neutral,
+		tone: true
+	};
+	const tile = client.renderTile(request, controller.signal);
+
+	controller.abort();
+	await assert.rejects(tile, /Tile rendering cancelled/);
+
+	let closed = false;
+	const bitmap = {
+		width: 512,
+		height: 512,
+		close: () => {
+			closed = true;
+		}
+	} as ImageBitmap;
+	workers[0]?.respond({ id: 1, type: 'tile', bitmap });
+	assert.equal(closed, true);
+	client.destroy();
+});
+
 test('copies and transfers persistent masks without detaching document state', async () => {
 	const { client, workers } = setup();
 	const alpha = new Uint8Array([0, 64, 128, 255]);
