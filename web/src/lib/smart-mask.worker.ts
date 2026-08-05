@@ -1,6 +1,6 @@
 import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
 import type { Tensor } from 'onnxruntime-web';
-import { refineObjectMask } from './mask-edge-refiner.ts';
+import { refineObjectMask, refinePaintedMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
 import { createSegNextPrompt } from './segnext-prompt.ts';
@@ -41,6 +41,9 @@ self.onmessage = async (event: MessageEvent<SmartMaskRequest>) => {
 				break;
 			case 'subject':
 				await selectSubject(request);
+				break;
+			case 'refine-edge':
+				refineEdge(request);
 				break;
 			case 'reset':
 				resetPreparedImage();
@@ -100,6 +103,17 @@ async function selectSubject(request: Extract<SmartMaskRequest, { type: 'subject
 	const alpha = alphaChannel(mask);
 	postMask(request.id, mask.width, mask.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
+}
+
+function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>) {
+	const active = preparedImage(request.photoId);
+	if (request.width !== active.image.width || request.height !== active.image.height) {
+		throw new Error('Mask edge dimensions do not match the prepared photo');
+	}
+	postProgress(request.id, 'refining', null, 'refining painted edge');
+	const alpha = refinePaintedMask(active.image, new Uint8Array(request.alpha), request.stroke);
+	postMask(request.id, request.width, request.height, alpha);
+	postProgress(request.id, 'ready', 100, 'mask edge ready');
 }
 
 async function loadObjectModel(requestId: number) {

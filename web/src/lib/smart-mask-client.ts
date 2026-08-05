@@ -1,12 +1,15 @@
 import {
 	SMART_MASK_PACK,
+	maskEdgeStrokeSchema,
 	smartMaskStrokeSchema,
 	type SmartMaskProgress,
+	type MaskEdgeStroke,
 	type SmartMaskRaster,
 	type SmartMaskRequest,
 	type SmartMaskResponse,
 	type SmartMaskStroke
 } from './smart-mask.ts';
+import type { MaskRasterData } from './mask-raster.ts';
 
 type Completion = Exclude<SmartMaskResponse, { type: 'progress' | 'error' }>;
 type CompletionType = Completion['type'];
@@ -46,12 +49,31 @@ export class SmartMaskClient {
 			(id) => ({ id, type: 'object', photoId, selectionId, strokes: parsed }),
 			'mask'
 		);
-		return raster(response);
+		return rasterFromResponse(response);
 	}
 
 	async selectSubject(photoId: string) {
 		const response = await this.send((id) => ({ id, type: 'subject', photoId }), 'mask');
-		return raster(response);
+		return rasterFromResponse(response);
+	}
+
+	async refineEdge(photoId: string, raster: MaskRasterData, stroke: MaskEdgeStroke) {
+		const parsed = maskEdgeStrokeSchema.parse(stroke);
+		const alpha = raster.alpha.slice().buffer as ArrayBuffer;
+		const response = await this.send(
+			(id) => ({
+				id,
+				type: 'refine-edge',
+				photoId,
+				width: raster.width,
+				height: raster.height,
+				alpha,
+				stroke: parsed
+			}),
+			'mask',
+			[alpha]
+		);
+		return rasterFromResponse(response);
 	}
 
 	onProgress(listener: ProgressListener) {
@@ -79,7 +101,8 @@ export class SmartMaskClient {
 
 	private send<Type extends CompletionType>(
 		request: (id: number) => SmartMaskRequest,
-		expected: Type
+		expected: Type,
+		transfer: Transferable[] = []
 	): Promise<CompletionOf<Type>> {
 		if (this.destroyed) return Promise.reject(new Error('Smart mask worker closed'));
 		const id = this.nextRequestId++;
@@ -89,7 +112,12 @@ export class SmartMaskClient {
 				resolve: (response) => resolve(response as CompletionOf<Type>),
 				reject
 			});
-			this.worker.postMessage(request(id));
+			try {
+				this.worker.postMessage(request(id), transfer);
+			} catch (error) {
+				this.pending.delete(id);
+				reject(error instanceof Error ? error : new Error('Unable to message smart mask worker'));
+			}
 		});
 	}
 
@@ -133,7 +161,9 @@ export class SmartMaskClient {
 	}
 }
 
-function raster(response: Extract<SmartMaskResponse, { type: 'mask' }>): SmartMaskRaster {
+function rasterFromResponse(
+	response: Extract<SmartMaskResponse, { type: 'mask' }>
+): SmartMaskRaster {
 	return {
 		width: response.width,
 		height: response.height,

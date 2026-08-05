@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { UNKNOWN_TRIMAP_VALUE } from '../src/lib/mask-refinement.ts';
-import { refineRgbBoundary } from '../src/lib/mask-edge-refiner.ts';
+import { refinePaintedMask, refineRgbBoundary } from '../src/lib/mask-edge-refiner.ts';
 
 test('locks an uncertain boundary onto an equal-luminance color edge', () => {
 	const width = 9;
@@ -41,4 +41,25 @@ test('locks an uncertain boundary onto an equal-luminance color edge', () => {
 		assert.ok(refined[y * width + 3]! < 96);
 		assert.ok(refined[y * width + 4]! > 159);
 	}
+});
+
+test('refines only the full-resolution boundary painted by the user', () => {
+	const width = 11;
+	const height = 5;
+	const image = new Uint8Array(width * height * 3);
+	const alpha = new Uint8Array(width * height);
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			image.set(x < 5 ? [255, 0, 0] : [0, 130, 0], (y * width + x) * 3);
+			alpha[y * width + x] = x < 4 ? 0 : 255;
+		}
+	}
+
+	const refined = refinePaintedMask({ data: image, width, height, channels: 3 }, alpha, {
+		points: [{ x: 0.45, y: 0.5 }],
+		radius: 0.2
+	});
+	assert.ok(refined[2 * width + 4]! < alpha[2 * width + 4]!);
+	assert.equal(refined[2 * width], alpha[2 * width]);
+	assert.equal(refined[2 * width + 10], alpha[2 * width + 10]);
 });

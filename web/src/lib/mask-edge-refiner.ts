@@ -7,6 +7,7 @@ import {
 	prepareMatteRegion,
 	type MaskBounds
 } from './mask-refinement.ts';
+import type { MaskEdgeStroke } from './smart-mask.ts';
 
 const COLOR_SIGMA = 24;
 const COLOR_WEIGHTS = gaussianWeights(3 * 255 * 255, COLOR_SIGMA);
@@ -77,10 +78,120 @@ export function refineRgbBoundary(
 	return refined;
 }
 
+export function refinePaintedMask(image: ImagePixels, alpha: Uint8Array, stroke: MaskEdgeStroke) {
+	validateImage(image);
+	if (alpha.length !== image.width * image.height) {
+		throw new Error('Painted mask dimensions do not match the photo');
+	}
+	if (stroke.points.length === 0 || !Number.isFinite(stroke.radius) || stroke.radius <= 0) {
+		throw new Error('Paint an edge before refining it');
+	}
+	const radius = matteBoundaryRadius(image.width, image.height);
+	const brushRadius = Math.max(1, Math.round(stroke.radius * Math.max(image.width, image.height)));
+	const points = stroke.points.map(({ x, y }) => ({ x: x * image.width, y: y * image.height }));
+	const bounds = strokeBounds(points, brushRadius + radius, image.width, image.height);
+	const coarse = cropMaskRegion(alpha, image.width, bounds);
+	const trimap = Uint8Array.from(coarse, (value) =>
+		value === UNKNOWN_TRIMAP_VALUE ? UNKNOWN_TRIMAP_VALUE - 1 : value
+	);
+	paintStroke(trimap, bounds, points, brushRadius);
+	const refined = refineRgbBoundary(image, coarse, trimap, bounds, radius);
+	return replaceMaskRegion(alpha, refined, bounds, image.width);
+}
+
 function constrainedAlpha(trimap: Uint8Array, alpha: Uint8Array, index: number) {
 	if (trimap[index] === 0) return 0;
 	if (trimap[index] === 255) return 255;
 	return alpha[index]!;
+}
+
+function strokeBounds(
+	points: { x: number; y: number }[],
+	padding: number,
+	width: number,
+	height: number
+): MaskBounds {
+	let minimumX = points[0]!.x;
+	let maximumX = minimumX;
+	let minimumY = points[0]!.y;
+	let maximumY = minimumY;
+	for (const point of points.slice(1)) {
+		minimumX = Math.min(minimumX, point.x);
+		maximumX = Math.max(maximumX, point.x);
+		minimumY = Math.min(minimumY, point.y);
+		maximumY = Math.max(maximumY, point.y);
+	}
+	const left = Math.max(0, Math.floor(minimumX - padding));
+	const top = Math.max(0, Math.floor(minimumY - padding));
+	const right = Math.min(width, Math.ceil(maximumX + padding + 1));
+	const bottom = Math.min(height, Math.ceil(maximumY + padding + 1));
+	return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function paintStroke(
+	trimap: Uint8Array,
+	bounds: MaskBounds,
+	points: { x: number; y: number }[],
+	radius: number
+) {
+	const segments = points.length === 1 ? [[points[0]!, points[0]!] as const] : pairwise(points);
+	for (const [start, end] of segments) {
+		const left = Math.max(bounds.x, Math.floor(Math.min(start.x, end.x) - radius));
+		const top = Math.max(bounds.y, Math.floor(Math.min(start.y, end.y) - radius));
+		const right = Math.min(
+			bounds.x + bounds.width - 1,
+			Math.ceil(Math.max(start.x, end.x) + radius)
+		);
+		const bottom = Math.min(
+			bounds.y + bounds.height - 1,
+			Math.ceil(Math.max(start.y, end.y) + radius)
+		);
+		for (let y = top; y <= bottom; y += 1) {
+			for (let x = left; x <= right; x += 1) {
+				if (pointSegmentDistanceSquared(x + 0.5, y + 0.5, start, end) > radius * radius) {
+					continue;
+				}
+				trimap[(y - bounds.y) * bounds.width + x - bounds.x] = UNKNOWN_TRIMAP_VALUE;
+			}
+		}
+	}
+}
+
+function pairwise<T>(values: T[]) {
+	return values.slice(1).map((value, index) => [values[index]!, value] as const);
+}
+
+function pointSegmentDistanceSquared(
+	x: number,
+	y: number,
+	start: { x: number; y: number },
+	end: { x: number; y: number }
+) {
+	const deltaX = end.x - start.x;
+	const deltaY = end.y - start.y;
+	const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+	const position =
+		lengthSquared === 0
+			? 0
+			: Math.max(0, Math.min(1, ((x - start.x) * deltaX + (y - start.y) * deltaY) / lengthSquared));
+	const closestX = start.x + position * deltaX;
+	const closestY = start.y + position * deltaY;
+	return (x - closestX) ** 2 + (y - closestY) ** 2;
+}
+
+function replaceMaskRegion(
+	alpha: Uint8Array,
+	region: Uint8Array,
+	bounds: MaskBounds,
+	width: number
+) {
+	const replaced = alpha.slice();
+	for (let y = 0; y < bounds.height; y += 1) {
+		const source = y * bounds.width;
+		const target = (bounds.y + y) * width + bounds.x;
+		replaced.set(region.subarray(source, source + bounds.width), target);
+	}
+	return replaced;
 }
 
 function gaussianKernel(radius: number, sigma: number) {

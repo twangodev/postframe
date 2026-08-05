@@ -6,10 +6,12 @@ import type { SmartMaskRequest, SmartMaskResponse } from '../src/lib/smart-mask.
 
 class FakeWorker extends EventTarget {
 	readonly messages: SmartMaskRequest[] = [];
+	readonly transfers: Transferable[][] = [];
 	terminated = false;
 
-	postMessage(message: SmartMaskRequest) {
+	postMessage(message: SmartMaskRequest, transfer: Transferable[] = []) {
 		this.messages.push(message);
+		this.transfers.push(transfer);
 	}
 
 	respond(response: SmartMaskResponse) {
@@ -73,6 +75,33 @@ test('prepares a photo before requesting prompted masks', async () => {
 		alpha: new Uint8Array([0, 255, 255, 0]).buffer
 	});
 	assert.deepEqual((await selecting).alpha, new Uint8Array([0, 255, 255, 0]));
+	client.destroy();
+});
+
+test('transfers a copied mask for localized edge refinement', async () => {
+	const { client, workers } = setup();
+	const alpha = Uint8Array.from([0, 255, 255, 0]);
+	const refining = client.refineEdge(
+		'photo-one',
+		{ width: 2, height: 2, alpha },
+		{ points: [{ x: 0.5, y: 0.5 }], radius: 0.1 }
+	);
+	const request = workers[0]?.messages[0];
+	assert.equal(request?.type, 'refine-edge');
+	if (request?.type !== 'refine-edge') throw new Error('Expected edge refinement');
+	assert.notEqual(request.alpha, alpha.buffer);
+	assert.deepEqual(workers[0]?.transfers, [[request.alpha]]);
+	assert.equal(alpha.byteLength, 4);
+
+	workers[0]?.respond({
+		id: 1,
+		type: 'mask',
+		modelVersion: client.modelVersion,
+		width: 2,
+		height: 2,
+		alpha: Uint8Array.of(0, 0, 255, 255).buffer
+	});
+	assert.deepEqual((await refining).alpha, Uint8Array.of(0, 0, 255, 255));
 	client.destroy();
 });
 

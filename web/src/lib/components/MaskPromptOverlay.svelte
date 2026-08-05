@@ -3,17 +3,20 @@
 
 	interface Props {
 		points: NormalizedPoint[];
-		label: 'foreground' | 'background';
+		label: 'foreground' | 'background' | 'refine';
 		imageWidth: number;
 		imageHeight: number;
 		viewportScale: number;
+		brushRadius?: number;
 	}
 
-	let { points, label, imageWidth, imageHeight, viewportScale }: Props = $props();
+	let { points, label, imageWidth, imageHeight, viewportScale, brushRadius = 0 }: Props = $props();
 	const coordinates = $derived(
 		points.map(({ x, y }) => `${x * imageWidth},${y * imageHeight}`).join(' ')
 	);
-	const strokeWidth = $derived(7 / viewportScale);
+	const strokeWidth = $derived(
+		brushRadius > 0 ? brushRadius * 2 * Math.max(imageWidth, imageHeight) : 7 / viewportScale
+	);
 </script>
 
 <svg
@@ -27,6 +30,8 @@
 		fill="none"
 		class:stroke-negative={label === 'foreground'}
 		class:stroke-bg={label === 'background'}
+		class:stroke-accent={label === 'refine'}
+		opacity={label === 'refine' ? 0.55 : 1}
 		stroke-width={strokeWidth}
 		stroke-linecap="round"
 		stroke-linejoin="round"

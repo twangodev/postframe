@@ -98,6 +98,12 @@
 		label: 'foreground' | 'background';
 		points: NormalizedPoint[];
 	} | null>(null);
+	let edgeRefinementStroke = $state<{
+		pointerId: number;
+		points: NormalizedPoint[];
+		radius: number;
+	} | null>(null);
+	let refineBrushSize = $state(42);
 	let pinch: {
 		origin: Point;
 		distance: number;
@@ -115,6 +121,13 @@
 	const pixelGridStrength = $derived(pixelGridOpacity(viewportTransform.scale));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
+	);
+	const canRefineSelectedMask = $derived(
+		selectedMask?.components.filter(
+			(component) =>
+				(component.type === 'ai-object' || component.type === 'ai-subject') &&
+				component.raster !== null
+		).length === 1
 	);
 	const smartMaskWorking = $derived(
 		['downloading', 'loading', 'encoding', 'refining'].includes(workspace.smartMaskStatus.phase)
@@ -333,6 +346,28 @@
 			return;
 		}
 
+		if (
+			activeTool === 'mask-refine' &&
+			event.button === 0 &&
+			canRefineSelectedMask &&
+			!smartMaskWorking
+		) {
+			const imagePoint = normalizedImagePoint(point);
+			if (!imagePoint) return;
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			edgeRefinementStroke = {
+				pointerId: event.pointerId,
+				points: [imagePoint],
+				radius:
+					refineBrushSize /
+					2 /
+					viewportTransform.scale /
+					Math.max(imageSize.width, imageSize.height)
+			};
+			return;
+		}
+
 		if (activeTool === 'hand' || spaceHeld || event.button === 1) {
 			event.preventDefault();
 			viewportElement.setPointerCapture(event.pointerId);
@@ -351,6 +386,23 @@
 				(!previous || Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) > 0.003)
 			) {
 				objectStroke = { ...objectStroke, points: [...objectStroke.points, imagePoint] };
+			}
+			return;
+		}
+		if (edgeRefinementStroke?.pointerId === event.pointerId) {
+			event.preventDefault();
+			const imagePoint = normalizedImagePoint(point);
+			const previous = edgeRefinementStroke.points.at(-1);
+			if (
+				imagePoint &&
+				(!previous ||
+					Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) >
+						edgeRefinementStroke.radius / 4)
+			) {
+				edgeRefinementStroke = {
+					...edgeRefinementStroke,
+					points: [...edgeRefinementStroke.points, imagePoint]
+				};
 			}
 			return;
 		}
@@ -384,6 +436,12 @@
 	}
 
 	function handlePointerUp(event: PointerEvent) {
+		if (edgeRefinementStroke?.pointerId === event.pointerId) {
+			const completed = edgeRefinementStroke;
+			edgeRefinementStroke = null;
+			if (event.type === 'pointerup') void workspace.refineMaskEdge(completed);
+			return;
+		}
 		if (objectStroke?.pointerId === event.pointerId) {
 			const completed = objectStroke;
 			objectStroke = null;
@@ -405,7 +463,14 @@
 	}
 
 	function handleDoubleClick(event: MouseEvent) {
-		if (!active || activeTool === 'zoom' || activeTool === 'object-select') return;
+		if (
+			!active ||
+			activeTool === 'zoom' ||
+			activeTool === 'object-select' ||
+			activeTool === 'mask-refine'
+		) {
+			return;
+		}
 		event.preventDefault();
 		if (viewportMode === 'fit') setZoom(1, viewportPoint(event));
 		else fitPhoto();
@@ -607,6 +672,12 @@
 	function beginObjectMask() {
 		chooseTool('object-select', 'object selection');
 		inspectorTab = 'mask';
+		maskPreviewMode = 'overlay';
+	}
+
+	function beginEdgeRefinement() {
+		if (!canRefineSelectedMask) return;
+		chooseTool('mask-refine', 'refine edge');
 		maskPreviewMode = 'overlay';
 	}
 
@@ -851,7 +922,11 @@
 					/>
 					<button class="bg-text text-bg h-6 shrink-0 cursor-pointer rounded px-2">generate</button>
 				{:else if activeTool.startsWith('mask')}
-					<span class="shrink-0">size <span class="text-text font-mono">42 px</span></span>
+					<span class="shrink-0"
+						>size <span class="text-text font-mono"
+							>{activeTool === 'mask-refine' ? refineBrushSize : 42} px</span
+						></span
+					>
 					<span class="shrink-0">feather <span class="text-text font-mono">45%</span></span>
 					<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
 				{:else}
@@ -874,7 +949,7 @@
 						? 'cursor-grab'
 						: activeTool === 'zoom'
 							? 'cursor-zoom-in'
-							: activeTool === 'object-select'
+							: activeTool === 'object-select' || activeTool === 'mask-refine'
 								? 'cursor-crosshair'
 								: 'cursor-default'}"
 				onwheel={handleWheel}
@@ -999,6 +1074,16 @@
 								<MaskPromptOverlay
 									points={objectStroke.points}
 									label={objectStroke.label}
+									imageWidth={imageSize.width}
+									imageHeight={imageSize.height}
+									viewportScale={viewportTransform.scale}
+								/>
+							{/if}
+							{#if edgeRefinementStroke}
+								<MaskPromptOverlay
+									points={edgeRefinementStroke.points}
+									label="refine"
+									brushRadius={edgeRefinementStroke.radius}
 									imageWidth={imageSize.width}
 									imageHeight={imageSize.height}
 									viewportScale={viewportTransform.scale}
@@ -1501,6 +1586,31 @@
 								onValueChange={previewMaskEdge('shift')}
 								onValueCommit={commitMaskEdge('shift')}
 							/>
+							<button
+								type="button"
+								disabled={!canRefineSelectedMask || smartMaskWorking}
+								class="border-subtle text-muted hover:border-muted hover:text-text mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[10px] lowercase transition-colors disabled:cursor-default disabled:opacity-40 {activeTool ===
+								'mask-refine'
+									? 'border-accent bg-surface text-text'
+									: ''}"
+								onclick={beginEdgeRefinement}
+							>
+								<span class="flex items-center gap-2"><Brush size={12} /> refine edge</span>
+								<span>{activeTool === 'mask-refine' ? 'paint boundary' : 'brush'}</span>
+							</button>
+							{#if activeTool === 'mask-refine'}
+								<div class="motion-enter pt-1">
+									<AdjustmentSlider
+										label="Brush"
+										bind:value={refineBrushSize}
+										min={8}
+										max={200}
+										defaultValue={42}
+										suffix=" px"
+										signed={false}
+									/>
+								</div>
+							{/if}
 							<div class="bg-subtle my-2 h-px"></div>
 							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">light</p>
 							<AdjustmentSlider

@@ -58,6 +58,13 @@ export const smartMaskStrokeSchema = z.object({
 
 export type SmartMaskStroke = z.infer<typeof smartMaskStrokeSchema>;
 
+export const maskEdgeStrokeSchema = z.object({
+	points: z.array(normalizedPointSchema).min(1),
+	radius: z.number().finite().positive().max(1)
+});
+
+export type MaskEdgeStroke = z.infer<typeof maskEdgeStrokeSchema>;
+
 export interface SmartMaskRaster {
 	width: number;
 	height: number;
@@ -83,6 +90,15 @@ export type SmartMaskRequest =
 			strokes: SmartMaskStroke[];
 	  }
 	| { id: number; type: 'subject'; photoId: string }
+	| {
+			id: number;
+			type: 'refine-edge';
+			photoId: string;
+			width: number;
+			height: number;
+			alpha: ArrayBuffer;
+			stroke: MaskEdgeStroke;
+	  }
 	| { id: number; type: 'reset' };
 
 export type SmartMaskResponse =

@@ -52,7 +52,7 @@ import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from 
 import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
 import { SmartMaskClient } from './smart-mask-client';
-import type { SmartMaskProgress, SmartMaskRaster } from './smart-mask';
+import type { MaskEdgeStroke, SmartMaskProgress, SmartMaskRaster } from './smart-mask';
 import type { MaskEdgeControlName } from './mask-edge-settings';
 import {
 	composeMaskRasters,
@@ -709,6 +709,45 @@ export class WorkspaceState {
 				mask.components.push(component);
 				this.dispatchEditorCommand({ type: 'mask.create', mask });
 			}
+			this.selectMask(mask.id);
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	};
+
+	refineMaskEdge = async (stroke: MaskEdgeStroke) => {
+		const photo = this.smartMaskPhoto();
+		if (!photo || !this.selectedMaskId) return;
+		const mask = this.masks.find(({ id }) => id === this.selectedMaskId);
+		const components = mask?.components.filter(
+			(component): component is Extract<MaskComponent, { type: 'ai-object' | 'ai-subject' }> =>
+				(component.type === 'ai-object' || component.type === 'ai-subject') &&
+				component.raster !== null
+		);
+		const component = components?.length === 1 ? components[0] : null;
+		if (!mask || !component?.raster) {
+			this.failSmartMask(new Error('Choose one generated mask before refining its edge'));
+			return;
+		}
+
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const source = await this.maskRaster(component.raster);
+			const refined = await this.smartMaskClient!.refineEdge(photo.id, source, stroke);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const updated = {
+				...component,
+				raster: await this.persistMaskRaster(photo.id, component.id, refined)
+			};
+			this.dispatchEditorCommand({
+				type: 'mask.component.set',
+				maskId: mask.id,
+				component: updated
+			});
 			this.selectMask(mask.id);
 			this.finishSmartMask();
 		} catch (error) {
