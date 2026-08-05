@@ -20,7 +20,7 @@ export interface MatteRegion {
 }
 
 export function matteBoundaryRadius(width: number, height: number) {
-	return Math.max(4, Math.round(Math.max(width, height) / 128));
+	return Math.max(2, Math.min(12, Math.round(Math.max(width, height) / 1000)));
 }
 
 export function prepareMatteRegion(

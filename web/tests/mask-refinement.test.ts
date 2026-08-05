@@ -5,10 +5,17 @@ import {
 	UNKNOWN_TRIMAP_VALUE,
 	cropMaskRegion,
 	mergeRefinedAlpha,
+	matteBoundaryRadius,
 	placeMaskRegion,
 	prepareMatteRegion,
 	trimapFromAlpha
 } from '../src/lib/mask-refinement.ts';
+
+test('keeps the automatic source-resolution edge band narrow', () => {
+	assert.equal(matteBoundaryRadius(256, 256), 2);
+	assert.equal(matteBoundaryRadius(6000, 4000), 6);
+	assert.equal(matteBoundaryRadius(20_000, 12_000), 12);
+});
 
 test('turns uncertain confidence and both sides of a boundary into a trimap band', () => {
 	const alpha = new Uint8Array([

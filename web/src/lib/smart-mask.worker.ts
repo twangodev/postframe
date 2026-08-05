@@ -1,6 +1,6 @@
 import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
 import type { Tensor } from 'onnxruntime-web';
-import { refineObjectMask } from './guided-mask-refiner.ts';
+import { refineObjectMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
 import { createSegNextPrompt } from './segnext-prompt.ts';
