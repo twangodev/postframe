@@ -61,6 +61,7 @@
 		type ViewportTransform
 	} from '$lib/photo-viewport';
 	import type { NormalizedPoint } from '$lib/edit-document';
+	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -83,7 +84,7 @@
 	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
 	let before = $state(false);
-	let maskOverlay = $state(true);
+	let maskPreviewMode = $state<MaskPreviewMode | null>('overlay');
 	let viewportElement = $state<HTMLDivElement | null>(null);
 	let viewportSize = $state<Size>({ width: 1, height: 1 });
 	let viewportTransform = $state<ViewportTransform>({ scale: 1, pan: { x: 0, y: 0 } });
@@ -184,6 +185,7 @@
 	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 	const zoomMenuItemClass =
 		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[10px] outline-none';
+	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (maskPreviewMode = mode);
 
 	$effect(() => {
 		const key = active ? `${active.id}:${imageSize.width}:${imageSize.height}` : '';
@@ -599,13 +601,13 @@
 		activeTool = 'mask';
 		activeToolLabel = 'mask brush';
 		inspectorTab = 'mask';
-		maskOverlay = true;
+		maskPreviewMode = 'overlay';
 	}
 
 	function beginObjectMask() {
 		chooseTool('object-select', 'object selection');
 		inspectorTab = 'mask';
-		maskOverlay = true;
+		maskPreviewMode = 'overlay';
 	}
 
 	function developPhaseLabel(phase: DevelopPhase) {
@@ -988,8 +990,10 @@
 									>
 								</div>
 							{/if}
-							{#if selectedMask?.visible && maskOverlay && workspace.selectedMaskRaster?.maskId === selectedMask.id}
-								<MaskOverlay raster={workspace.selectedMaskRaster} />
+							{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id}
+								{#key maskPreviewMode}
+									<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
+								{/key}
 							{/if}
 							{#if objectStroke}
 								<MaskPromptOverlay
@@ -1381,14 +1385,37 @@
 					<div class="border-subtle border-b p-3">
 						<div class="mb-2 flex items-center justify-between">
 							<p class="text-muted text-[10px] tracking-[0.03em]">layers</p>
-							<button
-								type="button"
-								class="text-muted hover:text-text cursor-pointer"
-								aria-label="Toggle mask overlay"
-								onclick={() => (maskOverlay = !maskOverlay)}
-							>
-								{#if maskOverlay}<Eye size={13} />{:else}<EyeOff size={13} />{/if}
-							</button>
+							<DropdownMenu.Root>
+								<DropdownMenu.Trigger
+									aria-label="Choose mask preview"
+									class="text-muted hover:bg-surface hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[9px] lowercase outline-none"
+								>
+									{#if maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+									<span>{maskPreviewMode ?? 'off'}</span>
+								</DropdownMenu.Trigger>
+								<DropdownMenu.Portal>
+									<DropdownMenu.Content
+										align="end"
+										sideOffset={4}
+										class="motion-menu border-subtle bg-bg z-50 min-w-28 rounded border p-1 shadow-2xl"
+									>
+										{#each MASK_PREVIEW_MODES as mode}
+											<DropdownMenu.Item
+												class={zoomMenuItemClass}
+												onSelect={chooseMaskPreview(mode)}
+											>
+												<span class="text-accent w-3">{maskPreviewMode === mode ? '•' : ''}</span>
+												<span>{mode}</span>
+											</DropdownMenu.Item>
+										{/each}
+										<DropdownMenu.Separator class="bg-subtle my-1 h-px" />
+										<DropdownMenu.Item class={zoomMenuItemClass} onSelect={chooseMaskPreview(null)}>
+											<span class="text-accent w-3">{maskPreviewMode === null ? '•' : ''}</span>
+											<span>off</span>
+										</DropdownMenu.Item>
+									</DropdownMenu.Content>
+								</DropdownMenu.Portal>
+							</DropdownMenu.Root>
 						</div>
 						<div class="space-y-1">
 							{#each workspace.masks as mask (mask.id)}
