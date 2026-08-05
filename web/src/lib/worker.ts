@@ -181,6 +181,7 @@ const ready = loadWasmRuntime().then((runtime) => {
 let document: ActiveDocument | null = null;
 let maskCompositors: { id: string; compositor: WasmDevelopedTileCompositor }[] = [];
 let cacheWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingCacheWrite: { session: WasmSession; cache: FileSystemFileHandle } | null = null;
 let performanceEnabled = false;
 
 const post = (message: Response, transfer: Transferable[] = []) =>
@@ -215,8 +216,14 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				await openDisplayDocument(message);
 				break;
 			case 'tile': {
-				const bitmap = await measureAsync('tile', () => renderTile(activeDocument(), message));
-				post({ id: message.id, type: 'tile', bitmap }, [bitmap]);
+				const active = activeDocument();
+				deferRawCacheWrite(active);
+				try {
+					const bitmap = await measureAsync('tile', () => renderTile(active, message));
+					post({ id: message.id, type: 'tile', bitmap }, [bitmap]);
+				} finally {
+					deferRawCacheWrite(active);
+				}
 				break;
 			}
 			case 'set-masks':
@@ -436,13 +443,29 @@ async function publishRawDocument(
 }
 
 function scheduleRawCacheWrite(session: WasmSession, cache: FileSystemFileHandle) {
+	pendingCacheWrite = { session, cache };
+	queueRawCacheWrite();
+}
+
+function deferRawCacheWrite(active: ActiveDocument) {
+	if (active.kind !== 'raw' || !pendingCacheWrite || pendingCacheWrite.session !== active.session) {
+		return;
+	}
+	queueRawCacheWrite();
+}
+
+function queueRawCacheWrite() {
 	if (cacheWriteTimer !== null) clearTimeout(cacheWriteTimer);
-	cacheWriteTimer = setTimeout(() => {
-		cacheWriteTimer = null;
-		if (document?.kind !== 'raw' || document.session !== session) return;
-		const bytes = session.cache_bytes();
-		void measureAsync('cache-write', () => writeFileHandle(cache, bytes)).catch(() => {});
-	}, 500);
+	cacheWriteTimer = setTimeout(flushRawCacheWrite, RENDER_CACHE_IDLE_DELAY_MS);
+}
+
+function flushRawCacheWrite() {
+	cacheWriteTimer = null;
+	const pending = pendingCacheWrite;
+	pendingCacheWrite = null;
+	if (!pending || document?.kind !== 'raw' || document.session !== pending.session) return;
+	const bytes = pending.session.cache_bytes();
+	void measureAsync('cache-write', () => writeFileHandle(pending.cache, bytes)).catch(() => {});
 }
 
 async function openDisplayDocument(message: Extract<Request, { type: 'open-display' }>) {
@@ -778,7 +801,9 @@ function sameLightSettings(left: LightSettings, right: LightSettings) {
 	);
 }
 
-const READ_PROGRESS_STEP = 4 * 1024 * 1024;
+const OPFS_IO_CHUNK_SIZE = 4 * 1024 * 1024;
+const READ_PROGRESS_STEP = OPFS_IO_CHUNK_SIZE;
+const RENDER_CACHE_IDLE_DELAY_MS = 5_000;
 
 async function fileSize(handle: FileSystemFileHandle) {
 	return handle.getFile().then((file) => file.size);
@@ -850,6 +875,7 @@ function closeDocument() {
 		clearTimeout(cacheWriteTimer);
 		cacheWriteTimer = null;
 	}
+	pendingCacheWrite = null;
 	if (document?.kind === 'raw') {
 		document.renderer?.destroy();
 		document.session.free();
@@ -987,9 +1013,13 @@ async function writeFileHandle(handle: FileSystemFileHandle, bytes: Uint8Array) 
 			access.truncate(0);
 			let offset = 0;
 			while (offset < bytes.byteLength) {
-				const written = access.write(bytes.subarray(offset), { at: offset });
-				if (written === 0) throw new Error(`Unable to write ${handle.name}`);
-				offset += written;
+				const chunkEnd = Math.min(offset + OPFS_IO_CHUNK_SIZE, bytes.byteLength);
+				while (offset < chunkEnd) {
+					const written = access.write(bytes.subarray(offset, chunkEnd), { at: offset });
+					if (written === 0) throw new Error(`Unable to write ${handle.name}`);
+					offset += written;
+				}
+				await yieldToWorker();
 			}
 			access.flush();
 		} finally {
@@ -999,14 +1029,22 @@ async function writeFileHandle(handle: FileSystemFileHandle, bytes: Uint8Array) 
 	}
 	const writable = await handle.createWritable();
 	try {
-		const contents = new Uint8Array(bytes.byteLength);
-		contents.set(bytes);
-		await writable.write(contents);
+		for (let offset = 0; offset < bytes.byteLength; offset += OPFS_IO_CHUNK_SIZE) {
+			const chunk = new Uint8Array(
+				bytes.subarray(offset, Math.min(offset + OPFS_IO_CHUNK_SIZE, bytes.byteLength))
+			);
+			await writable.write(chunk);
+			await yieldToWorker();
+		}
 		await writable.close();
 	} catch (error) {
 		await writable.abort();
 		throw error;
 	}
+}
+
+function yieldToWorker() {
+	return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 function measure<T>(stage: RenderPerformanceStage, operation: () => T, detail?: string): T {
