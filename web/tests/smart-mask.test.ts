@@ -3,12 +3,17 @@ import test from 'node:test';
 
 import { SMART_MASK_PACK } from '../src/lib/smart-mask.ts';
 
-test('pins the interactive object model to quantized SAM 2.1', () => {
+test('pins the interactive object model to the validated SegNext export', () => {
 	assert.deepEqual(SMART_MASK_PACK.object, {
-		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
-		revision: '814a066',
-		license: 'Apache-2.0',
-		dtype: 'q8'
+		source: 'https://github.com/uncbiag/SegNext',
+		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
+		license: 'MIT',
+		precision: 'fp16',
+		inputSize: 1024,
+		files: {
+			encoder: 'encoder.fp16.onnx',
+			decoder: 'decoder.fp16.onnx'
+		}
 	});
-	assert.match(SMART_MASK_PACK.version, /^sam2\.1-hiera-tiny-/);
+	assert.match(SMART_MASK_PACK.version, /^segnext-vitb-/);
 });

@@ -8,21 +8,38 @@ const smartMaskModelSchema = z.object({
 	dtype: z.enum(['fp32', 'fp16', 'q8', 'int8', 'uint8', 'q4', 'q4f16', 'bnb4'])
 });
 
+const segNextModelSchema = z.object({
+	source: z.string().url(),
+	revision: z.string().min(1),
+	license: z.literal('MIT'),
+	precision: z.literal('fp16'),
+	inputSize: z.number().int().positive(),
+	files: z.object({
+		encoder: z.string().min(1),
+		decoder: z.string().min(1)
+	})
+});
+
 export const smartMaskPackSchema = z.object({
 	version: z.string().min(1),
-	host: z.string().url(),
-	object: smartMaskModelSchema,
+	subjectHost: z.string().url(),
+	object: segNextModelSchema,
 	subject: smartMaskModelSchema
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'sam2.1-hiera-tiny-814a066-ormbg-main',
-	host: 'https://huggingface.co/',
+	version: 'segnext-vitb-sa2-hqseg44k-4c45ce8-fp16-ormbg-main',
+	subjectHost: 'https://huggingface.co/',
 	object: {
-		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
-		revision: '814a066',
-		license: 'Apache-2.0',
-		dtype: 'q8'
+		source: 'https://github.com/uncbiag/SegNext',
+		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
+		license: 'MIT',
+		precision: 'fp16',
+		inputSize: 1024,
+		files: {
+			encoder: 'encoder.fp16.onnx',
+			decoder: 'decoder.fp16.onnx'
+		}
 	},
 	subject: {
 		id: 'onnx-community/ormbg-ONNX',
@@ -31,6 +48,8 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 		dtype: 'q8'
 	}
 });
+
+export type SegNextModel = z.infer<typeof segNextModelSchema>;
 
 export const smartMaskStrokeSchema = z.object({
 	label: maskPromptLabelSchema,

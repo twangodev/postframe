@@ -1,44 +1,29 @@
-import {
-	AutoProcessor,
-	RawImage,
-	Sam2Model,
-	Tensor,
-	env,
-	pipeline,
-	type ProgressInfo
-} from '@huggingface/transformers';
+import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
+import type { Tensor } from 'onnxruntime-web';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
-import {
-	prepareSmartMaskPrompt,
-	selectedMaskInput,
-	selectPromptedMask
-} from './smart-mask-prompt.ts';
+import { createSegNextPrompt } from './segnext-prompt.ts';
+import { SegNextRuntime, type SegNextDevice } from './segnext-runtime.ts';
 import { SMART_MASK_PACK, type SmartMaskRequest, type SmartMaskResponse } from './smart-mask.ts';
 
-type Device = 'webgpu' | 'wasm';
-type SamProcessor = Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> & {
-	post_process_masks: (...args: unknown[]) => Promise<Tensor[]>;
-};
 type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>>;
 
 interface PreparedImage {
 	photoId: string;
 	image: RawImage;
-	embeddings: Record<string, Tensor> | null;
-	selection: { id: string; maskInput: Tensor } | null;
+	embeddings: Tensor | null;
+	selection: { id: string; probabilities: Float32Array } | null;
 }
 
-let device: Device = supportsWebGpu() ? 'webgpu' : 'wasm';
-let objectModel: Sam2Model | null = null;
-let objectProcessor: SamProcessor | null = null;
+let device: SegNextDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
+let objectModel: SegNextRuntime | null = null;
 let subjectModel: SubjectPipeline | null = null;
 let prepared: PreparedImage | null = null;
 
 env.useBrowserCache = false;
 env.useCustomCache = true;
 env.customCache = new OpfsModelCache();
-env.remoteHost = import.meta.env.VITE_SMART_MASK_MODEL_HOST ?? SMART_MASK_PACK.host;
+env.remoteHost = import.meta.env.VITE_SMART_MASK_MODEL_HOST ?? SMART_MASK_PACK.subjectHost;
 
 const post = (message: SmartMaskResponse, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);
@@ -82,61 +67,24 @@ async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' 
 	await loadObjectModel(request.id);
 	if (!active.embeddings) {
 		postProgress(request.id, 'encoding', null, 'analyzing photo');
-		const inputs = (await objectProcessor!(active.image)) as Record<string, Tensor> & {
-			pixel_values: Tensor;
-		};
-		active.embeddings = (await objectModel!.get_image_embeddings(inputs)) as Record<string, Tensor>;
+		active.embeddings = await objectModel!.encode(active.image);
 	}
 	postProgress(request.id, 'refining', null, 'refining object');
-	const prompt = prepareSmartMaskPrompt(request.strokes, active.image.width, active.image.height);
 	const previousMask =
-		active.selection?.id === request.selectionId ? active.selection.maskInput : undefined;
-	let selected: { outputs: Awaited<ReturnType<Sam2Model['_call']>>; score: number } | null = null;
-	let promptInputs: Record<string, Tensor> | null = null;
-	for (const proposal of prompt.proposals) {
-		const inputs = (await objectProcessor!(active.image, {
-			input_points: [[proposal.inputPoints]],
-			input_labels: [[proposal.inputLabels]]
-		})) as Record<string, Tensor>;
-		const outputs = await objectModel!({
-			...inputs,
-			...active.embeddings,
-			...(previousMask ? { input_masks: previousMask } : {})
-		});
-		const candidate = selectPromptedMask(
-			outputs.pred_masks.data as ArrayLike<number>,
-			outputs.pred_masks.dims,
-			outputs.iou_scores.data as ArrayLike<number>,
-			prompt
-		);
-		if (candidate && (!selected || candidate.score > selected.score)) {
-			selected = { outputs, score: candidate.score };
-			promptInputs = inputs;
-		}
-	}
-	if (!selected || !promptInputs) throw new Error('No object was found under the painted area');
-	const masks = await objectProcessor!.post_process_masks(
-		selected.outputs.pred_masks,
-		promptInputs.original_sizes,
-		promptInputs.reshaped_input_sizes
-	);
-	const mask = selectPromptedMask(
-		masks[0].data as ArrayLike<number>,
-		masks[0].dims,
-		selected.outputs.iou_scores.data as ArrayLike<number>,
-		prompt
-	);
-	if (!mask) throw new Error('No object was found under the painted area');
-	const maskInput = selectedMaskInput(
-		selected.outputs.pred_masks.data as ArrayLike<number>,
-		selected.outputs.pred_masks.dims,
-		mask.index
-	);
+		active.selection?.id === request.selectionId ? active.selection.probabilities : undefined;
+	const prompt = createSegNextPrompt(request.strokes, objectModel!.inputSize, previousMask);
+	const logits = await objectModel!.decode(active.embeddings, prompt);
 	active.selection = {
 		id: request.selectionId,
-		maskInput: new Tensor('float32', maskInput.data, maskInput.dimensions)
+		probabilities: maskProbabilities(logits)
 	};
-	postMask(request.id, mask.width, mask.height, mask.alpha);
+	const alpha = await resizeMask(
+		logits,
+		objectModel!.inputSize,
+		active.image.width,
+		active.image.height
+	);
+	postMask(request.id, active.image.width, active.image.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
 
@@ -152,15 +100,15 @@ async function selectSubject(request: Extract<SmartMaskRequest, { type: 'subject
 }
 
 async function loadObjectModel(requestId: number) {
-	if (objectModel && objectProcessor) return;
+	if (objectModel) return;
 	const load = async () => {
-		const options = modelOptions(SMART_MASK_PACK.object, requestId);
-		const [model, processor] = await Promise.all([
-			Sam2Model.from_pretrained(SMART_MASK_PACK.object.id, options),
-			AutoProcessor.from_pretrained(SMART_MASK_PACK.object.id, options)
-		]);
-		objectModel = model as Sam2Model;
-		objectProcessor = processor as SamProcessor;
+		const baseUrl = import.meta.env.VITE_SEGNEXT_MODEL_HOST ?? '/models/segnext';
+		objectModel = await SegNextRuntime.load(
+			SMART_MASK_PACK.object,
+			baseUrl,
+			device,
+			({ file, progress }) => postProgress(requestId, 'downloading', progress, file)
+		);
 	};
 	await withDeviceFallback(load);
 }
@@ -185,10 +133,7 @@ async function withDeviceFallback(load: () => Promise<void>) {
 	}
 }
 
-function modelOptions(
-	model: (typeof SMART_MASK_PACK)['object'] | (typeof SMART_MASK_PACK)['subject'],
-	requestId: number
-) {
+function modelOptions(model: (typeof SMART_MASK_PACK)['subject'], requestId: number) {
 	return {
 		revision: model.revision,
 		dtype: model.dtype,
@@ -228,7 +173,19 @@ function preparedImage(photoId: string) {
 }
 
 function resetPreparedImage() {
+	prepared?.embeddings?.dispose();
 	prepared = null;
+}
+
+function maskProbabilities(logits: Float32Array) {
+	return Float32Array.from(logits, (logit) => 1 / (1 + Math.exp(-logit)));
+}
+
+async function resizeMask(logits: Float32Array, size: number, width: number, height: number) {
+	if (logits.length !== size * size) throw new Error('SegNext returned an invalid mask');
+	const binary = Uint8Array.from(logits, (logit) => (logit > 0 ? 255 : 0));
+	const resized = await new RawImage(binary, size, size, 1).resize(width, height);
+	return Uint8Array.from(resized.data);
 }
 
 function supportsWebGpu() {
