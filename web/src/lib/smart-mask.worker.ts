@@ -119,10 +119,9 @@ function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>)
 async function loadObjectModel(requestId: number) {
 	if (objectModel) return;
 	const load = async () => {
-		const baseUrl = import.meta.env.VITE_SEGNEXT_MODEL_HOST ?? '/models/segnext';
 		objectModel = await SegNextRuntime.load(
 			SMART_MASK_PACK.object,
-			baseUrl,
+			SMART_MASK_PACK.object.host,
 			device,
 			({ file, progress }) => postProgress(requestId, 'downloading', progress, file)
 		);

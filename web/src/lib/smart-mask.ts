@@ -9,6 +9,7 @@ const smartMaskModelSchema = z.object({
 });
 
 const segNextModelSchema = z.object({
+	host: z.string().url(),
 	source: z.string().url(),
 	revision: z.string().min(1),
 	license: z.literal('MIT'),
@@ -31,6 +32,7 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 	version: 'segnext-vitb-4c45ce8-fp32-rgb-edge-v2-ormbg-main',
 	subjectHost: 'https://huggingface.co/',
 	object: {
+		host: 'https://huggingface.co/twangodev/segnext-vitb-sa2-hqseg44k-onnx/resolve/8a9b6fb7d796e4add92e666d76a2f86b636ae268',
 		source: 'https://github.com/uncbiag/SegNext',
 		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
 		license: 'MIT',

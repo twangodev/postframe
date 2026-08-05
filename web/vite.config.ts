@@ -2,7 +2,6 @@ import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
-import { postframeModels } from './model.plugin.ts';
 import { postframeWasm } from './wasm.plugin.ts';
 
 const isolationHeaders = {
@@ -15,7 +14,6 @@ export default defineConfig({
 	server: { headers: isolationHeaders },
 	preview: { headers: isolationHeaders },
 	plugins: [
-		postframeModels(),
 		postframeWasm(),
 		tailwindcss(),
 		sveltekit({
