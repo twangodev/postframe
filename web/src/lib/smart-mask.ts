@@ -28,7 +28,7 @@ export const smartMaskPackSchema = z.object({
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'segnext-vitb-sa2-hqseg44k-4c45ce8-fp16-ormbg-main',
+	version: 'segnext-vitb-4c45ce8-guided-v1-ormbg-main',
 	subjectHost: 'https://huggingface.co/',
 	object: {
 		source: 'https://github.com/uncbiag/SegNext',

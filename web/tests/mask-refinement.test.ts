@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
 	UNKNOWN_TRIMAP_VALUE,
+	cropMaskRegion,
 	mergeRefinedAlpha,
 	placeMaskRegion,
 	prepareMatteRegion,
@@ -31,6 +32,15 @@ test('extracts a padded region around the selected object', () => {
 
 	assert.deepEqual(region?.bounds, { x: 6, y: 1, width: 8, height: 8 });
 	assert.equal(region?.trimap.length, 64);
+});
+
+test('crops a mask plane to the selected region', () => {
+	const source = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+	assert.deepEqual(
+		cropMaskRegion(source, 4, { x: 1, y: 1, width: 2, height: 2 }),
+		new Uint8Array([6, 7, 10, 11])
+	);
 });
 
 test('keeps known trimap pixels and uses the matte only in the unknown band', () => {

@@ -1,5 +1,6 @@
 import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
 import type { Tensor } from 'onnxruntime-web';
+import { refineObjectMask } from './guided-mask-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
 import { createSegNextPrompt } from './segnext-prompt.ts';
@@ -78,12 +79,14 @@ async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' 
 		id: request.selectionId,
 		probabilities: maskProbabilities(logits)
 	};
-	const alpha = await resizeMask(
+	const coarseAlpha = await resizeCoarseAlpha(
 		logits,
 		objectModel!.inputSize,
 		active.image.width,
 		active.image.height
 	);
+	postProgress(request.id, 'refining', null, 'refining object edges');
+	const alpha = await refineObjectMask(active.image, coarseAlpha);
 	postMask(request.id, active.image.width, active.image.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
@@ -181,10 +184,17 @@ function maskProbabilities(logits: Float32Array) {
 	return Float32Array.from(logits, (logit) => 1 / (1 + Math.exp(-logit)));
 }
 
-async function resizeMask(logits: Float32Array, size: number, width: number, height: number) {
+async function resizeCoarseAlpha(
+	logits: Float32Array,
+	size: number,
+	width: number,
+	height: number
+) {
 	if (logits.length !== size * size) throw new Error('SegNext returned an invalid mask');
-	const binary = Uint8Array.from(logits, (logit) => (logit > 0 ? 255 : 0));
-	const resized = await new RawImage(binary, size, size, 1).resize(width, height);
+	const probabilities = Uint8Array.from(logits, (logit) =>
+		Math.round((1 / (1 + Math.exp(-logit))) * 255)
+	);
+	const resized = await new RawImage(probabilities, size, size, 1).resize(width, height);
 	return Uint8Array.from(resized.data);
 }
 

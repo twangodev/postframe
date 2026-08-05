@@ -37,6 +37,13 @@ export function prepareMatteRegion(
 	return { bounds, trimap: cropPlane(trimap, width, bounds) };
 }
 
+export function cropMaskRegion(source: Uint8Array, width: number, bounds: MaskBounds) {
+	const height = source.length / width;
+	validatePlane(source, width, height);
+	validateBounds(bounds, width, height);
+	return cropPlane(source, width, bounds);
+}
+
 export function trimapFromAlpha(
 	coarseAlpha: Uint8Array,
 	width: number,
@@ -113,6 +120,7 @@ export function placeMaskRegion(
 	height: number
 ) {
 	validatePlane(region, bounds.width, bounds.height);
+	validateBounds(bounds, width, height);
 	const alpha = new Uint8Array(width * height);
 	for (let y = 0; y < bounds.height; y += 1) {
 		alpha.set(
@@ -190,5 +198,22 @@ function validatePlane(data: Uint8Array, width: number, height: number) {
 		data.length !== width * height
 	) {
 		throw new Error('Mask dimensions do not match its pixels');
+	}
+}
+
+function validateBounds(bounds: MaskBounds, width: number, height: number) {
+	if (
+		!Number.isSafeInteger(bounds.x) ||
+		!Number.isSafeInteger(bounds.y) ||
+		!Number.isSafeInteger(bounds.width) ||
+		!Number.isSafeInteger(bounds.height) ||
+		bounds.x < 0 ||
+		bounds.y < 0 ||
+		bounds.width < 1 ||
+		bounds.height < 1 ||
+		bounds.x + bounds.width > width ||
+		bounds.y + bounds.height > height
+	) {
+		throw new Error('Mask region falls outside its pixels');
 	}
 }
