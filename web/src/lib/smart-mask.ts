@@ -16,11 +16,11 @@ export const smartMaskPackSchema = z.object({
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'slimsam-5850ab4-ormbg-main',
+	version: 'sam2.1-hiera-tiny-814a066-ormbg-main',
 	host: 'https://huggingface.co/',
 	object: {
-		id: 'Xenova/slimsam-77-uniform',
-		revision: '5850ab4',
+		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
+		revision: '814a066',
 		license: 'Apache-2.0',
 		dtype: 'q8'
 	},
@@ -44,13 +44,7 @@ export interface SmartMaskRaster {
 }
 
 export type SmartMaskPhase =
-	| 'idle'
-	| 'downloading'
-	| 'loading'
-	| 'encoding'
-	| 'ready'
-	| 'refining'
-	| 'error';
+	'idle' | 'downloading' | 'loading' | 'encoding' | 'ready' | 'refining' | 'error';
 
 export interface SmartMaskProgress {
 	phase: SmartMaskPhase;
@@ -60,7 +54,12 @@ export interface SmartMaskProgress {
 
 export type SmartMaskRequest =
 	| { id: number; type: 'prepare'; photoId: string; image: Blob }
-	| { id: number; type: 'object'; photoId: string; prompts: z.infer<typeof smartMaskPromptSchema>[] }
+	| {
+			id: number;
+			type: 'object';
+			photoId: string;
+			prompts: z.infer<typeof smartMaskPromptSchema>[];
+	  }
 	| { id: number; type: 'subject'; photoId: string }
 	| { id: number; type: 'reset' };
 

@@ -1,7 +1,7 @@
 import {
 	AutoProcessor,
 	RawImage,
-	SamModel,
+	Sam2Model,
 	env,
 	pipeline,
 	type ProgressInfo,
@@ -24,7 +24,7 @@ interface PreparedImage {
 }
 
 let device: Device = supportsWebGpu() ? 'webgpu' : 'wasm';
-let objectModel: SamModel | null = null;
+let objectModel: Sam2Model | null = null;
 let objectProcessor: SamProcessor | null = null;
 let subjectModel: SubjectPipeline | null = null;
 let prepared: PreparedImage | null = null;
@@ -118,10 +118,10 @@ async function loadObjectModel(requestId: number) {
 	const load = async () => {
 		const options = modelOptions(SMART_MASK_PACK.object, requestId);
 		const [model, processor] = await Promise.all([
-			SamModel.from_pretrained(SMART_MASK_PACK.object.id, options),
+			Sam2Model.from_pretrained(SMART_MASK_PACK.object.id, options),
 			AutoProcessor.from_pretrained(SMART_MASK_PACK.object.id, options)
 		]);
-		objectModel = model as SamModel;
+		objectModel = model as Sam2Model;
 		objectProcessor = processor as SamProcessor;
 	};
 	await withDeviceFallback(load);
