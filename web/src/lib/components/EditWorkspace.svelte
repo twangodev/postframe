@@ -41,6 +41,7 @@
 		type WorkspaceState
 	} from '$lib/workspace.svelte';
 	import type { LightControlName } from '$lib/develop-settings';
+	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
 	import type { DevelopPhase } from '$lib/worker';
 	import {
 		ZOOM_MENU_PRESETS,
@@ -74,6 +75,10 @@
 		workspace.previewMaskLight(control, value);
 	const commitMaskLight = (control: LightControlName) => (value: number) =>
 		workspace.commitMaskLight(control, value);
+	const previewMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
+		workspace.previewMaskEdge(control, value);
+	const commitMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
+		workspace.commitMaskEdge(control, value);
 	let activeTool = $state('move');
 	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
@@ -1437,6 +1442,40 @@
 
 					{#if selectedMask}
 						<Panel title="Mask adjustments" meta={selectedMask.name}>
+							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">edge</p>
+							<AdjustmentSlider
+								label="Definition"
+								value={selectedMask.edge.contrast}
+								min={0}
+								max={100}
+								signed={false}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskEdge('contrast')}
+								onValueCommit={commitMaskEdge('contrast')}
+							/>
+							<AdjustmentSlider
+								label="Feather"
+								value={selectedMask.edge.feather}
+								min={0}
+								max={100}
+								suffix=" px"
+								signed={false}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskEdge('feather')}
+								onValueCommit={commitMaskEdge('feather')}
+							/>
+							<AdjustmentSlider
+								label="Shift"
+								value={selectedMask.edge.shift}
+								min={-100}
+								max={100}
+								suffix=" px"
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskEdge('shift')}
+								onValueCommit={commitMaskEdge('shift')}
+							/>
+							<div class="bg-subtle my-2 h-px"></div>
+							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">light</p>
 							<AdjustmentSlider
 								label="Exposure"
 								value={selectedMask.adjustments.light.exposure}

@@ -10,12 +10,14 @@ import {
 	type NormalizedCrop
 } from './edit-document.ts';
 import { lightSettingsSchema, type LightControlName } from './develop-settings.ts';
+import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
 export type EditorCommand =
 	| { type: 'light.set'; control: LightControlName; value: number }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
+	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
 	| { type: 'mask.create'; mask: EditMask }
 	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
@@ -73,6 +75,17 @@ export function applyEditorCommand(
 			if (mask.adjustments.light[command.control] === light[command.control]) return null;
 			mask.adjustments.light = light;
 			return transition(command, lightLabel(command.control, command.value), 'render', next);
+		}
+		case 'mask.edge.set': {
+			const mask = next.masks.find(({ id }) => id === command.maskId);
+			if (!mask) return null;
+			const edge = maskEdgeSettingsSchema.parse({
+				...mask.edge,
+				[command.control]: command.value
+			});
+			if (mask.edge[command.control] === edge[command.control]) return null;
+			mask.edge = edge;
+			return transition(command, edgeLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.create': {
 			const mask = editMaskSchema.parse(command.mask);
@@ -138,6 +151,11 @@ function transition(
 function lightLabel(control: LightControlName, value: number) {
 	const suffix = control === 'exposure' ? ' EV' : '';
 	return `${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
+}
+
+function edgeLabel(control: MaskEdgeControlName, value: number) {
+	const suffix = control === 'contrast' ? '' : ' px';
+	return `mask ${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
 }
 
 function formatNumber(value: number) {

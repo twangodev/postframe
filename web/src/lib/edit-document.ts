@@ -6,8 +6,9 @@ import {
 	lightSettingsSchema,
 	type LightSettings
 } from './develop-settings.ts';
+import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 3;
+export const EDIT_DOCUMENT_VERSION = 4;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -78,13 +79,17 @@ export const normalizedCropSchema = z
 	.refine(({ x, width }) => x + width <= 1, { message: 'crop exceeds image width' })
 	.refine(({ y, height }) => y + height <= 1, { message: 'crop exceeds image height' });
 
-export const editMaskSchema = z.object({
+const versionThreeEditMaskSchema = z.object({
 	id: z.string().min(1),
 	name: z.string().trim().min(1),
 	kind: maskKindSchema,
 	visible: z.boolean(),
 	components: z.array(maskComponentSchema),
 	adjustments: z.object({ light: lightSettingsSchema })
+});
+
+export const editMaskSchema = versionThreeEditMaskSchema.extend({
+	edge: maskEdgeSettingsSchema
 });
 
 export const editDocumentSchema = z
@@ -151,7 +156,21 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 	const legacy = developSettingsSchema.safeParse(value);
 	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
 
-	const previous = previousEditDocumentSchema.safeParse(value);
+	const versionThree = versionThreeEditDocumentSchema.safeParse(value);
+	if (versionThree.success) {
+		if (versionThree.data.photoId !== photoId)
+			throw new Error(`Edit document belongs to another photo`);
+		return editDocumentSchema.parse({
+			...versionThree.data,
+			version: EDIT_DOCUMENT_VERSION,
+			masks: versionThree.data.masks.map((mask) => ({
+				...mask,
+				edge: defaultMaskEdgeSettings()
+			}))
+		});
+	}
+
+	const previous = versionTwoEditDocumentSchema.safeParse(value);
 	if (previous.success) {
 		if (previous.data.photoId !== photoId)
 			throw new Error(`Edit document belongs to another photo`);
@@ -188,6 +207,7 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		kind,
 		visible: true,
 		components: [],
+		edge: defaultMaskEdgeSettings(),
 		adjustments: { light: defaultLightSettings() }
 	};
 }
@@ -196,7 +216,20 @@ export function editDocumentStorageName(photoId: string) {
 	return `${photoId}.json`;
 }
 
-const previousEditDocumentSchema = z.object({
+const versionThreeEditDocumentSchema = z.object({
+	version: z.literal(3),
+	photoId: z.string().min(1),
+	adjustments: z.object({ light: lightSettingsSchema }),
+	geometry: z.object({
+		rotation: z.number().finite().min(-180).max(180),
+		flipHorizontal: z.boolean(),
+		flipVertical: z.boolean(),
+		crop: normalizedCropSchema.nullable()
+	}),
+	masks: z.array(versionThreeEditMaskSchema)
+});
+
+const versionTwoEditDocumentSchema = z.object({
 	version: z.literal(2),
 	photoId: z.string().min(1),
 	adjustments: z.object({ light: lightSettingsSchema }),

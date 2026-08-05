@@ -13,6 +13,8 @@ const neutral = {
 	blacks: 0
 };
 
+const neutralEdge = { contrast: 0, feather: 0, shift: 0 };
+
 function scopeTransfer() {
 	return {
 		histogram: new Uint32Array(4 * 256).buffer,
@@ -228,6 +230,7 @@ test('copies and transfers persistent masks without detaching document state', a
 		width: 2,
 		height: 2,
 		alpha: alpha.buffer,
+		edge: neutralEdge,
 		settings: { ...neutral, exposure: 0.5 }
 	};
 	const updated = client.setMasks([mask]);
@@ -242,6 +245,28 @@ test('copies and transfers persistent masks without detaching document state', a
 
 	workers[0]?.respond({ id: 1, type: 'masks-set' });
 	await updated;
+	client.destroy();
+});
+
+test('adjusts mask edges without detaching the persistent source', async () => {
+	const { client, workers } = setup();
+	const alpha = new Uint8Array([0, 255, 255, 0]);
+	const adjusted = client.adjustMask({
+		width: 2,
+		height: 2,
+		alpha: alpha.buffer,
+		edge: { contrast: 25, feather: 2, shift: -1 }
+	});
+
+	const request = workers[0]?.messages[0];
+	assert.equal(request?.type, 'adjust-mask');
+	if (request?.type !== 'adjust-mask') throw new Error('Expected a mask adjustment request');
+	assert.notEqual(request.alpha, alpha.buffer);
+	assert.deepEqual(workers[0]?.transfers, [[request.alpha]]);
+	assert.equal(alpha.byteLength, 4);
+
+	workers[0]?.respond({ id: 1, type: 'mask-adjusted', alpha: Uint8Array.of(0, 0, 0, 0).buffer });
+	assert.deepEqual(await adjusted, new Uint8Array(4));
 	client.destroy();
 });
 

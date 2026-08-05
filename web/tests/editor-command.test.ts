@@ -71,6 +71,38 @@ test('updates local light without changing global development settings', () => {
 	assert.equal(changed.document.adjustments.light.exposure, 0);
 });
 
+test('updates mask edges without changing the stored component raster', () => {
+	const document = defaultEditDocument('photo-one');
+	const mask = createEditMask('mask-one', 'subject');
+	const component = {
+		id: 'component-one',
+		type: 'ai-subject',
+		operation: 'add',
+		inverted: false,
+		modelVersion: 'model-one',
+		raster: {
+			storageName: 'photo-one-component-one.mask',
+			width: 2,
+			height: 2,
+			digest: '0'.repeat(64)
+		}
+	} satisfies MaskComponent;
+	mask.components.push(component);
+	document.masks.push(mask);
+
+	const changed = applyEditorCommand(document, {
+		type: 'mask.edge.set',
+		maskId: mask.id,
+		control: 'feather',
+		value: 12
+	});
+	assert.ok(changed);
+	assert.equal(changed.invalidation, 'render');
+	assert.equal(changed.document.masks[0]?.edge.feather, 12);
+	assert.deepEqual(changed.document.masks[0]?.components[0]?.raster, component.raster);
+	assert.equal(document.masks[0]?.edge.feather, 0);
+});
+
 test('adds and replaces persistent mask components by id', () => {
 	const document = defaultEditDocument('photo-one');
 	document.masks.push(createEditMask('mask-one', 'object'));

@@ -1,5 +1,6 @@
 import type {
 	DevelopedMaskInput,
+	MaskEdgeInput,
 	RawFrameHandleInput,
 	RenderPerformanceMeasurement,
 	RenderTileRequest,
@@ -134,6 +135,7 @@ export class PostframeWorkerClient {
 	async setMasks(masks: DevelopedMaskInput[]) {
 		const copies = masks.map((mask) => ({
 			...mask,
+			edge: { ...mask.edge },
 			settings: { ...mask.settings },
 			alpha: mask.alpha.slice(0)
 		}));
@@ -142,6 +144,23 @@ export class PostframeWorkerClient {
 			'masks-set',
 			copies.map(({ alpha }) => alpha)
 		);
+	}
+
+	async adjustMask(mask: MaskEdgeInput) {
+		const alpha = mask.alpha.slice(0);
+		const response = await this.send(
+			(id) => ({
+				id,
+				type: 'adjust-mask',
+				width: mask.width,
+				height: mask.height,
+				alpha,
+				edge: { ...mask.edge }
+			}),
+			'mask-adjusted',
+			[alpha]
+		);
+		return new Uint8Array(response.alpha);
 	}
 
 	preview(settings: LightSettings, tone: boolean) {

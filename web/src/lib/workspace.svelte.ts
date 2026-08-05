@@ -53,6 +53,7 @@ import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
 import { SmartMaskClient } from './smart-mask-client';
 import type { SmartMaskProgress, SmartMaskRaster } from './smart-mask';
+import type { MaskEdgeControlName } from './mask-edge-settings';
 import {
 	composeMaskRasters,
 	maskDigest,
@@ -196,8 +197,13 @@ export class WorkspaceState {
 	private smartMaskRevision = 0;
 	private activeSmartMaskPhotoId: string | null = null;
 	private maskRenderRevision = 0;
+	private maskPreviewRevision = 0;
 	private maskRenderTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly maskRasterCache = new Map<string, MaskRasterData>();
+	private readonly adjustedMaskRasterCache = new Map<
+		string,
+		{ key: string; raster: MaskRasterData }
+	>();
 
 	mode = $state<WorkspaceMode>('welcome');
 	photos = $state<Photo[]>([]);
@@ -483,6 +489,31 @@ export class WorkspaceState {
 		if (
 			!this.dispatchEditorCommand({
 				type: 'mask.light.set',
+				maskId: this.selectedMaskId,
+				control,
+				value
+			})
+		) {
+			this.resetMaskPreview();
+		}
+	};
+
+	previewMaskEdge = (control: MaskEdgeControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedPhoto || !this.selectedMaskId) return;
+		const document = cloneEditDocument(this.selectedPhoto.edit);
+		const mask = document.masks.find(({ id }) => id === this.selectedMaskId);
+		if (!mask) return;
+		mask.edge = { ...mask.edge, [control]: value };
+		this.masks = document.masks.map(cloneEditMask);
+		this.scheduleMaskRender(document, true);
+	};
+
+	commitMaskEdge = (control: MaskEdgeControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedMaskId) return;
+		this.clearMaskRenderTimer();
+		if (
+			!this.dispatchEditorCommand({
+				type: 'mask.edge.set',
 				maskId: this.selectedMaskId,
 				control,
 				value
@@ -997,11 +1028,12 @@ export class WorkspaceState {
 		void this.queueCatalogMutation((store) => store.saveEditDocument(next.photoId, next));
 	}
 
-	private scheduleMaskRender(document: EditDocument) {
+	private scheduleMaskRender(document: EditDocument, refreshRaster = false) {
 		this.clearMaskRenderTimer();
 		this.maskRenderTimer = setTimeout(() => {
 			this.maskRenderTimer = null;
 			this.renderEditDocument(document);
+			if (refreshRaster) void this.refreshSelectedMaskRaster();
 		}, 40);
 	}
 
@@ -1015,6 +1047,7 @@ export class WorkspaceState {
 		if (!this.selectedPhoto) return;
 		this.masks = this.selectedPhoto.edit.masks.map(cloneEditMask);
 		this.renderEditDocument(this.selectedPhoto.edit);
+		void this.refreshSelectedMaskRaster();
 	}
 
 	private renderEditDocument(document: EditDocument) {
@@ -1066,6 +1099,7 @@ export class WorkspaceState {
 					width: raster.width,
 					height: raster.height,
 					alpha: raster.alpha.slice().buffer as ArrayBuffer,
+					edge: { ...mask.edge },
 					settings: { ...mask.adjustments.light }
 				};
 			})
@@ -1196,6 +1230,7 @@ export class WorkspaceState {
 	}
 
 	private async refreshSelectedMaskRaster() {
+		const revision = ++this.maskPreviewRevision;
 		const maskId = this.selectedMaskId;
 		const mask = this.masks.find(({ id }) => id === maskId);
 		if (!maskId || !mask) {
@@ -1203,13 +1238,42 @@ export class WorkspaceState {
 			return;
 		}
 		try {
-			const raster = await this.composedMaskRaster(mask);
-			if (this.selectedMaskId !== maskId) return;
+			const raster = await this.adjustedMaskRaster(mask);
+			if (revision !== this.maskPreviewRevision || this.selectedMaskId !== maskId) return;
 			this.selectedMaskRaster = raster ? { maskId, ...raster } : null;
 		} catch (error) {
-			if (this.selectedMaskId === maskId) this.selectedMaskRaster = null;
+			if (revision === this.maskPreviewRevision && this.selectedMaskId === maskId) {
+				this.selectedMaskRaster = null;
+			}
 			this.failSmartMask(error);
 		}
+	}
+
+	private async adjustedMaskRaster(mask: EditMask) {
+		const key = JSON.stringify({
+			edge: mask.edge,
+			components: mask.components.map((component) => ({
+				type: component.type,
+				operation: component.operation,
+				inverted: component.type === 'ai-subject' && component.inverted,
+				raster: component.raster?.digest ?? null
+			}))
+		});
+		const cached = this.adjustedMaskRasterCache.get(mask.id);
+		if (cached?.key === key) return cached.raster;
+		const raster = await this.composedMaskRaster(mask);
+		if (!raster) return null;
+		const alpha = this.workerClient
+			? await this.workerClient.adjustMask({
+					width: raster.width,
+					height: raster.height,
+					alpha: raster.alpha.buffer as ArrayBuffer,
+					edge: mask.edge
+				})
+			: raster.alpha.slice();
+		const adjusted = { width: raster.width, height: raster.height, alpha };
+		this.adjustedMaskRasterCache.set(mask.id, { key, raster: adjusted });
+		return adjusted;
 	}
 
 	private finishSmartMask() {
@@ -1250,6 +1314,7 @@ export class WorkspaceState {
 		this.objectUrls.clear();
 		this.thumbnailLoads.clear();
 		this.maskRasterCache.clear();
+		this.adjustedMaskRasterCache.clear();
 		this.editPreview = null;
 	}
 

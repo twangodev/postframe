@@ -12,6 +12,8 @@ import {
 	type LinearTileSource,
 	type RawRenderProfile
 } from './webgpu-renderer.ts';
+import { adjustMaskEdges } from './mask-edge-adjustment.ts';
+import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -80,7 +82,15 @@ export interface DevelopedMaskInput {
 	width: number;
 	height: number;
 	alpha: ArrayBuffer;
+	edge: MaskEdgeSettings;
 	settings: LightSettings;
+}
+
+export interface MaskEdgeInput {
+	width: number;
+	height: number;
+	alpha: ArrayBuffer;
+	edge: MaskEdgeSettings;
 }
 
 export type Request =
@@ -103,6 +113,7 @@ export type Request =
 			settings: LightSettings;
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
+	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
 	| { id: number; type: 'preview'; settings: LightSettings; tone: boolean }
 	| {
@@ -118,6 +129,7 @@ export type Request =
 
 export type Response =
 	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
+	| { id: number; type: 'mask-adjusted'; alpha: ArrayBuffer }
 	| ({ id: number; type: 'progress' } & DevelopProgress)
 	| {
 			id: number;
@@ -224,6 +236,19 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				} finally {
 					deferRawCacheWrite(active);
 				}
+				break;
+			}
+			case 'adjust-mask': {
+				const adjusted = adjustMaskEdges(
+					{
+						width: message.width,
+						height: message.height,
+						alpha: new Uint8Array(message.alpha)
+					},
+					message.edge
+				);
+				const alpha = adjusted.alpha.buffer as ArrayBuffer;
+				post({ id: message.id, type: 'mask-adjusted', alpha }, [alpha]);
 				break;
 			}
 			case 'set-masks':
@@ -897,10 +922,18 @@ function createMaskCompositors(masks: DevelopedMaskInput[]) {
 	const created: typeof maskCompositors = [];
 	try {
 		for (const mask of masks) {
+			const adjusted = adjustMaskEdges(
+				{
+					width: mask.width,
+					height: mask.height,
+					alpha: new Uint8Array(mask.alpha)
+				},
+				mask.edge
+			);
 			created.push({
 				id: mask.id,
 				compositor: new wasm.DevelopedTileCompositor(
-					new Uint8Array(mask.alpha),
+					adjusted.alpha,
 					mask.width,
 					mask.height,
 					...lightArguments(mask.settings)

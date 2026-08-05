@@ -50,6 +50,19 @@ test('preserves global edits while removing version-two visual masks', () => {
 	assert.deepEqual(migrated.masks, []);
 });
 
+test('preserves version-three masks with neutral edge settings', () => {
+	const mask = createEditMask('mask-one', 'subject');
+	const { edge: _, ...versionThreeMask } = mask;
+	const previous = {
+		...defaultEditDocument('photo-one'),
+		version: 3,
+		masks: [versionThreeMask]
+	};
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
+	assert.deepEqual(migrated.masks[0], mask);
+});
+
 test('rejects mismatched photos, duplicate masks, and invalid normalized crops', () => {
 	const document = defaultEditDocument('photo-one');
 	assert.throws(() => parseEditDocument({ ...document, photoId: 'photo-two' }, 'photo-one'));
