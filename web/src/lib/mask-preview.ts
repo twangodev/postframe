@@ -30,28 +30,3 @@ export function maskEdgePreview(alpha: Uint8Array, width: number, height: number
 	}
 	return edge;
 }
-
-export function maskBoundaryPreview(alpha: Uint8Array, width: number, height: number) {
-	const edge = maskEdgePreview(alpha, width, height);
-	const halo = new Uint8Array(edge.length);
-	for (let y = 0; y < height; y += 1) {
-		for (let x = 0; x < width; x += 1) {
-			let strongestNeighbor = 0;
-			for (
-				let neighborY = Math.max(0, y - 1);
-				neighborY <= Math.min(height - 1, y + 1);
-				neighborY += 1
-			) {
-				for (
-					let neighborX = Math.max(0, x - 1);
-					neighborX <= Math.min(width - 1, x + 1);
-					neighborX += 1
-				) {
-					strongestNeighbor = Math.max(strongestNeighbor, edge[neighborY * width + neighborX]!);
-				}
-			}
-			halo[y * width + x] = strongestNeighbor;
-		}
-	}
-	return { edge, halo };
-}
