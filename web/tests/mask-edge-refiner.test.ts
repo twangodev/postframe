@@ -59,7 +59,9 @@ test('refines only the full-resolution boundary painted by the user', () => {
 		points: [{ x: 0.45, y: 0.5 }],
 		radius: 0.2
 	});
+	const cornerOutsideCircularBrush = 3;
 	assert.ok(refined[2 * width + 4]! < alpha[2 * width + 4]!);
+	assert.equal(refined[cornerOutsideCircularBrush], alpha[cornerOutsideCircularBrush]);
 	assert.equal(refined[2 * width], alpha[2 * width]);
 	assert.equal(refined[2 * width + 10], alpha[2 * width + 10]);
 });

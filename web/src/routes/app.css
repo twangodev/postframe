@@ -34,6 +34,7 @@
 	--color-positive: #6fa878;
 	--color-warning: #c4a35a;
 	--color-negative: #c26f68;
+	--color-mask-overlay: #ff3b30;
 }
 
 :root {

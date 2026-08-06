@@ -27,6 +27,7 @@
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import PhotoPyramidLayer from './PhotoPyramidLayer.svelte';
+	import MaskBrushCursor from './MaskBrushCursor.svelte';
 	import MaskOverlay from './MaskOverlay.svelte';
 	import MaskPromptOverlay from './MaskPromptOverlay.svelte';
 	import ToolRail from './ToolRail.svelte';
@@ -103,6 +104,7 @@
 		points: NormalizedPoint[];
 		radius: number;
 	} | null>(null);
+	let maskBrushPoint = $state<NormalizedPoint | null>(null);
 	let refineBrushSize = $state(42);
 	let pinch: {
 		origin: Point;
@@ -119,6 +121,9 @@
 	const imageOffset = $derived(surfaceTransform(viewportSize, imageSize, viewportTransform));
 	const visiblePixels = $derived(visibleImageRect(viewportSize, imageSize, viewportTransform));
 	const pixelGridStrength = $derived(pixelGridOpacity(viewportTransform.scale));
+	const refineBrushRadius = $derived(
+		refineBrushSize / 2 / viewportTransform.scale / Math.max(imageSize.width, imageSize.height)
+	);
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -211,6 +216,7 @@
 		// TODO(WASM_TODOS.editorTools): start the selected tool in the Wasm document.
 		activeTool = tool;
 		activeToolLabel = label;
+		maskBrushPoint = null;
 		if (tool.startsWith('mask')) inspectorTab = 'mask';
 	}
 
@@ -359,11 +365,7 @@
 			edgeRefinementStroke = {
 				pointerId: event.pointerId,
 				points: [imagePoint],
-				radius:
-					refineBrushSize /
-					2 /
-					viewportTransform.scale /
-					Math.max(imageSize.width, imageSize.height)
+				radius: refineBrushRadius
 			};
 			return;
 		}
@@ -377,6 +379,10 @@
 
 	function handlePointerMove(event: PointerEvent) {
 		const point = viewportPoint(event);
+		maskBrushPoint =
+			activeTool === 'mask-refine' && event.pointerType !== 'touch'
+				? normalizedImagePoint(point)
+				: null;
 		if (objectStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
 			const imagePoint = normalizedImagePoint(point);
@@ -433,6 +439,10 @@
 			viewportSize,
 			imageSize
 		);
+	}
+
+	function handlePointerLeave() {
+		maskBrushPoint = null;
 	}
 
 	function handlePointerUp(event: PointerEvent) {
@@ -949,12 +959,15 @@
 						? 'cursor-grab'
 						: activeTool === 'zoom'
 							? 'cursor-zoom-in'
-							: activeTool === 'object-select' || activeTool === 'mask-refine'
-								? 'cursor-crosshair'
-								: 'cursor-default'}"
+							: activeTool === 'mask-refine' && maskBrushPoint
+								? 'cursor-none'
+								: activeTool === 'object-select' || activeTool === 'mask-refine'
+									? 'cursor-crosshair'
+									: 'cursor-default'}"
 				onwheel={handleWheel}
 				onpointerdown={handlePointerDown}
 				onpointermove={handlePointerMove}
+				onpointerleave={handlePointerLeave}
 				onpointerup={handlePointerUp}
 				onpointercancel={handlePointerUp}
 				onlostpointercapture={handlePointerUp}
@@ -1084,6 +1097,15 @@
 									points={edgeRefinementStroke.points}
 									label="refine"
 									brushRadius={edgeRefinementStroke.radius}
+									imageWidth={imageSize.width}
+									imageHeight={imageSize.height}
+									viewportScale={viewportTransform.scale}
+								/>
+							{/if}
+							{#if activeTool === 'mask-refine' && maskBrushPoint && !smartMaskWorking}
+								<MaskBrushCursor
+									point={maskBrushPoint}
+									radius={edgeRefinementStroke?.radius ?? refineBrushRadius}
 									imageWidth={imageSize.width}
 									imageHeight={imageSize.height}
 									viewportScale={viewportTransform.scale}
