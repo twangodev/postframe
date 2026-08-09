@@ -64,7 +64,8 @@ test('prepares a photo before requesting prompted masks', async () => {
 		type: 'object',
 		photoId: 'photo-one',
 		selectionId: 'selection-one',
-		strokes: [{ label: 'foreground', points: [{ x: 0.25, y: 0.75 }] }]
+		strokes: [{ label: 'foreground', points: [{ x: 0.25, y: 0.75 }] }],
+		candidate: 0
 	});
 	workers[0]?.respond({
 		id: 2,
@@ -72,9 +73,15 @@ test('prepares a photo before requesting prompted masks', async () => {
 		modelVersion: client.modelVersion,
 		width: 2,
 		height: 2,
-		alpha: new Uint8Array([0, 255, 255, 0]).buffer
+		alpha: new Uint8Array([0, 255, 255, 0]).buffer,
+		alternatives: { index: 0, count: 3 }
 	});
-	assert.deepEqual((await selecting).alpha, new Uint8Array([0, 255, 255, 0]));
+	assert.deepEqual(await selecting, {
+		width: 2,
+		height: 2,
+		alpha: new Uint8Array([0, 255, 255, 0]),
+		alternatives: { index: 0, count: 3 }
+	});
 	client.destroy();
 });
 

@@ -1,23 +1,32 @@
 import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
-import type { Tensor } from 'onnxruntime-web';
 import { refineObjectMask, refinePaintedMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
-import { createSegNextPrompt } from './segnext-prompt.ts';
-import { SegNextRuntime, type SegNextDevice } from './segnext-runtime.ts';
-import { SMART_MASK_PACK, type SmartMaskRequest, type SmartMaskResponse } from './smart-mask.ts';
+import { usableSam2Mask } from './sam2-candidates.ts';
+import {
+	Sam2ObjectRuntime,
+	type Sam2ImageEmbedding,
+	type Sam2Selection
+} from './sam2-object-runtime.ts';
+import {
+	SMART_MASK_PACK,
+	type SmartMaskDevice,
+	type SmartMaskRequest,
+	type SmartMaskResponse
+} from './smart-mask.ts';
 
 type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>>;
 
 interface PreparedImage {
 	photoId: string;
 	image: RawImage;
-	embeddings: Tensor | null;
-	selection: { id: string; probabilities: Float32Array } | null;
+	embedding: Sam2ImageEmbedding | null;
+	selection: { id: string; prompt: string; result: Sam2Selection } | null;
 }
 
-let device: SegNextDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
-let objectModel: SegNextRuntime | null = null;
+let objectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
+let subjectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
+let objectModel: Sam2ObjectRuntime | null = null;
 let subjectModel: SubjectPipeline | null = null;
 let prepared: PreparedImage | null = null;
 
@@ -59,38 +68,66 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 	resetPreparedImage();
 	postProgress(request.id, 'loading', null, 'reading photo');
 	const image = await RawImage.fromBlob(request.image);
-	prepared = { photoId: request.photoId, image, embeddings: null, selection: null };
+	prepared = { photoId: request.photoId, image, embedding: null, selection: null };
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
-	post({ id: request.id, type: 'prepared', modelVersion: SMART_MASK_PACK.version, device });
+	post({
+		id: request.id,
+		type: 'prepared',
+		modelVersion: SMART_MASK_PACK.version,
+		device: objectDevice
+	});
 }
 
 async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' }>) {
 	const active = preparedImage(request.photoId);
+	try {
+		await selectObjectWithActiveDevice(request, active);
+	} catch (error) {
+		if (objectDevice === 'wasm') throw error;
+		postProgress(request.id, 'loading', null, 'retrying with compatible runtime');
+		await fallBackObjectModel(request.id, active);
+		await selectObjectWithActiveDevice(request, active);
+	}
+}
+
+async function selectObjectWithActiveDevice(
+	request: Extract<SmartMaskRequest, { type: 'object' }>,
+	active: PreparedImage
+) {
 	if (request.strokes.length === 0) throw new Error('Paint over an object before selecting it');
 	postProgress(request.id, 'loading', null, 'loading object model');
 	await loadObjectModel(request.id);
-	if (!active.embeddings) {
+	if (!active.embedding) {
 		postProgress(request.id, 'encoding', null, 'analyzing photo');
-		active.embeddings = await objectModel!.encode(active.image);
+		active.embedding = await objectModel!.encode(active.image);
 	}
-	postProgress(request.id, 'refining', null, 'refining object');
-	const previousMask =
-		active.selection?.id === request.selectionId ? active.selection.probabilities : undefined;
-	const prompt = createSegNextPrompt(request.strokes, objectModel!.inputSize, previousMask);
-	const logits = await objectModel!.decode(active.embeddings, prompt);
-	active.selection = {
-		id: request.selectionId,
-		probabilities: maskProbabilities(logits)
-	};
-	const coarseAlpha = await resizeCoarseAlpha(
-		logits,
-		objectModel!.inputSize,
-		active.image.width,
-		active.image.height
+
+	postProgress(request.id, 'refining', null, 'finding object');
+	const prompt = JSON.stringify(request.strokes);
+	if (active.selection?.id !== request.selectionId || active.selection.prompt !== prompt) {
+		active.selection = {
+			id: request.selectionId,
+			prompt,
+			result: await objectModel!.select(
+				active.embedding,
+				request.strokes,
+				active.image.width,
+				active.image.height
+			)
+		};
+	}
+	const viable = active.selection.result.candidates.filter((candidate) =>
+		usableSam2Mask(candidate, active.selection!.result.prompts)
 	);
+	if (viable.length === 0) throw new Error('The object model returned an unusable mask');
+	const index = positiveModulo(request.candidate, viable.length);
+	const coarseAlpha = await objectModel!.render(viable[index]!, active.embedding);
 	postProgress(request.id, 'refining', null, 'refining object edges');
-	const alpha = await refineObjectMask(active.image, coarseAlpha);
-	postMask(request.id, active.image.width, active.image.height, alpha);
+	const alpha = refineObjectMask(active.image, coarseAlpha);
+	postMask(request.id, active.image.width, active.image.height, alpha, {
+		index,
+		count: viable.length
+	});
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
 
@@ -118,38 +155,52 @@ function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>)
 
 async function loadObjectModel(requestId: number) {
 	if (objectModel) return;
-	const load = async () => {
-		objectModel = await SegNextRuntime.load(
-			SMART_MASK_PACK.object,
-			SMART_MASK_PACK.object.host,
-			device,
-			({ file, progress }) => postProgress(requestId, 'downloading', progress, file)
-		);
-	};
-	await withDeviceFallback(load);
+	try {
+		objectModel = await createObjectModel(requestId);
+	} catch (error) {
+		if (objectDevice === 'wasm') throw error;
+		objectDevice = 'wasm';
+		objectModel = await createObjectModel(requestId);
+	}
+}
+
+function createObjectModel(requestId: number) {
+	return Sam2ObjectRuntime.load(SMART_MASK_PACK.object, objectDevice, (progress) =>
+		reportDownload(requestId, progress)
+	);
+}
+
+async function fallBackObjectModel(requestId: number, active: PreparedImage) {
+	objectModel?.disposeEmbedding(active.embedding);
+	active.embedding = null;
+	active.selection = null;
+	await objectModel?.dispose();
+	objectModel = null;
+	objectDevice = 'wasm';
+	await loadObjectModel(requestId);
 }
 
 async function loadSubjectModel(requestId: number) {
 	if (subjectModel) return;
 	const load = async () => {
 		subjectModel = await pipeline('background-removal', SMART_MASK_PACK.subject.id, {
-			...modelOptions(SMART_MASK_PACK.subject, requestId)
+			...modelOptions(SMART_MASK_PACK.subject, subjectDevice, requestId)
 		});
 	};
-	await withDeviceFallback(load);
-}
-
-async function withDeviceFallback(load: () => Promise<void>) {
 	try {
 		await load();
 	} catch (error) {
-		if (device === 'wasm') throw error;
-		device = 'wasm';
+		if (subjectDevice === 'wasm') throw error;
+		subjectDevice = 'wasm';
 		await load();
 	}
 }
 
-function modelOptions(model: (typeof SMART_MASK_PACK)['subject'], requestId: number) {
+function modelOptions(
+	model: (typeof SMART_MASK_PACK)['subject'],
+	device: SmartMaskDevice,
+	requestId: number
+) {
 	return {
 		revision: model.revision,
 		dtype: model.dtype,
@@ -159,18 +210,36 @@ function modelOptions(model: (typeof SMART_MASK_PACK)['subject'], requestId: num
 }
 
 function reportDownload(requestId: number, progress: ProgressInfo) {
-	if (progress.status !== 'progress') return;
-	postProgress(requestId, 'downloading', progress.progress, progress.file);
+	if (progress.status === 'progress_total') {
+		postProgress(requestId, 'downloading', progress.progress, 'object model');
+	} else if (progress.status === 'progress') {
+		postProgress(requestId, 'downloading', progress.progress, progress.file);
+	}
 }
 
-function postMask(id: number, width: number, height: number, alpha: Uint8Array) {
+function postMask(
+	id: number,
+	width: number,
+	height: number,
+	alpha: Uint8Array,
+	alternatives?: { index: number; count: number }
+) {
 	const buffer = alpha.buffer.slice(
 		alpha.byteOffset,
 		alpha.byteOffset + alpha.byteLength
 	) as ArrayBuffer;
-	post({ id, type: 'mask', modelVersion: SMART_MASK_PACK.version, width, height, alpha: buffer }, [
-		buffer
-	]);
+	post(
+		{
+			id,
+			type: 'mask',
+			modelVersion: SMART_MASK_PACK.version,
+			width,
+			height,
+			alpha: buffer,
+			alternatives
+		},
+		[buffer]
+	);
 }
 
 function postProgress(
@@ -183,36 +252,23 @@ function postProgress(
 }
 
 function preparedImage(photoId: string) {
-	if (!prepared || prepared.photoId !== photoId)
+	if (!prepared || prepared.photoId !== photoId) {
 		throw new Error('Prepare this photo for smart masking');
+	}
 	return prepared;
 }
 
 function resetPreparedImage() {
-	prepared?.embeddings?.dispose();
+	objectModel?.disposeEmbedding(prepared?.embedding ?? null);
 	prepared = null;
-}
-
-function maskProbabilities(logits: Float32Array) {
-	return Float32Array.from(logits, (logit) => 1 / (1 + Math.exp(-logit)));
-}
-
-async function resizeCoarseAlpha(
-	logits: Float32Array,
-	size: number,
-	width: number,
-	height: number
-) {
-	if (logits.length !== size * size) throw new Error('SegNext returned an invalid mask');
-	const probabilities = Uint8Array.from(logits, (logit) =>
-		Math.round((1 / (1 + Math.exp(-logit))) * 255)
-	);
-	const resized = await new RawImage(probabilities, size, size, 1).resize(width, height);
-	return Uint8Array.from(resized.data);
 }
 
 function supportsWebGpu() {
 	return 'gpu' in navigator && navigator.gpu !== undefined;
+}
+
+function positiveModulo(value: number, divisor: number) {
+	return ((value % divisor) + divisor) % divisor;
 }
 
 function errorMessage(error: unknown) {

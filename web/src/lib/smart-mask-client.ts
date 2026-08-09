@@ -43,10 +43,15 @@ export class SmartMaskClient {
 		return this.send((id) => ({ id, type: 'prepare', photoId, image }), 'prepared');
 	}
 
-	async selectObject(photoId: string, selectionId: string, strokes: SmartMaskStroke[]) {
+	async selectObject(
+		photoId: string,
+		selectionId: string,
+		strokes: SmartMaskStroke[],
+		candidate = 0
+	) {
 		const parsed = strokes.map((stroke) => smartMaskStrokeSchema.parse(stroke));
 		const response = await this.send(
-			(id) => ({ id, type: 'object', photoId, selectionId, strokes: parsed }),
+			(id) => ({ id, type: 'object', photoId, selectionId, strokes: parsed, candidate }),
 			'mask'
 		);
 		return rasterFromResponse(response);
@@ -167,7 +172,8 @@ function rasterFromResponse(
 	return {
 		width: response.width,
 		height: response.height,
-		alpha: new Uint8Array(response.alpha)
+		alpha: new Uint8Array(response.alpha),
+		alternatives: response.alternatives
 	};
 }
 

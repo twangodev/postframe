@@ -8,40 +8,21 @@ const smartMaskModelSchema = z.object({
 	dtype: z.enum(['fp32', 'fp16', 'q8', 'int8', 'uint8', 'q4', 'q4f16', 'bnb4'])
 });
 
-const segNextModelSchema = z.object({
-	host: z.string().url(),
-	source: z.string().url(),
-	revision: z.string().min(1),
-	license: z.literal('MIT'),
-	precision: z.literal('fp32'),
-	inputSize: z.number().int().positive(),
-	files: z.object({
-		encoder: z.string().min(1),
-		decoder: z.string().min(1)
-	})
-});
-
 export const smartMaskPackSchema = z.object({
 	version: z.string().min(1),
 	subjectHost: z.string().url(),
-	object: segNextModelSchema,
+	object: smartMaskModelSchema,
 	subject: smartMaskModelSchema
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'segnext-vitb-4c45ce8-fp32-rgb-edge-v2-ormbg-main',
+	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main',
 	subjectHost: 'https://huggingface.co/',
 	object: {
-		host: 'https://huggingface.co/twangodev/segnext-vitb-sa2-hqseg44k-onnx/resolve/8a9b6fb7d796e4add92e666d76a2f86b636ae268',
-		source: 'https://github.com/uncbiag/SegNext',
-		revision: '4c45ce8bfa8d3121d36d71f0ff263555805dad89',
-		license: 'MIT',
-		precision: 'fp32',
-		inputSize: 1024,
-		files: {
-			encoder: 'encoder.fp32.onnx',
-			decoder: 'decoder.fp32.onnx'
-		}
+		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
+		revision: '814a066640debee5a91e70aa401fb8e17e030503',
+		license: 'Apache-2.0',
+		dtype: 'fp32'
 	},
 	subject: {
 		id: 'onnx-community/ormbg-ONNX',
@@ -51,7 +32,8 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 	}
 });
 
-export type SegNextModel = z.infer<typeof segNextModelSchema>;
+export type SmartMaskModel = z.infer<typeof smartMaskModelSchema>;
+export type SmartMaskDevice = 'webgpu' | 'wasm';
 
 export const smartMaskStrokeSchema = z.object({
 	label: maskPromptLabelSchema,
@@ -71,6 +53,7 @@ export interface SmartMaskRaster {
 	width: number;
 	height: number;
 	alpha: Uint8Array;
+	alternatives?: { index: number; count: number };
 }
 
 export type SmartMaskPhase =
@@ -90,6 +73,7 @@ export type SmartMaskRequest =
 			photoId: string;
 			selectionId: string;
 			strokes: SmartMaskStroke[];
+			candidate: number;
 	  }
 	| { id: number; type: 'subject'; photoId: string }
 	| {
@@ -105,7 +89,7 @@ export type SmartMaskRequest =
 
 export type SmartMaskResponse =
 	| ({ id: number; type: 'progress' } & SmartMaskProgress)
-	| { id: number; type: 'prepared'; modelVersion: string; device: 'webgpu' | 'wasm' }
+	| { id: number; type: 'prepared'; modelVersion: string; device: SmartMaskDevice }
 	| {
 			id: number;
 			type: 'mask';
@@ -113,6 +97,7 @@ export type SmartMaskResponse =
 			width: number;
 			height: number;
 			alpha: ArrayBuffer;
+			alternatives?: { index: number; count: number };
 	  }
 	| { id: number; type: 'reset' }
 	| { id: number; type: 'error'; message: string };
