@@ -10,14 +10,14 @@ const smartMaskModelSchema = z.object({
 
 export const smartMaskPackSchema = z.object({
 	version: z.string().min(1),
-	subjectHost: z.string().url(),
+	modelHost: z.string().url(),
 	object: smartMaskModelSchema,
 	subject: smartMaskModelSchema
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main',
-	subjectHost: 'https://huggingface.co/',
+	modelHost: 'https://huggingface.co/',
 	object: {
 		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
 		revision: '814a066640debee5a91e70aa401fb8e17e030503',

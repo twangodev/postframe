@@ -33,7 +33,7 @@ let prepared: PreparedImage | null = null;
 env.useBrowserCache = false;
 env.useCustomCache = true;
 env.customCache = new OpfsModelCache();
-env.remoteHost = import.meta.env.VITE_SMART_MASK_MODEL_HOST ?? SMART_MASK_PACK.subjectHost;
+env.remoteHost = import.meta.env.VITE_SMART_MASK_MODEL_HOST ?? SMART_MASK_PACK.modelHost;
 
 const post = (message: SmartMaskResponse, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);
