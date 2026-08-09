@@ -15,6 +15,20 @@ export interface Sam2PointPrompt {
 	labels: (0 | 1)[][][];
 }
 
+export function fitSam2PromptToPaddedImage(
+	points: Sam2PromptPoint[],
+	reshapedSize: [number, number],
+	paddedSize: [number, number]
+) {
+	const [reshapedHeight, reshapedWidth] = reshapedSize;
+	const [paddedHeight, paddedWidth] = paddedSize;
+	return points.map((point) => ({
+		...point,
+		x: point.x * (reshapedWidth / paddedWidth),
+		y: point.y * (reshapedHeight / paddedHeight)
+	}));
+}
+
 export function createSam2PointPrompt(
 	strokes: SmartMaskStroke[],
 	imageWidth: number,
@@ -35,7 +49,10 @@ export function createSam2PointPrompt(
 		points,
 		coordinates: [
 			[
-				points.map(({ x, y }) => [x * Math.max(0, imageWidth - 1), y * Math.max(0, imageHeight - 1)])
+				points.map(({ x, y }) => [
+					x * Math.max(0, imageWidth - 1),
+					y * Math.max(0, imageHeight - 1)
+				])
 			]
 		],
 		labels: [[points.map(({ label }) => label)]]
@@ -51,10 +68,7 @@ function sampleStroke(points: NormalizedPoint[], imageWidth: number, imageHeight
 		return {
 			start,
 			end: point,
-			length: Math.hypot(
-				(point.x - start.x) * imageWidth,
-				(point.y - start.y) * imageHeight
-			)
+			length: Math.hypot((point.x - start.x) * imageWidth, (point.y - start.y) * imageHeight)
 		};
 	});
 	const length = segments.reduce((total, segment) => total + segment.length, 0);
@@ -94,7 +108,8 @@ function fitPromptBudget(points: Sam2PromptPoint[]) {
 }
 
 function evenlySpaced<T>(values: T[], count: number) {
-	return Array.from({ length: count }, (_, index) =>
-		values[Math.round(index * ((values.length - 1) / (count - 1)))]!
+	return Array.from(
+		{ length: count },
+		(_, index) => values[Math.round(index * ((values.length - 1) / (count - 1)))]!
 	);
 }

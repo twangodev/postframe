@@ -82,6 +82,27 @@ test('prepares a photo before requesting prompted masks', async () => {
 		alpha: new Uint8Array([0, 255, 255, 0]),
 		alternatives: { index: 0, count: 3 }
 	});
+
+	const cycling = client.selectObject(
+		'photo-one',
+		'selection-one',
+		[{ label: 'foreground', points: [{ x: 0.25, y: 0.75 }] }],
+		2
+	);
+	assert.equal(
+		workers[0]?.messages[2]?.type === 'object' ? workers[0].messages[2].candidate : null,
+		2
+	);
+	workers[0]?.respond({
+		id: 3,
+		type: 'mask',
+		modelVersion: client.modelVersion,
+		width: 2,
+		height: 2,
+		alpha: new Uint8Array([255, 0, 0, 255]).buffer,
+		alternatives: { index: 2, count: 3 }
+	});
+	assert.deepEqual((await cycling).alternatives, { index: 2, count: 3 });
 	client.destroy();
 });
 

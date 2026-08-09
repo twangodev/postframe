@@ -49,6 +49,13 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 	maskComponentBaseSchema.extend({
 		type: z.literal('ai-object'),
 		modelVersion: z.string().min(1).nullable(),
+		alternatives: z
+			.object({
+				index: z.number().int().nonnegative(),
+				count: z.number().int().positive()
+			})
+			.refine(({ index, count }) => index < count, { message: 'mask alternative is out of range' })
+			.optional(),
 		prompts: z.array(
 			z.object({
 				label: maskPromptLabelSchema,

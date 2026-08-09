@@ -111,6 +111,7 @@ test('adds and replaces persistent mask components by id', () => {
 		type: 'ai-object',
 		operation: 'add',
 		modelVersion: 'model-one',
+		alternatives: { index: 0, count: 3 },
 		prompts: [{ label: 'foreground', points: [{ x: 0.5, y: 0.5 }] }],
 		raster: {
 			storageName: 'photo-one-component-one.mask',

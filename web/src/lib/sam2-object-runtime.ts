@@ -6,17 +6,18 @@ import {
 	type RawImage
 } from '@huggingface/transformers';
 import { rankSam2MaskCandidates, type RankedSam2MaskCandidate } from './sam2-candidates.ts';
-import { createSam2PointPrompt, type Sam2PromptPoint } from './sam2-prompt.ts';
-import type {
-	SmartMaskDevice,
-	SmartMaskModel,
-	SmartMaskStroke
-} from './smart-mask.ts';
+import {
+	createSam2PointPrompt,
+	fitSam2PromptToPaddedImage,
+	type Sam2PromptPoint
+} from './sam2-prompt.ts';
+import type { SmartMaskDevice, SmartMaskModel, SmartMaskStroke } from './smart-mask.ts';
 
 export interface Sam2ImageEmbedding {
 	tensors: Record<string, Tensor>;
 	originalSizes: [number, number][];
 	reshapedInputSizes: [number, number][];
+	paddedSize: [number, number];
 }
 
 export interface Sam2Selection {
@@ -33,11 +34,7 @@ export class Sam2ObjectRuntime {
 		private readonly processor: Sam2Processor
 	) {}
 
-	static async load(
-		model: SmartMaskModel,
-		device: SmartMaskDevice,
-		onProgress: ProgressCallback
-	) {
+	static async load(model: SmartMaskModel, device: SmartMaskDevice, onProgress: ProgressCallback) {
 		const options = {
 			revision: model.revision,
 			dtype: model.dtype,
@@ -53,11 +50,14 @@ export class Sam2ObjectRuntime {
 
 	async encode(image: RawImage): Promise<Sam2ImageEmbedding> {
 		const inputs = await this.processor(image);
+		const [, , paddedHeight, paddedWidth] = inputs.pixel_values.dims;
+		if (!paddedHeight || !paddedWidth) throw new Error('SAM 2 produced invalid image dimensions');
 		try {
 			return {
 				tensors: await this.model.get_image_embeddings({ pixel_values: inputs.pixel_values }),
 				originalSizes: inputs.original_sizes,
-				reshapedInputSizes: inputs.reshaped_input_sizes
+				reshapedInputSizes: inputs.reshaped_input_sizes,
+				paddedSize: [paddedHeight, paddedWidth]
 			};
 		} finally {
 			inputs.pixel_values.dispose();
@@ -76,11 +76,11 @@ export class Sam2ObjectRuntime {
 			embedding.originalSizes,
 			embedding.reshapedInputSizes
 		);
-		const inputLabels = new Tensor(
-			'int64',
-			BigInt64Array.from(prompt.labels.flat(2), BigInt),
-			[1, 1, prompt.points.length]
-		);
+		const inputLabels = new Tensor('int64', BigInt64Array.from(prompt.labels.flat(2), BigInt), [
+			1,
+			1,
+			prompt.points.length
+		]);
 		try {
 			const output = await this.model.forward({
 				...embedding.tensors,
@@ -88,9 +88,14 @@ export class Sam2ObjectRuntime {
 				input_labels: inputLabels
 			});
 			try {
+				const candidatePrompts = fitSam2PromptToPaddedImage(
+					prompt.points,
+					embedding.reshapedInputSizes[0]!,
+					embedding.paddedSize
+				);
 				return {
-					prompts: prompt.points,
-					candidates: rankSam2MaskCandidates(candidatesFrom(output), prompt.points)
+					prompts: candidatePrompts,
+					candidates: rankSam2MaskCandidates(candidatesFrom(output), candidatePrompts)
 				};
 			} finally {
 				disposeOutput(output);
@@ -101,10 +106,7 @@ export class Sam2ObjectRuntime {
 		}
 	}
 
-	async render(
-		candidate: RankedSam2MaskCandidate,
-		embedding: Sam2ImageEmbedding
-	) {
+	async render(candidate: RankedSam2MaskCandidate, embedding: Sam2ImageEmbedding) {
 		const logits = new Tensor('float32', candidate.logits, [
 			1,
 			1,

@@ -63,6 +63,7 @@ test('records commands containing reactive mask arrays as plain history data', (
 		type: 'ai-object',
 		operation: 'add',
 		modelVersion: 'model-one',
+		alternatives: { index: 0, count: 3 },
 		prompts: [
 			{
 				label: 'foreground',

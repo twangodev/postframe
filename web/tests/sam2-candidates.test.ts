@@ -31,7 +31,13 @@ test('rejects point-shaped and non-finite model output', () => {
 });
 
 test('accepts an object-sized candidate that obeys included and excluded points', () => {
-	assert.equal(usableSam2Mask(candidate((x) => x < 5, 0.9), prompts), true);
+	assert.equal(
+		usableSam2Mask(
+			candidate((x) => x < 5, 0.9),
+			prompts
+		),
+		true
+	);
 });
 
 function candidate(

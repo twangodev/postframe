@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createSam2PointPrompt } from '../src/lib/sam2-prompt.ts';
+import { createSam2PointPrompt, fitSam2PromptToPaddedImage } from '../src/lib/sam2-prompt.ts';
+
+test('maps prompts into the valid region of the padded mask grid', () => {
+	const [point] = fitSam2PromptToPaddedImage(
+		[{ x: 0.5, y: 0.5, label: 1 }],
+		[683, 1024],
+		[1024, 1024]
+	);
+
+	assert.deepEqual(point, { x: 0.5, y: 683 / 2048, label: 1 });
+});
 
 test('turns a painted path into sparse points instead of a raster mask', () => {
 	const prompt = createSam2PointPrompt(
@@ -16,7 +26,10 @@ test('turns a painted path into sparse points instead of a raster mask', () => {
 	);
 
 	assert.equal(prompt.points.length, 5);
-	assert.deepEqual(prompt.points.map(({ label }) => label), [1, 1, 1, 1, 1]);
+	assert.deepEqual(
+		prompt.points.map(({ label }) => label),
+		[1, 1, 1, 1, 1]
+	);
 	assert.deepEqual(prompt.coordinates[0]?.[0]?.at(0), [0, 249.5]);
 	assert.ok(Math.abs(prompt.coordinates[0]![0]!.at(-1)![0] - 999) < 1e-9);
 	assert.equal(prompt.coordinates[0]![0]!.at(-1)![1], 249.5);
@@ -36,12 +49,7 @@ test('preserves foreground and background corrections within the prompt budget',
 
 test('requires at least one included point', () => {
 	assert.throws(
-		() =>
-			createSam2PointPrompt(
-				[{ label: 'background', points: [{ x: 0.5, y: 0.5 }] }],
-				100,
-				100
-			),
+		() => createSam2PointPrompt([{ label: 'background', points: [{ x: 0.5, y: 0.5 }] }], 100, 100),
 		/Paint over the object/
 	);
 });

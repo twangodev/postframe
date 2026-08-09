@@ -76,4 +76,15 @@ test('rejects mismatched photos, duplicate masks, and invalid normalized crops',
 		}).success,
 		false
 	);
+	const object = createEditMask('object-one', 'object');
+	object.components.push({
+		id: 'component-one',
+		type: 'ai-object',
+		operation: 'add',
+		modelVersion: 'model-one',
+		alternatives: { index: 2, count: 2 },
+		prompts: [{ label: 'foreground', points: [{ x: 0.5, y: 0.5 }] }],
+		raster: null
+	});
+	assert.equal(editDocumentSchema.safeParse({ ...document, masks: [object] }).success, false);
 });

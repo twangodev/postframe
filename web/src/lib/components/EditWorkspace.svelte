@@ -8,6 +8,8 @@
 		CircleDashed,
 		CloudSun,
 		Columns2,
+		ChevronLeft,
+		ChevronRight,
 		Eye,
 		EyeOff,
 		History,
@@ -126,6 +128,9 @@
 	);
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
+	);
+	const selectedObjectComponent = $derived(
+		selectedMask?.components.find((component) => component.type === 'ai-object') ?? null
 	);
 	const canRefineSelectedMask = $derived(
 		selectedMask?.components.filter(
@@ -1576,6 +1581,37 @@
 
 					{#if selectedMask}
 						<Panel title="Mask adjustments" meta={selectedMask.name}>
+							{#if selectedObjectComponent?.alternatives && selectedObjectComponent.alternatives.count > 1}
+								<div
+									class="border-subtle mb-2 flex h-8 items-center justify-between rounded border px-1"
+								>
+									<button
+										type="button"
+										aria-label="Previous object candidate"
+										disabled={smartMaskWorking}
+										class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
+										onclick={() => workspace.cycleObjectMaskCandidate(-1)}
+									>
+										<ChevronLeft size={12} />
+									</button>
+									<span class="text-muted text-[9px] lowercase">
+										candidate
+										<span class="text-text font-mono"
+											>{selectedObjectComponent.alternatives.index + 1}/{selectedObjectComponent
+												.alternatives.count}</span
+										>
+									</span>
+									<button
+										type="button"
+										aria-label="Next object candidate"
+										disabled={smartMaskWorking}
+										class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
+										onclick={() => workspace.cycleObjectMaskCandidate(1)}
+									>
+										<ChevronRight size={12} />
+									</button>
+								</div>
+							{/if}
 							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">edge</p>
 							<AdjustmentSlider
 								label="Definition"
