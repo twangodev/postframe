@@ -1084,6 +1084,7 @@ dependencies = [
  "rayon",
  "thiserror",
  "ultrahdr-rs",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-rayon",
  "zune-jpeg",
