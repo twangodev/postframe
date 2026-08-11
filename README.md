@@ -1,6 +1,6 @@
 # postframe
 
-[![build](https://img.shields.io/github/actions/workflow/status/twangodev/postframe/rust.yml?branch=main)](https://github.com/twangodev/postframe/actions/workflows/rust.yml)
+[![build](https://img.shields.io/github/actions/workflow/status/twangodev/postframe/ci.yml?branch=main)](https://github.com/twangodev/postframe/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/twangodev/postframe)](LICENSE)
 
 Post-processing built on your JPEGs.
