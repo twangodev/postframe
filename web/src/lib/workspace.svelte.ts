@@ -13,7 +13,13 @@ import type {
 	StoredPhoto
 } from './library-schema';
 import { PostframeWorkerClient } from './worker-client';
-import { smartMaskTask, viewportTask, type ProgressTask } from './progress-task';
+import {
+	backgroundTasks as composeBackgroundTasks,
+	smartMaskTask,
+	viewportTask,
+	type BackgroundTask,
+	type ProgressTask
+} from './progress-task';
 import {
 	groupPhotoFiles,
 	type PhotoAsset as GroupedPhotoAsset,
@@ -174,6 +180,7 @@ export class WorkspaceState {
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
 	private smartMaskClient: SmartMaskClient | null = null;
+	private modelWarmupId: number | null = null;
 	private readonly rawExtensions = new Set<string>();
 	private capabilityLoading: Promise<void> | null = null;
 	private libraryRevision = 0;
@@ -243,6 +250,12 @@ export class WorkspaceState {
 		detail: '',
 		error: null
 	});
+	modelPreloadStatus = $state<SmartMaskStatus>({
+		phase: 'idle',
+		progress: null,
+		detail: '',
+		error: null
+	});
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
 	renderSettings = $state({ settings: defaultLightSettings(), revision: 0 });
@@ -265,7 +278,9 @@ export class WorkspaceState {
 	viewportProgress: ProgressTask | null = $derived(
 		viewportTask(this.documentStatus, this.developPreview, this.selectedPhoto?.id ?? null)
 	);
-	smartMaskProgress: ProgressTask | null = $derived(smartMaskTask(this.smartMaskStatus));
+	backgroundTasks: BackgroundTask[] = $derived(
+		composeBackgroundTasks(this.documentStatus, this.smartMaskStatus, this.modelPreloadStatus)
+	);
 	canAdjustLight = $derived(
 		this.selectedPhoto !== null &&
 			this.documentStatus.kind === 'ready' &&
@@ -1284,11 +1299,27 @@ export class WorkspaceState {
 		if (typeof Worker === 'undefined') return null;
 		this.smartMaskClient = new SmartMaskClient();
 		this.removeSmartMaskProgressListener = this.smartMaskClient.onProgress((progress) => {
+			if (progress.id === this.modelWarmupId) {
+				this.modelPreloadStatus = { ...progress, error: null };
+				return;
+			}
 			if (!this.activeSmartMaskPhotoId) return;
 			this.smartMaskStatus = { ...progress, error: null };
 		});
 		return this.smartMaskClient;
 	}
+
+	preloadSmartMaskModels = () => {
+		if (this.modelWarmupId !== null) return;
+		const client = this.smartMask();
+		if (!client) return;
+		const { id, done } = client.warmup();
+		this.modelWarmupId = id;
+		done.catch((error: unknown) => {
+			const message = error instanceof Error ? error.message : 'Unable to load smart mask models';
+			this.modelPreloadStatus = { phase: 'error', progress: null, detail: message, error: message };
+		});
+	};
 
 	private async ensureSmartMaskPrepared(photoId: string) {
 		if (this.preparedSmartMaskPhotoId === photoId) return;

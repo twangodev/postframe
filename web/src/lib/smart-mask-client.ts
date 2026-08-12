@@ -22,7 +22,7 @@ interface PendingRequest {
 }
 
 type WorkerFactory = () => Worker;
-type ProgressListener = (progress: SmartMaskProgress) => void;
+type ProgressListener = (progress: Extract<SmartMaskResponse, { type: 'progress' }>) => void;
 
 export class SmartMaskClient {
 	readonly modelVersion = SMART_MASK_PACK.version;
@@ -41,6 +41,15 @@ export class SmartMaskClient {
 
 	async prepare(photoId: string, image: Blob) {
 		return this.send((id) => ({ id, type: 'prepare', photoId, image }), 'prepared');
+	}
+
+	warmup() {
+		let requestId = 0;
+		const done = this.send((id) => {
+			requestId = id;
+			return { id, type: 'warmup' as const };
+		}, 'warmed').then(() => undefined);
+		return { id: requestId, done };
 	}
 
 	async selectObject(

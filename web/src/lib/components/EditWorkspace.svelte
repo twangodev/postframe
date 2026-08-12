@@ -1398,11 +1398,6 @@
 								><Scan size={15} /><span>object</span></button
 							>
 						</div>
-						{#if workspace.smartMaskProgress}
-							<div class="mt-2">
-								<ProgressCard task={workspace.smartMaskProgress} variant="inline" />
-							</div>
-						{/if}
 					</div>
 
 					<div class="border-subtle border-b p-3">
