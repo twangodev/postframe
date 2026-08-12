@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { MonitorUp } from '@lucide/svelte';
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import EditWorkspace from '$lib/components/EditWorkspace.svelte';
 	import ExportDialog from '$lib/components/ExportDialog.svelte';
 	import OrganizeWorkspace from '$lib/components/OrganizeWorkspace.svelte';
+	import TaskManager from '$lib/components/ui/TaskManager.svelte';
 	import Welcome from '$lib/components/Welcome.svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import { WorkspaceState } from '$lib/workspace.svelte';
@@ -13,6 +14,9 @@
 	let exportOpen = $state(false);
 
 	onDestroy(workspace.destroy);
+	onMount(() => {
+		workspace.preloadSmartMaskModels();
+	});
 </script>
 
 <svelte:head>
@@ -81,3 +85,8 @@
 
 	<ExportDialog bind:open={exportOpen} {workspace} />
 {/if}
+
+<TaskManager
+	tasks={workspace.backgroundTasks}
+	cancel={{ key: 'develop', run: workspace.cancelDocument }}
+/>
