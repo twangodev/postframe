@@ -434,7 +434,7 @@ export class LibraryCatalog {
 	}
 
 	async clear() {
-		await this.database.delete();
+		await this.database.delete({ disableAutoOpen: false });
 	}
 
 	close() {

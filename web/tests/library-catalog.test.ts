@@ -225,3 +225,17 @@ test('deletes the local catalog', async () => {
 		await reopened.clear();
 	}
 });
+
+test('stays usable for new imports after clearing', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		await catalog.saveLibrary(manifest());
+		await catalog.clear();
+
+		assert.equal(await catalog.loadLibrary(), null);
+		const resolution = await catalog.resolveImports([manifest().photos[0]]);
+		assert.equal(resolution.additions.length, 1);
+	} finally {
+		await catalog.clear();
+	}
+});
