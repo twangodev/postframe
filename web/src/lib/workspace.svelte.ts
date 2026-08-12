@@ -1943,7 +1943,4 @@ function neutralLight(settings: LightSettings) {
 	return LIGHT_CONTROL_NAMES.every((control) => settings[control] === 0);
 }
 
-export function formatBytes(bytes: number) {
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+export { formatBytes } from './progress-task';
