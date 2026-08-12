@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatBytes, smartMaskTask, viewportTask } from '../src/lib/progress-task.ts';
+import {
+	backgroundTasks,
+	formatBytes,
+	progressKind,
+	smartMaskTask,
+	viewportTask
+} from '../src/lib/progress-task.ts';
 import type { DocumentStatus, SmartMaskStatus } from '../src/lib/workspace.svelte.ts';
 
 type Loading = Extract<DocumentStatus, { kind: 'loading' }>;
@@ -157,4 +163,53 @@ test('smart mask errors surface regardless of phase', () => {
 test('formatBytes switches units at one megabyte', () => {
 	assert.equal(formatBytes(512), '0.5 KB');
 	assert.equal(formatBytes(3 * 1024 * 1024), '3.0 MB');
+});
+
+test('progressKind discriminates on percent presence', () => {
+	assert.equal(progressKind({ label: 'x', detail: null, progress: 40, error: null }), 'realtime');
+	assert.equal(progressKind({ label: 'x', detail: null, progress: null, error: null }), 'infinite');
+});
+
+test('backgroundTasks composes develop, smart mask, and preload in order', () => {
+	const tasks = backgroundTasks(
+		loading({ bytesRead: 1024, totalBytes: 4096 }),
+		mask({ phase: 'encoding', detail: 'analyzing photo' }),
+		mask({ phase: 'downloading', progress: 60, detail: 'object model' })
+	);
+	assert.deepEqual(
+		tasks.map((entry) => [entry.key, entry.name, entry.kind]),
+		[
+			['develop', 'developing photo', 'realtime'],
+			['smart-mask', 'smart mask', 'infinite'],
+			['model-preload', 'smart mask models', 'realtime']
+		]
+	);
+	assert.equal(tasks[0].task.label, 'reading originals');
+});
+
+test('backgroundTasks omits idle, ready, and terminal sources', () => {
+	assert.deepEqual(
+		backgroundTasks({ kind: 'idle' }, mask(), mask({ phase: 'ready', progress: 100 })),
+		[]
+	);
+	assert.deepEqual(
+		backgroundTasks({ kind: 'error', photoId: 'p1', message: 'boom' }, mask(), mask()),
+		[]
+	);
+});
+
+test('backgroundTasks keeps preload errors visible', () => {
+	const tasks = backgroundTasks(
+		{ kind: 'idle' },
+		mask(),
+		mask({ phase: 'error', detail: 'download failed', error: 'download failed' })
+	);
+	assert.equal(tasks.length, 1);
+	assert.equal(tasks[0].key, 'model-preload');
+	assert.equal(tasks[0].task.error, 'download failed');
+});
+
+test('develop entry ignores photo identity', () => {
+	const tasks = backgroundTasks(loading({ photoId: 'other' }), mask(), mask());
+	assert.equal(tasks[0]?.key, 'develop');
 });

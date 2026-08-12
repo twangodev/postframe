@@ -28,17 +28,21 @@ export function viewportTask(
 	activePhotoId: string | null
 ): ProgressTask | null {
 	if (status.kind === 'loading' && status.photoId === activePhotoId) {
-		return {
-			label: DEVELOP_LABELS[status.phase],
-			detail: developDetail(status),
-			progress: developPercent(status),
-			error: null
-		};
+		return developTask(status);
 	}
 	if (preview && preview.photoId === activePhotoId) {
 		return { label: PREVIEW_LABELS[preview.phase], detail: null, progress: null, error: null };
 	}
 	return null;
+}
+
+function developTask(status: LoadingStatus): ProgressTask {
+	return {
+		label: DEVELOP_LABELS[status.phase],
+		detail: developDetail(status),
+		progress: developPercent(status),
+		error: null
+	};
 }
 
 function developDetail(status: LoadingStatus) {
@@ -79,6 +83,39 @@ export function smartMaskTask(status: SmartMaskStatus): ProgressTask | null {
 	}
 	if (!SMART_MASK_WORKING.has(status.phase)) return null;
 	return { label: status.detail, detail: null, progress: status.progress, error: null };
+}
+
+export type ProgressKind = 'realtime' | 'infinite';
+
+export interface BackgroundTask {
+	key: string;
+	name: string;
+	kind: ProgressKind;
+	task: ProgressTask;
+}
+
+export function progressKind(task: ProgressTask): ProgressKind {
+	return task.progress === null ? 'infinite' : 'realtime';
+}
+
+export function backgroundTasks(
+	status: DocumentStatus,
+	smartMask: SmartMaskStatus,
+	preload: SmartMaskStatus
+): BackgroundTask[] {
+	const entries: BackgroundTask[] = [];
+	if (status.kind === 'loading') {
+		entries.push(entry('develop', 'developing photo', developTask(status)));
+	}
+	const maskTask = smartMaskTask(smartMask);
+	if (maskTask) entries.push(entry('smart-mask', 'smart mask', maskTask));
+	const preloadTask = smartMaskTask(preload);
+	if (preloadTask) entries.push(entry('model-preload', 'smart mask models', preloadTask));
+	return entries;
+}
+
+function entry(key: string, name: string, task: ProgressTask): BackgroundTask {
+	return { key, name, kind: progressKind(task), task };
 }
 
 export function formatBytes(bytes: number) {
