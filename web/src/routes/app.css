@@ -66,16 +66,6 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-select {
-	font: inherit;
-}
-
-button {
-	color: inherit;
-}
-
 button:not(:disabled):active,
 label:has(> input[type='file']):active {
 	transform: scale(0.975);
