@@ -25,7 +25,7 @@
 		>
 			{task.error ?? task.label}
 			{#if !task.error && task.detail}
-				<span class="font-mono text-[9px] opacity-40 tabular-nums">· {task.detail}</span>
+				<span class="font-mono text-[9px] tabular-nums opacity-40">· {task.detail}</span>
 			{/if}
 		</p>
 		{#if onCancel}

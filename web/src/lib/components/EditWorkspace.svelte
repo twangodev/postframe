@@ -36,16 +36,11 @@
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
+	import ProgressCard from './ui/ProgressCard.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
-	import {
-		formatBytes,
-		type DocumentStatus,
-		type MaskKind,
-		type WorkspaceState
-	} from '$lib/workspace.svelte';
+	import { type MaskKind, type WorkspaceState } from '$lib/workspace.svelte';
 	import type { LightControlName } from '$lib/develop-settings';
 	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
-	import type { DevelopPhase } from '$lib/worker';
 	import {
 		ZOOM_MENU_PRESETS,
 		clampTransform,
@@ -142,7 +137,6 @@
 	const smartMaskWorking = $derived(
 		['downloading', 'loading', 'encoding', 'refining'].includes(workspace.smartMaskStatus.phase)
 	);
-	type LoadingDocument = Extract<DocumentStatus, { kind: 'loading' }>;
 	const selectionTools = new Set([
 		'object-select',
 		'quick-select',
@@ -695,40 +689,6 @@
 		chooseTool('mask-refine', 'refine edge');
 		maskPreviewMode = 'overlay';
 	}
-
-	function developPhaseLabel(phase: DevelopPhase) {
-		return {
-			reading: 'reading originals',
-			decoding: 'decoding raw',
-			merging: 'aligning + merging',
-			rendering: 'rendering preview'
-		}[phase];
-	}
-
-	function developDetail(status: LoadingDocument) {
-		switch (status.phase) {
-			case 'reading':
-				return status.totalBytes > 0
-					? `${formatBytes(status.bytesRead)} / ${formatBytes(status.totalBytes)}`
-					: 'locating originals';
-			case 'decoding':
-				return `frame ${status.activeFrame} / ${status.totalFrames}`;
-			case 'merging':
-				return status.totalFrames > 1 ? `${status.totalFrames} exposures` : 'building image';
-			case 'rendering':
-				return 'SDR preview';
-		}
-	}
-
-	function developProgress(status: LoadingDocument) {
-		if (status.phase === 'reading' && status.totalBytes > 0) {
-			return (status.bytesRead / status.totalBytes) * 100;
-		}
-		if (status.phase === 'decoding' && status.totalFrames > 1) {
-			return (status.framesDecoded / status.totalFrames) * 100;
-		}
-		return null;
-	}
 </script>
 
 <div class="bg-canvas flex min-h-0 flex-1 flex-col">
@@ -1037,18 +997,6 @@
 								<div class="develop-dither absolute inset-0"></div>
 								<div class="develop-glimmer absolute"></div>
 							</div>
-							<div
-								class="border-subtle bg-bg/90 text-muted pointer-events-none absolute bottom-3 left-1/2 z-30 w-36 -translate-x-1/2 overflow-hidden rounded border px-2 py-1.5 text-[9px] shadow-lg backdrop-blur"
-							>
-								<span>
-									{workspace.developPreview.phase === 'refining'
-										? 'refining tiles'
-										: 'applying light'}
-								</span>
-								<div class="bg-subtle mt-1 h-px overflow-hidden">
-									<div class="develop-progress-sweep bg-text h-full w-1/3"></div>
-								</div>
-							</div>
 						{/if}
 						<div
 							class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
@@ -1125,38 +1073,18 @@
 							before
 						</span>
 					{/if}
-					{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id}
+					{#if workspace.viewportProgress}
 						<div
-							class="pointer-events-none absolute right-3 bottom-3 left-3 flex justify-center text-white"
+							class="pointer-events-none absolute right-3 bottom-3 left-3 z-30 flex justify-center"
 						>
-							<div
-								class="motion-enter pointer-events-auto w-full max-w-72 rounded border border-white/10 bg-black/70 px-3 py-2.5 shadow-xl backdrop-blur-md"
-							>
-								<div class="flex min-w-0 items-center gap-2">
-									<p class="min-w-0 flex-1 truncate text-[10px]">
-										{developPhaseLabel(workspace.documentStatus.phase)}
-										<span class="font-mono text-[9px] text-white/40 tabular-nums">
-											· {developDetail(workspace.documentStatus)}
-										</span>
-									</p>
-									<button
-										type="button"
-										class="cursor-pointer text-[9px] text-white/40 transition-colors hover:text-white"
-										onclick={workspace.cancelDocument}
-									>
-										cancel
-									</button>
-								</div>
-								<div class="relative mt-2 h-0.5 overflow-hidden rounded-full bg-white/10">
-									{#if developProgress(workspace.documentStatus) !== null}
-										<div
-											class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
-											style:width={`${developProgress(workspace.documentStatus)}%`}
-										></div>
-									{/if}
-									<div class="develop-progress-sweep absolute inset-y-0 w-1/3"></div>
-								</div>
-							</div>
+							<ProgressCard
+								task={workspace.viewportProgress}
+								variant="floating"
+								onCancel={workspace.documentStatus.kind === 'loading' &&
+								workspace.documentStatus.photoId === active.id
+									? workspace.cancelDocument
+									: undefined}
+							/>
 						</div>
 					{/if}
 					{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
@@ -1470,26 +1398,9 @@
 								><Scan size={15} /><span>object</span></button
 							>
 						</div>
-						{#if smartMaskWorking || workspace.smartMaskStatus.error}
-							<div class="border-subtle bg-surface mt-2 overflow-hidden rounded border px-2 py-1.5">
-								<p
-									class="truncate text-[9px] {workspace.smartMaskStatus.error
-										? 'text-negative'
-										: 'text-muted'}"
-								>
-									{workspace.smartMaskStatus.detail}
-								</p>
-								{#if smartMaskWorking}
-									<div class="bg-subtle mt-1 h-px overflow-hidden">
-										<div
-											class="bg-text h-full transition-[width] duration-200"
-											class:develop-progress-sweep={workspace.smartMaskStatus.progress === null}
-											style:width={workspace.smartMaskStatus.progress === null
-												? '33%'
-												: `${workspace.smartMaskStatus.progress}%`}
-										></div>
-									</div>
-								{/if}
+						{#if workspace.smartMaskProgress}
+							<div class="mt-2">
+								<ProgressCard task={workspace.smartMaskProgress} variant="inline" />
 							</div>
 						{/if}
 					</div>

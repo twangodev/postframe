@@ -13,6 +13,7 @@ import type {
 	StoredPhoto
 } from './library-schema';
 import { PostframeWorkerClient } from './worker-client';
+import { smartMaskTask, viewportTask, type ProgressTask } from './progress-task';
 import {
 	groupPhotoFiles,
 	type PhotoAsset as GroupedPhotoAsset,
@@ -261,6 +262,10 @@ export class WorkspaceState {
 				}
 			: null
 	);
+	viewportProgress: ProgressTask | null = $derived(
+		viewportTask(this.documentStatus, this.developPreview, this.selectedPhoto?.id ?? null)
+	);
+	smartMaskProgress: ProgressTask | null = $derived(smartMaskTask(this.smartMaskStatus));
 	canAdjustLight = $derived(
 		this.selectedPhoto !== null &&
 			this.documentStatus.kind === 'ready' &&

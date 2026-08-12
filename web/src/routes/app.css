@@ -259,11 +259,6 @@ select:focus-visible {
 	animation: develop-glimmer 1.9s ease-in-out infinite;
 }
 
-.develop-progress-sweep {
-	background: linear-gradient(to right, transparent, rgb(255 255 255 / 55%), transparent);
-	animation: develop-sweep 1.25s ease-in-out infinite;
-}
-
 @keyframes enter-fade {
 	from {
 		opacity: 0;
@@ -466,15 +461,6 @@ select:focus-visible {
 	100% {
 		left: 115%;
 		opacity: 0;
-	}
-}
-
-@keyframes develop-sweep {
-	from {
-		transform: translateX(-120%);
-	}
-	to {
-		transform: translateX(420%);
 	}
 }
 
