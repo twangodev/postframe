@@ -27,7 +27,9 @@ interface PreparedImage {
 let objectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
 let subjectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
 let objectModel: Sam2ObjectRuntime | null = null;
+let objectModelLoading: Promise<void> | null = null;
 let subjectModel: SubjectPipeline | null = null;
+let subjectModelLoading: Promise<void> | null = null;
 let prepared: PreparedImage | null = null;
 
 env.useBrowserCache = false;
@@ -58,6 +60,9 @@ self.onmessage = async (event: MessageEvent<SmartMaskRequest>) => {
 				resetPreparedImage();
 				post({ id: request.id, type: 'reset' });
 				break;
+			case 'warmup':
+				await warmup(request);
+				break;
 		}
 	} catch (error) {
 		post({ id: request.id, type: 'error', message: errorMessage(error) });
@@ -76,6 +81,15 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 		modelVersion: SMART_MASK_PACK.version,
 		device: objectDevice
 	});
+}
+
+async function warmup(request: Extract<SmartMaskRequest, { type: 'warmup' }>) {
+	postProgress(request.id, 'loading', null, 'loading object model');
+	await loadObjectModel(request.id);
+	postProgress(request.id, 'loading', null, 'loading subject model');
+	await loadSubjectModel(request.id);
+	postProgress(request.id, 'ready', 100, 'smart mask models ready');
+	post({ id: request.id, type: 'warmed' });
 }
 
 async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' }>) {
@@ -154,14 +168,19 @@ function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>)
 }
 
 async function loadObjectModel(requestId: number) {
-	if (objectModel) return;
-	try {
-		objectModel = await createObjectModel(requestId);
-	} catch (error) {
-		if (objectDevice === 'wasm') throw error;
-		objectDevice = 'wasm';
-		objectModel = await createObjectModel(requestId);
-	}
+	objectModelLoading ??= (async () => {
+		try {
+			objectModel = await createObjectModel(requestId);
+		} catch (error) {
+			if (objectDevice === 'wasm') throw error;
+			objectDevice = 'wasm';
+			objectModel = await createObjectModel(requestId);
+		}
+	})().catch((error) => {
+		objectModelLoading = null;
+		throw error;
+	});
+	await objectModelLoading;
 }
 
 function createObjectModel(requestId: number) {
@@ -176,24 +195,30 @@ async function fallBackObjectModel(requestId: number, active: PreparedImage) {
 	active.selection = null;
 	await objectModel?.dispose();
 	objectModel = null;
+	objectModelLoading = null;
 	objectDevice = 'wasm';
 	await loadObjectModel(requestId);
 }
 
 async function loadSubjectModel(requestId: number) {
-	if (subjectModel) return;
 	const load = async () => {
 		subjectModel = await pipeline('background-removal', SMART_MASK_PACK.subject.id, {
 			...modelOptions(SMART_MASK_PACK.subject, subjectDevice, requestId)
 		});
 	};
-	try {
-		await load();
-	} catch (error) {
-		if (subjectDevice === 'wasm') throw error;
-		subjectDevice = 'wasm';
-		await load();
-	}
+	subjectModelLoading ??= (async () => {
+		try {
+			await load();
+		} catch (error) {
+			if (subjectDevice === 'wasm') throw error;
+			subjectDevice = 'wasm';
+			await load();
+		}
+	})().catch((error) => {
+		subjectModelLoading = null;
+		throw error;
+	});
+	await subjectModelLoading;
 }
 
 function modelOptions(

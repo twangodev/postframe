@@ -85,10 +85,12 @@ export type SmartMaskRequest =
 			alpha: ArrayBuffer;
 			stroke: MaskEdgeStroke;
 	  }
-	| { id: number; type: 'reset' };
+	| { id: number; type: 'reset' }
+	| { id: number; type: 'warmup' };
 
 export type SmartMaskResponse =
 	| ({ id: number; type: 'progress' } & SmartMaskProgress)
+	| { id: number; type: 'warmed' }
 	| { id: number; type: 'prepared'; modelVersion: string; device: SmartMaskDevice }
 	| {
 			id: number;
