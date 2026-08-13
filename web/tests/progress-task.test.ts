@@ -32,12 +32,11 @@ const mask = (overrides: Partial<SmartMaskStatus> = {}): SmartMaskStatus => ({
 	...overrides
 });
 
+const developProjection = (overrides: Partial<Loading> = {}) =>
+	backgroundTasks(loading(overrides), mask(), mask())[0]?.task;
+
 test('reading with known size reports bytes and percent', () => {
-	const task = viewportTask(
-		loading({ bytesRead: 1024 * 1024, totalBytes: 4 * 1024 * 1024 }),
-		null,
-		'p1'
-	);
+	const task = developProjection({ bytesRead: 1024 * 1024, totalBytes: 4 * 1024 * 1024 });
 	assert.deepEqual(task, {
 		label: 'reading originals',
 		detail: '1.0 MB / 4.0 MB',
@@ -47,8 +46,7 @@ test('reading with known size reports bytes and percent', () => {
 });
 
 test('reading with unknown size is indeterminate', () => {
-	const task = viewportTask(loading(), null, 'p1');
-	assert.deepEqual(task, {
+	assert.deepEqual(developProjection(), {
 		label: 'reading originals',
 		detail: 'locating originals',
 		progress: null,
@@ -57,11 +55,12 @@ test('reading with unknown size is indeterminate', () => {
 });
 
 test('multi-frame decoding reports frame counts and percent', () => {
-	const task = viewportTask(
-		loading({ phase: 'decoding', framesDecoded: 1, totalFrames: 4, activeFrame: 2 }),
-		null,
-		'p1'
-	);
+	const task = developProjection({
+		phase: 'decoding',
+		framesDecoded: 1,
+		totalFrames: 4,
+		activeFrame: 2
+	});
 	assert.deepEqual(task, {
 		label: 'decoding raw',
 		detail: 'frame 2 / 4',
@@ -71,20 +70,20 @@ test('multi-frame decoding reports frame counts and percent', () => {
 });
 
 test('single-frame decoding is indeterminate', () => {
-	const task = viewportTask(loading({ phase: 'decoding' }), null, 'p1');
+	const task = developProjection({ phase: 'decoding' });
 	assert.equal(task?.progress, null);
 	assert.equal(task?.detail, 'frame 1 / 1');
 });
 
 test('merging and rendering phases label without percent', () => {
-	assert.deepEqual(viewportTask(loading({ phase: 'merging', totalFrames: 3 }), null, 'p1'), {
+	assert.deepEqual(developProjection({ phase: 'merging', totalFrames: 3 }), {
 		label: 'aligning + merging',
 		detail: '3 exposures',
 		progress: null,
 		error: null
 	});
-	assert.equal(viewportTask(loading({ phase: 'merging' }), null, 'p1')?.detail, 'building image');
-	assert.deepEqual(viewportTask(loading({ phase: 'rendering' }), null, 'p1'), {
+	assert.equal(developProjection({ phase: 'merging' })?.detail, 'building image');
+	assert.deepEqual(developProjection({ phase: 'rendering' }), {
 		label: 'rendering preview',
 		detail: 'SDR preview',
 		progress: null,
@@ -92,40 +91,16 @@ test('merging and rendering phases label without percent', () => {
 	});
 });
 
-test('develop wins over preview and other photos are ignored', () => {
-	const preview = { photoId: 'p1', phase: 'applying' as const };
-	assert.equal(viewportTask(loading(), preview, 'p1')?.label, 'reading originals');
-	assert.equal(viewportTask(loading({ photoId: 'p2' }), preview, 'p1')?.label, 'applying light');
-	assert.equal(viewportTask(loading({ photoId: 'p2' }), null, 'p1'), null);
-	assert.equal(
-		viewportTask(loading(), { photoId: 'p2', phase: 'applying' }, 'p1')?.label,
-		'reading originals'
-	);
-});
-
-test('preview phases map to labels without detail or percent', () => {
-	const idle: DocumentStatus = { kind: 'idle' };
-	assert.deepEqual(viewportTask(idle, { photoId: 'p1', phase: 'applying' }, 'p1'), {
+test('viewport shows only the active photo preview', () => {
+	assert.deepEqual(viewportTask({ photoId: 'p1', phase: 'applying' }, 'p1'), {
 		label: 'applying light',
 		detail: null,
 		progress: null,
 		error: null
 	});
-	assert.equal(
-		viewportTask(idle, { photoId: 'p1', phase: 'refining' }, 'p1')?.label,
-		'refining tiles'
-	);
-});
-
-test('terminal document states produce no task', () => {
-	for (const status of [
-		{ kind: 'idle' },
-		{ kind: 'ready', photoId: 'p1', boostStops: null },
-		{ kind: 'cancelled', photoId: 'p1' },
-		{ kind: 'error', photoId: 'p1', message: 'boom' }
-	] satisfies DocumentStatus[]) {
-		assert.equal(viewportTask(status, null, 'p1'), null);
-	}
+	assert.equal(viewportTask({ photoId: 'p1', phase: 'refining' }, 'p1')?.label, 'refining tiles');
+	assert.equal(viewportTask({ photoId: 'p2', phase: 'applying' }, 'p1'), null);
+	assert.equal(viewportTask(null, 'p1'), null);
 });
 
 test('smart mask working phases pass detail and percent through', () => {
@@ -192,10 +167,13 @@ test('backgroundTasks omits idle, ready, and terminal sources', () => {
 		backgroundTasks({ kind: 'idle' }, mask(), mask({ phase: 'ready', progress: 100 })),
 		[]
 	);
-	assert.deepEqual(
-		backgroundTasks({ kind: 'error', photoId: 'p1', message: 'boom' }, mask(), mask()),
-		[]
-	);
+	for (const status of [
+		{ kind: 'ready', photoId: 'p1', boostStops: null },
+		{ kind: 'cancelled', photoId: 'p1' },
+		{ kind: 'error', photoId: 'p1', message: 'boom' }
+	] satisfies DocumentStatus[]) {
+		assert.deepEqual(backgroundTasks(status, mask(), mask()), []);
+	}
 });
 
 test('backgroundTasks keeps preload errors visible', () => {

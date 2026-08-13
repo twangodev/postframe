@@ -23,13 +23,9 @@ const PREVIEW_LABELS: Record<DevelopPreviewPhase, string> = {
 type LoadingStatus = Extract<DocumentStatus, { kind: 'loading' }>;
 
 export function viewportTask(
-	status: DocumentStatus,
 	preview: { photoId: string; phase: DevelopPreviewPhase } | null,
 	activePhotoId: string | null
 ): ProgressTask | null {
-	if (status.kind === 'loading' && status.photoId === activePhotoId) {
-		return developTask(status);
-	}
 	if (preview && preview.photoId === activePhotoId) {
 		return { label: PREVIEW_LABELS[preview.phase], detail: null, progress: null, error: null };
 	}

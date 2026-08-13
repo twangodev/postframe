@@ -1077,14 +1077,7 @@
 						<div
 							class="pointer-events-none absolute right-3 bottom-3 left-3 z-30 flex justify-center"
 						>
-							<ProgressCard
-								task={workspace.viewportProgress}
-								variant="floating"
-								onCancel={workspace.documentStatus.kind === 'loading' &&
-								workspace.documentStatus.photoId === active.id
-									? workspace.cancelDocument
-									: undefined}
-							/>
+							<ProgressCard task={workspace.viewportProgress} variant="floating" />
 						</div>
 					{/if}
 					{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}

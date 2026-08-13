@@ -276,7 +276,7 @@ export class WorkspaceState {
 			: null
 	);
 	viewportProgress: ProgressTask | null = $derived(
-		viewportTask(this.documentStatus, this.developPreview, this.selectedPhoto?.id ?? null)
+		viewportTask(this.developPreview, this.selectedPhoto?.id ?? null)
 	);
 	backgroundTasks: BackgroundTask[] = $derived(
 		composeBackgroundTasks(this.documentStatus, this.smartMaskStatus, this.modelPreloadStatus)
