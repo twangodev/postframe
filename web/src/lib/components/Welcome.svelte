@@ -122,7 +122,7 @@
 	{#if localStorageAvailable}
 		<button
 			type="button"
-			class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute bottom-5 left-5 rounded px-2.5 py-2 text-[10px] transition-colors"
+			class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] transition-colors"
 			onclick={openStorage}
 		>
 			local storage
@@ -132,9 +132,9 @@
 	<section class="motion-enter w-full max-w-md">
 		<div class="flex items-center gap-2">
 			<img src={postframeLogo} alt="" class="size-7" />
-			<span class="text-[13px] font-medium tracking-tight">postframe</span>
+			<span class="text-[14px] font-medium tracking-tight">postframe</span>
 		</div>
-		<p class="text-muted mt-3 text-[13px]">post-processing built on your JPEGs.</p>
+		<p class="text-muted mt-3 text-[14px]">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">
 			<input
@@ -166,13 +166,13 @@
 			</button>
 		</div>
 		{#if ingestError}
-			<p class="text-negative mt-3 truncate text-[10px]" title={ingestError}>
+			<p class="text-negative mt-3 truncate text-[11px]" title={ingestError}>
 				unsupported RAW file
 			</p>
 		{/if}
 
 		{#if libraryError}
-			<p class="text-negative mt-5 truncate text-[10px]" title={libraryError}>
+			<p class="text-negative mt-5 truncate text-[11px]" title={libraryError}>
 				couldn't read the local library
 			</p>
 		{/if}
@@ -200,7 +200,7 @@
 				</div>
 
 				<label class="mb-4 block">
-					<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">collection name</span>
+					<span class="text-muted mb-1.5 block text-[11px] tracking-[0.04em]">collection name</span>
 					<input
 						bind:value={collectionName}
 						placeholder="untitled collection"
@@ -226,7 +226,7 @@
 						<p class="text-text text-xs">
 							{files.length} photo{files.length === 1 ? '' : 's'} ready
 						</p>
-						<p class="text-muted mt-1 max-w-xs truncate font-mono text-[10px]">
+						<p class="text-muted mt-1 max-w-xs truncate font-mono text-[11px]">
 							{files
 								.slice(0, 3)
 								.map((file) => file.name)
@@ -235,7 +235,7 @@
 					{:else}
 						<Upload size={22} strokeWidth={1.25} class="text-muted mb-3" />
 						<p class="text-text text-xs">choose photos or drop them here</p>
-						<p class="text-muted mt-1 text-[10px]">local files only</p>
+						<p class="text-muted mt-1 text-[11px]">local files only</p>
 					{/if}
 				</label>
 
@@ -243,7 +243,7 @@
 					<button
 						type="submit"
 						disabled={!collectionName.trim() || busy}
-						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[10px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[11px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
 						create collection
 					</button>

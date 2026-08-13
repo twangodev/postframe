@@ -33,7 +33,7 @@
 		{#each EDITOR_MENUS as menu (menu.id)}
 			<Menubar.Menu value={menu.id}>
 				<Menubar.Trigger
-					class="text-muted data-[state=open]:bg-surface data-[state=open]:text-text hover:bg-surface/60 hover:text-text flex h-5 cursor-default items-center rounded-sm px-2 text-[10px] outline-none"
+					class="text-muted data-[state=open]:bg-surface data-[state=open]:text-text hover:bg-surface/60 hover:text-text flex h-5 cursor-default items-center rounded-sm px-2 text-[11px] outline-none"
 				>
 					{menu.label}
 				</Menubar.Trigger>
@@ -66,7 +66,7 @@
 														</span>
 														<span class="flex-1">{child.label}</span>
 														{#if child.shortcut}
-															<kbd class="text-muted ml-5 font-mono text-[9px]"
+															<kbd class="text-muted ml-5 font-mono text-[10px]"
 																>{child.shortcut}</kbd
 															>
 														{/if}
@@ -88,7 +88,7 @@
 									</span>
 									<span class="flex-1">{entry.label}</span>
 									{#if entry.shortcut}
-										<kbd class="text-muted ml-5 font-mono text-[9px]">{entry.shortcut}</kbd>
+										<kbd class="text-muted ml-5 font-mono text-[10px]">{entry.shortcut}</kbd>
 									{/if}
 								</Menubar.Item>
 							{/if}

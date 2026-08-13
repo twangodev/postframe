@@ -255,13 +255,13 @@
 					aria-label={group.label}
 					class="motion-tooltip border-subtle bg-bg absolute top-0 left-[calc(100%+0.4rem)] z-50 max-h-[min(34rem,calc(100vh-6rem))] w-52 overflow-y-auto rounded border p-1.5 shadow-2xl"
 				>
-					<p class="text-muted px-2 pt-1 pb-1.5 text-[10px] tracking-[0.04em]">{group.label}</p>
+					<p class="text-muted px-2 pt-1 pb-1.5 text-[11px] tracking-[0.04em]">{group.label}</p>
 					{#each group.tools as tool (tool.id)}
 						{@const ToolIcon = tool.icon}
 						<button
 							type="button"
 							role="menuitem"
-							class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {activeTool ===
+							class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {activeTool ===
 							tool.id
 								? 'bg-surface text-text'
 								: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -270,7 +270,7 @@
 							<ToolIcon size={13} strokeWidth={1.4} />
 							<span class="flex-1">{tool.label}</span>
 							{#if tool.shortcut}
-								<kbd class="font-mono text-[9px] opacity-55">{tool.shortcut}</kbd>
+								<kbd class="font-mono text-[10px] opacity-55">{tool.shortcut}</kbd>
 							{/if}
 						</button>
 					{/each}

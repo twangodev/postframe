@@ -19,19 +19,19 @@
 		<p
 			class={[
 				'min-w-0 flex-1 truncate',
-				variant === 'floating' ? 'text-[10px]' : 'text-[9px]',
+				variant === 'floating' ? 'text-[11px]' : 'text-[10px]',
 				task.error ? 'text-negative' : variant === 'inline' && 'text-muted'
 			]}
 		>
 			{task.error ?? task.label}
 			{#if !task.error && task.detail}
-				<span class="font-mono text-[9px] tabular-nums opacity-40">· {task.detail}</span>
+				<span class="font-mono text-[10px] tabular-nums opacity-40">· {task.detail}</span>
 			{/if}
 		</p>
 		{#if onCancel}
 			<button
 				type="button"
-				class="cursor-pointer text-[9px] opacity-40 transition-opacity hover:opacity-100"
+				class="cursor-pointer text-[10px] opacity-40 transition-opacity hover:opacity-100"
 				onclick={onCancel}
 			>
 				cancel

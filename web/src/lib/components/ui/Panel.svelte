@@ -19,9 +19,9 @@
 	<Collapsible.Trigger
 		class="group flex h-10 w-full cursor-pointer items-center justify-between px-3 text-left"
 	>
-		<span class="text-text/85 text-[10px] tracking-[0.03em] lowercase">{title}</span>
+		<span class="text-text/85 text-[11px] tracking-[0.03em] lowercase">{title}</span>
 		<span class="flex items-center gap-2">
-			{#if meta}<span class="text-muted text-[10px]">{meta}</span>{/if}
+			{#if meta}<span class="text-muted text-[11px]">{meta}</span>{/if}
 			<ChevronDown
 				size={13}
 				strokeWidth={1.5}

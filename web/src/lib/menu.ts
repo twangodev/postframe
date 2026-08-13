@@ -34,7 +34,7 @@ export type MenuEntry<A> = MenuLeaf<A> | MenuSubmenu<A>;
 export const separator = (): MenuSeparator => ({ kind: 'separator' });
 
 export const menuItemClass =
-	'data-[highlighted]:bg-elevated data-[highlighted]:text-text data-[disabled]:text-muted/45 flex h-7 min-w-52 items-center gap-2 rounded-sm px-2 text-[11px] outline-none data-[disabled]:cursor-default';
+	'data-[highlighted]:bg-elevated data-[highlighted]:text-text data-[disabled]:text-muted/45 flex h-7 min-w-52 items-center gap-2 rounded-sm px-2 text-[12px] outline-none data-[disabled]:cursor-default';
 
 export const menuContentClass =
 	'motion-menu border-subtle bg-bg z-50 min-w-52 rounded border p-1 shadow-2xl';

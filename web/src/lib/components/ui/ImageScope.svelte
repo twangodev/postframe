@@ -101,7 +101,7 @@
 
 <div>
 	<div class="mb-2 flex h-5 items-center justify-between">
-		<span class="text-text/75 text-[9px] tracking-[0.04em] lowercase">scope</span>
+		<span class="text-text/75 text-[10px] tracking-[0.04em] lowercase">scope</span>
 		<ToggleGroup.Root
 			type="single"
 			value={mode}
@@ -112,14 +112,14 @@
 			<ToggleGroup.Item
 				value="waveform"
 				aria-label="Waveform scope"
-				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[8px] lowercase transition-colors"
+				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[9px] lowercase transition-colors"
 			>
 				waveform
 			</ToggleGroup.Item>
 			<ToggleGroup.Item
 				value="histogram"
 				aria-label="Histogram scope"
-				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[8px] lowercase transition-colors"
+				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[9px] lowercase transition-colors"
 			>
 				histogram
 			</ToggleGroup.Item>
@@ -144,13 +144,13 @@
 		{/if}
 		{#if !data}
 			<div
-				class="text-muted/55 pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] tracking-[0.04em] lowercase"
+				class="text-muted/55 pointer-events-none absolute inset-0 flex items-center justify-center text-[9px] tracking-[0.04em] lowercase"
 			>
 				{loading ? 'building scope' : 'scope unavailable'}
 			</div>
 		{/if}
 	</div>
-	<div class="text-muted mt-1.5 flex items-baseline justify-between text-[8px]">
+	<div class="text-muted mt-1.5 flex items-baseline justify-between text-[9px]">
 		<span class="font-mono tabular-nums">{footer.start}</span>
 		<span>{footer.center}</span>
 		<span class="font-mono tabular-nums">{footer.end}</span>

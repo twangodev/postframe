@@ -115,7 +115,7 @@
 						onclick={workspace.enterLibrary}
 					>
 						<img src={postframeLogo} alt="" class="size-5" />
-						<span class="text-[11px] font-medium tracking-tight">postframe</span>
+						<span class="text-[12px] font-medium tracking-tight">postframe</span>
 					</button>
 				{/snippet}
 			</Tooltip>
@@ -124,7 +124,7 @@
 				<p class="text-text truncate text-xs font-medium">photo library</p>
 				<p
 					class:text-negative={workspace.storageStatus === 'error' || !!workspace.ingestError}
-					class="text-muted text-[10px] tracking-wide"
+					class="text-muted text-[11px] tracking-wide"
 					title={workspace.ingestError ?? workspace.storageError ?? undefined}
 				>
 					{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} ·
@@ -149,14 +149,14 @@
 			<Tabs.List class="border-subtle bg-surface flex h-8 items-center rounded border p-0.5">
 				<Tabs.Trigger
 					value="organize"
-					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors"
+					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] transition-colors"
 				>
 					organize
 				</Tabs.Trigger>
 				<Tabs.Trigger
 					value="edit"
 					disabled={workspace.photos.length === 0}
-					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[10px] tracking-[0.03em] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
 				>
 					edit
 				</Tabs.Trigger>
@@ -213,7 +213,7 @@
 			</Tooltip>
 			<button
 				type="button"
-				class="border-subtle text-text hover:border-muted hover:bg-surface ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 text-[10px] tracking-wide transition-colors"
+				class="border-subtle text-text hover:border-muted hover:bg-surface ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 text-[11px] tracking-wide transition-colors"
 				onclick={onExport}
 			>
 				<Download size={12} strokeWidth={1.5} />

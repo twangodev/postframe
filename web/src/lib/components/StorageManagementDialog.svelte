@@ -92,7 +92,7 @@
 				<div>
 					<div class="text-muted mb-2 flex items-center gap-2">
 						<Database size={14} strokeWidth={1.4} />
-						<span class="text-[10px] tracking-[0.04em]">local storage</span>
+						<span class="text-[11px] tracking-[0.04em]">local storage</span>
 					</div>
 					<Dialog.Title class="text-sm font-medium tracking-tight">on this device</Dialog.Title>
 					<Dialog.Description class="text-muted mt-1 text-xs leading-relaxed">
@@ -112,12 +112,12 @@
 				{#if status}
 					<div class="border-subtle bg-surface/45 rounded border p-3">
 						<div class="flex items-center justify-between gap-4">
-							<span class="text-muted text-[10px]">postframe</span>
-							<span class="font-mono text-[10px]">{formatBytes(status.appUsageBytes)}</span>
+							<span class="text-muted text-[11px]">postframe</span>
+							<span class="font-mono text-[11px]">{formatBytes(status.appUsageBytes)}</span>
 						</div>
 						<div class="mt-3 flex items-center justify-between gap-4">
-							<span class="text-muted text-[10px]">site usage</span>
-							<span class="font-mono text-[10px]">
+							<span class="text-muted text-[11px]">site usage</span>
+							<span class="font-mono text-[11px]">
 								{formatBytes(status.originUsageBytes)} / {formatBytes(status.quotaBytes)}
 							</span>
 						</div>
@@ -143,7 +143,7 @@
 										? 'browser-managed storage'
 										: 'persistence unavailable'}
 							</p>
-							<p class="text-muted mt-0.5 text-[10px] leading-relaxed">
+							<p class="text-muted mt-0.5 text-[11px] leading-relaxed">
 								{status.persisted
 									? 'the browser granted protection from routine storage eviction.'
 									: 'local data may be removed when the browser needs space.'}
@@ -151,16 +151,16 @@
 						</div>
 					</div>
 				{:else}
-					<div class="text-muted flex h-24 items-center justify-center text-[10px]">
+					<div class="text-muted flex h-24 items-center justify-center text-[11px]">
 						storage details unavailable
 					</div>
 				{/if}
 
 				{#if error || actionError}
-					<p class="text-negative text-[10px]" role="status">{actionError ?? error}</p>
+					<p class="text-negative text-[11px]" role="status">{actionError ?? error}</p>
 				{/if}
 				{#if cleanupResult}
-					<p class="text-muted text-[10px]" role="status">
+					<p class="text-muted text-[11px]" role="status">
 						{cleanupResult.deletedFiles === 0
 							? 'nothing to clean up.'
 							: `removed ${cleanupResult.deletedFiles} files · ${formatBytes(cleanupResult.reclaimedBytes)}`}
@@ -173,12 +173,12 @@
 				<div class="border-subtle flex items-center justify-between rounded border px-3 py-2.5">
 					<div>
 						<p class="text-xs">ai models</p>
-						<p class="text-muted mt-0.5 font-mono text-[9px]">{formatBytes(modelCacheBytes)}</p>
+						<p class="text-muted mt-0.5 font-mono text-[10px]">{formatBytes(modelCacheBytes)}</p>
 					</div>
 					<button
 						type="button"
 						disabled={busy || modelCacheBytes === 0}
-						class="text-muted hover:text-negative cursor-pointer rounded px-2 py-1 text-[10px] transition-colors disabled:cursor-default disabled:opacity-35"
+						class="text-muted hover:text-negative cursor-pointer rounded px-2 py-1 text-[11px] transition-colors disabled:cursor-default disabled:opacity-35"
 						onclick={() => run('models', onClearModelCache)}
 					>
 						{action === 'models' ? 'clearing…' : 'clear models'}
@@ -188,14 +188,14 @@
 				{#if confirmingClear}
 					<div class="border-negative/40 bg-negative/5 rounded border p-3">
 						<p class="text-xs">delete the local library?</p>
-						<p class="text-muted mt-1 text-[10px] leading-relaxed">
+						<p class="text-muted mt-1 text-[11px] leading-relaxed">
 							this removes originals and edits from this browser. it cannot be undone.
 						</p>
 						<div class="mt-3 flex justify-end gap-2">
 							<button
 								type="button"
 								disabled={busy}
-								class="border-subtle text-muted hover:bg-surface hover:text-text cursor-pointer rounded border px-3 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
+								class="border-subtle text-muted hover:bg-surface hover:text-text cursor-pointer rounded border px-3 py-2 text-[11px] transition-colors disabled:cursor-wait disabled:opacity-40"
 								onclick={() => (confirmingClear = false)}
 							>
 								cancel
@@ -203,7 +203,7 @@
 							<button
 								type="button"
 								disabled={busy}
-								class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[10px] font-medium transition-opacity disabled:cursor-wait disabled:opacity-45"
+								class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[11px] font-medium transition-opacity disabled:cursor-wait disabled:opacity-45"
 								onclick={() => run('clear', onClearLocalData)}
 							>
 								{action === 'clear' ? 'clearing…' : 'clear everything'}
@@ -219,7 +219,7 @@
 						type="button"
 						disabled={busy}
 						aria-label="Refresh storage details"
-						class="text-muted hover:text-text flex cursor-pointer items-center gap-1.5 rounded px-2 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
+						class="text-muted hover:text-text flex cursor-pointer items-center gap-1.5 rounded px-2 py-2 text-[11px] transition-colors disabled:cursor-wait disabled:opacity-40"
 						onclick={() => run('refresh', onRefresh)}
 					>
 						<RefreshCw size={12} class={action === 'refresh' ? 'animate-spin' : ''} />
@@ -229,7 +229,7 @@
 						<button
 							type="button"
 							disabled={busy}
-							class="border-subtle text-muted hover:bg-surface hover:text-text flex cursor-pointer items-center gap-1.5 rounded border px-3 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
+							class="border-subtle text-muted hover:bg-surface hover:text-text flex cursor-pointer items-center gap-1.5 rounded border px-3 py-2 text-[11px] transition-colors disabled:cursor-wait disabled:opacity-40"
 							onclick={() => run('cleanup', onCleanup)}
 						>
 							<RefreshCw size={12} class={action === 'cleanup' ? 'animate-spin' : ''} />
@@ -238,7 +238,7 @@
 						<button
 							type="button"
 							disabled={busy}
-							class="border-subtle text-muted hover:bg-surface hover:text-text flex cursor-pointer items-center gap-1.5 rounded border px-3 py-2 text-[10px] transition-colors disabled:cursor-wait disabled:opacity-40"
+							class="border-subtle text-muted hover:bg-surface hover:text-text flex cursor-pointer items-center gap-1.5 rounded border px-3 py-2 text-[11px] transition-colors disabled:cursor-wait disabled:opacity-40"
 							onclick={() => (confirmingClear = true)}
 						>
 							<Trash2 size={12} /> clear
@@ -247,7 +247,7 @@
 							<button
 								type="button"
 								disabled={busy}
-								class="bg-text text-bg flex cursor-pointer items-center gap-1.5 rounded px-3 py-2 text-[10px] font-medium transition-opacity disabled:cursor-wait disabled:opacity-45"
+								class="bg-text text-bg flex cursor-pointer items-center gap-1.5 rounded px-3 py-2 text-[11px] font-medium transition-opacity disabled:cursor-wait disabled:opacity-45"
 								onclick={() => run('persist', onRequestPersistence)}
 							>
 								<ShieldCheck size={12} />

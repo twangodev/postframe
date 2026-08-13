@@ -143,7 +143,7 @@
 	class="grid grid-cols-[4.75rem_1fr_3.5rem] items-center gap-2 py-1 transition-opacity"
 	class:opacity-40={disabled}
 >
-	<span class="text-text/75 truncate text-[10px] lowercase">{label}</span>
+	<span class="text-text/75 truncate text-[11px] lowercase">{label}</span>
 	<Slider.Root
 		type="single"
 		bind:value
@@ -182,6 +182,6 @@
 		onblur={commitDraft}
 		onkeydown={handleKeydown}
 		onwheel={handleWheel}
-		class="hover:border-control-track focus:border-control-edge focus:bg-surface text-muted h-5 w-full rounded border border-transparent bg-transparent px-1 text-right font-mono text-[10px] tabular-nums transition-colors outline-none disabled:cursor-default"
+		class="hover:border-control-track focus:border-control-edge focus:bg-surface text-muted h-5 w-full rounded border border-transparent bg-transparent px-1 text-right font-mono text-[11px] tabular-nums transition-colors outline-none disabled:cursor-default"
 	/>
 </div>

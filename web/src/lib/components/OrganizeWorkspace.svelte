@@ -210,11 +210,11 @@
 		: 'bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
 >
 	<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
-		<div class="text-muted px-3 pb-2 text-[10px] tracking-[0.04em]">library</div>
+		<div class="text-muted px-3 pb-2 text-[11px] tracking-[0.04em]">library</div>
 		<nav class="space-y-0.5 px-2" aria-label="Library">
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
 				'all'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -222,11 +222,11 @@
 			>
 				<Image size={13} strokeWidth={1.5} />
 				<span class="flex-1">all photos</span>
-				<span class="font-mono text-[10px]">{workspace.photos.length}</span>
+				<span class="font-mono text-[11px]">{workspace.photos.length}</span>
 			</button>
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
 				'recent'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -234,11 +234,11 @@
 			>
 				<Clock3 size={13} strokeWidth={1.5} />
 				<span class="flex-1">recent</span>
-				<span class="font-mono text-[10px]">{recentCount}</span>
+				<span class="font-mono text-[11px]">{recentCount}</span>
 			</button>
 			<button
 				type="button"
-				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
 				'favorites'
 					? 'bg-surface text-text'
 					: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -246,7 +246,7 @@
 			>
 				<Flag size={13} strokeWidth={1.5} />
 				<span class="flex-1">favorites</span>
-				<span class="font-mono text-[10px]">
+				<span class="font-mono text-[11px]">
 					{workspace.photos.filter((photo) => photo.flagged).length}
 				</span>
 			</button>
@@ -254,7 +254,7 @@
 
 		<div class="bg-subtle mx-3 my-3 h-px"></div>
 		<div class="flex items-center justify-between px-3 pb-2">
-			<span class="text-muted text-[10px] tracking-[0.04em]">collections</span>
+			<span class="text-muted text-[11px] tracking-[0.04em]">collections</span>
 			<Tooltip text="Create collection">
 				{#snippet children(props)}
 					<button
@@ -273,7 +273,7 @@
 			{#each workspace.collections as collection (collection.id)}
 				<button
 					type="button"
-					class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[11px] transition-colors {source ===
+					class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
 					`collection:${collection.id}`
 						? 'bg-surface text-text'
 						: 'text-muted hover:bg-surface/60 hover:text-text'}"
@@ -281,11 +281,11 @@
 				>
 					<Folder size={13} strokeWidth={1.5} />
 					<span class="min-w-0 flex-1 truncate">{collection.name}</span>
-					<span class="font-mono text-[10px]">{collection.photoIds.length}</span>
+					<span class="font-mono text-[11px]">{collection.photoIds.length}</span>
 				</button>
 			{/each}
 			{#if workspace.collections.length === 0}
-				<p class="text-muted/65 px-2 py-2 text-[10px] leading-relaxed">no collections yet.</p>
+				<p class="text-muted/65 px-2 py-2 text-[11px] leading-relaxed">no collections yet.</p>
 			{/if}
 		</div>
 	</aside>
@@ -302,14 +302,14 @@
 					<input
 						bind:value={search}
 						placeholder="search photos"
-						class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[10px] focus:outline-none"
+						class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[11px] focus:outline-none"
 					/>
 				</label>
 
 				<select
 					bind:value={sort}
 					aria-label="Sort photos"
-					class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
+					class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[11px] focus:outline-none"
 				>
 					<option value="capture">capture time</option>
 					<option value="name">filename</option>
@@ -320,7 +320,7 @@
 					{#if selectedStack}
 						<button
 							type="button"
-							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
+							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors"
 							onclick={() => workspace.ungroupStack(selectedStack.id)}
 						>
 							<Ungroup size={12} /> ungroup
@@ -329,7 +329,7 @@
 						<button
 							type="button"
 							disabled={workspace.selectedIds.length < 2}
-							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
 							onclick={workspace.createStack}
 						>
 							<Layers3 size={12} /> group stack
@@ -370,9 +370,9 @@
 						<ImagePlus size={17} strokeWidth={1.25} />
 					</div>
 					<p class="text-text text-xs font-medium">empty library</p>
-					<p class="text-muted mt-1 text-[10px]">add photographs when you're ready.</p>
+					<p class="text-muted mt-1 text-[11px]">add photographs when you're ready.</p>
 					<label
-						class="bg-text text-bg mt-4 flex h-8 cursor-pointer items-center rounded px-3 text-[10px] font-medium hover:opacity-85"
+						class="bg-text text-bg mt-4 flex h-8 cursor-pointer items-center rounded px-3 text-[11px] font-medium hover:opacity-85"
 					>
 						<input
 							type="file"
@@ -423,7 +423,7 @@
 											<button
 												type="button"
 												aria-label={stack.collapsed ? 'Expand stack' : 'Collapse stack'}
-												class="absolute right-1 bottom-1 flex h-5 cursor-pointer items-center gap-1 rounded-sm bg-black/65 px-1.5 font-mono text-[10px] text-white backdrop-blur"
+												class="absolute right-1 bottom-1 flex h-5 cursor-pointer items-center gap-1 rounded-sm bg-black/65 px-1.5 font-mono text-[11px] text-white backdrop-blur"
 												onclick={(event) => {
 													event.stopPropagation();
 													workspace.toggleStack(stack.id);
@@ -442,7 +442,7 @@
 									</div>
 
 									<div class={view === 'grid' ? 'min-w-0 px-0.5 pt-2 pb-0.5' : 'min-w-0'}>
-										<p class="text-text truncate font-mono text-[10px]">{photo.name}</p>
+										<p class="text-text truncate font-mono text-[11px]">{photo.name}</p>
 										{#if view === 'grid'}
 											<div class="mt-1.5 flex items-center justify-between">
 												<div class="flex">
@@ -472,8 +472,8 @@
 										{/if}
 									</div>
 									{#if view === 'list'}
-										<span class="text-muted font-mono text-[10px]">{photo.extension}</span>
-										<span class="text-muted font-mono text-[10px]">{formatBytes(photo.size)}</span>
+										<span class="text-muted font-mono text-[11px]">{photo.extension}</span>
+										<span class="text-muted font-mono text-[11px]">{formatBytes(photo.size)}</span>
 									{/if}
 								</div>
 							{/snippet}
@@ -484,14 +484,14 @@
 				<div class="flex h-full flex-col items-center justify-center text-center">
 					<Box size={28} strokeWidth={1} class="text-muted mb-3" />
 					<p class="text-text text-xs">no photos in this view</p>
-					<p class="text-muted mt-1 text-[10px]">try another collection or clear the search.</p>
+					<p class="text-muted mt-1 text-[11px]">try another collection or clear the search.</p>
 				</div>
 			{/if}
 		</div>
 
 		{#if workspace.photos.length > 0}
 			<footer
-				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
+				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[11px] tracking-wide"
 			>
 				<span>{visiblePhotos.length} visible</span>
 				<span>{workspace.selectedIds.length} selected</span>
@@ -514,8 +514,8 @@
 			<div class="border-subtle border-b p-3">
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
-						<p class="truncate text-[11px] font-medium">{active.name}</p>
-						<p class="text-muted mt-1 font-mono text-[10px]">
+						<p class="truncate text-[12px] font-medium">{active.name}</p>
+						<p class="text-muted mt-1 font-mono text-[11px]">
 							{active.extension} · {formatBytes(active.size)}
 						</p>
 					</div>
@@ -559,8 +559,8 @@
 			</div>
 
 			<div class="border-subtle border-b p-3">
-				<p class="text-muted mb-3 text-[10px] tracking-[0.04em]">metadata</p>
-				<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[10px]">
+				<p class="text-muted mb-3 text-[11px] tracking-[0.04em]">metadata</p>
+				<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[11px]">
 					<dt class="text-muted">captured</dt>
 					<dd class="text-text/80 text-right">{active.captured}</dd>
 					<dt class="text-muted">dimensions</dt>
@@ -581,11 +581,11 @@
 			</div>
 
 			<div class="p-3">
-				<p class="text-muted mb-2 text-[10px] tracking-[0.04em]">collections</p>
+				<p class="text-muted mb-2 text-[11px] tracking-[0.04em]">collections</p>
 				<div class="space-y-1">
 					{#each workspace.collections as collection (collection.id)}
 						<label
-							class="text-muted hover:text-text flex cursor-pointer items-center gap-2 py-1 text-[11px]"
+							class="text-muted hover:text-text flex cursor-pointer items-center gap-2 py-1 text-[12px]"
 						>
 							<input
 								type="checkbox"
@@ -599,7 +599,7 @@
 					{#if workspace.collections.length === 0}
 						<button
 							type="button"
-							class="text-muted hover:text-text cursor-pointer text-[11px] transition-colors"
+							class="text-muted hover:text-text cursor-pointer text-[12px] transition-colors"
 							onclick={workspace.requestCollectionCreation}
 						>
 							+ create a collection
@@ -608,7 +608,7 @@
 				</div>
 			</div>
 		{:else}
-			<div class="text-muted flex h-full items-center justify-center px-6 text-center text-[10px]">
+			<div class="text-muted flex h-full items-center justify-center px-6 text-center text-[11px]">
 				select a photo to inspect it.
 			</div>
 		{/if}
@@ -644,7 +644,7 @@
 					<button
 						type="submit"
 						disabled={!collectionName.trim() || collectionBusy}
-						class="bg-text text-bg cursor-pointer rounded px-3 py-2 text-[10px] disabled:opacity-35"
+						class="bg-text text-bg cursor-pointer rounded px-3 py-2 text-[11px] disabled:opacity-35"
 					>
 						create collection
 					</button>
@@ -681,13 +681,13 @@
 			</div>
 			<div class="mt-5 flex justify-end gap-2">
 				<Dialog.Close
-					class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[10px]"
+					class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[11px]"
 				>
 					cancel
 				</Dialog.Close>
 				<button
 					type="button"
-					class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[10px]"
+					class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[11px]"
 					onclick={confirmRemoval}
 				>
 					remove

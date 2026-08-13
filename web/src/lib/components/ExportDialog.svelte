@@ -38,7 +38,7 @@
 					<div>
 						<div class="text-muted mb-2 flex items-center gap-2">
 							<Download size={14} strokeWidth={1.4} />
-							<span class="text-[10px] tracking-[0.04em]">export</span>
+							<span class="text-[11px] tracking-[0.04em]">export</span>
 						</div>
 						<Dialog.Title class="text-sm font-medium tracking-tight">
 							{workspace.selectedIds.length > 1
@@ -60,7 +60,7 @@
 				<div class="space-y-5 p-5">
 					<div class="grid grid-cols-2 gap-3">
 						<label>
-							<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">format</span>
+							<span class="text-muted mb-1.5 block text-[11px] tracking-[0.04em]">format</span>
 							<select
 								bind:value={format}
 								class="border-subtle bg-surface focus:border-accent h-9 w-full cursor-pointer rounded border px-2 text-xs focus:outline-none"
@@ -71,7 +71,7 @@
 							</select>
 						</label>
 						<label>
-							<span class="text-muted mb-1.5 block text-[10px] tracking-[0.04em]">color space</span>
+							<span class="text-muted mb-1.5 block text-[11px] tracking-[0.04em]">color space</span>
 							<select
 								bind:value={colorSpace}
 								class="border-subtle bg-surface focus:border-accent h-9 w-full cursor-pointer rounded border px-2 text-xs focus:outline-none"
@@ -84,7 +84,7 @@
 					</div>
 
 					<label class="block">
-						<span class="text-muted mb-1.5 flex justify-between text-[10px] tracking-[0.04em]">
+						<span class="text-muted mb-1.5 flex justify-between text-[11px] tracking-[0.04em]">
 							<span>quality</span><span class="font-mono">{quality}</span>
 						</span>
 						<input
@@ -100,7 +100,7 @@
 						<label class="flex cursor-pointer items-center justify-between gap-3 text-xs">
 							<span>
 								<span class="text-text block">Ultra HDR gain map</span>
-								<span class="text-muted mt-0.5 block text-[10px]"
+								<span class="text-muted mt-0.5 block text-[11px]"
 									>preserve display headroom in supported viewers.</span
 								>
 							</span>
@@ -119,27 +119,27 @@
 									max="20000"
 									step="1"
 									bind:value={longEdge}
-									class="border-subtle bg-bg focus:border-accent h-8 min-w-0 flex-1 rounded border px-2 font-mono text-[10px] focus:outline-none"
+									class="border-subtle bg-bg focus:border-accent h-8 min-w-0 flex-1 rounded border px-2 font-mono text-[11px] focus:outline-none"
 								/>
-								<span class="text-muted font-mono text-[10px]">px</span>
+								<span class="text-muted font-mono text-[11px]">px</span>
 							</div>
 						{/if}
 					</div>
 				</div>
 
 				<div class="border-subtle flex items-center justify-between border-t p-4">
-					<p class="text-muted font-mono text-[10px] tracking-wide">
+					<p class="text-muted font-mono text-[11px] tracking-wide">
 						{format.toUpperCase()} · {colorSpace}
 					</p>
 					<div class="flex gap-2">
 						<Dialog.Close
-							class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[10px]"
+							class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[11px]"
 						>
 							cancel
 						</Dialog.Close>
 						<button
 							type="submit"
-							class="bg-text text-bg flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded px-3 py-2 text-[10px]"
+							class="bg-text text-bg flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded px-3 py-2 text-[11px]"
 						>
 							{#if completed}<Check size={12} /> ready{:else}<Download size={12} /> export{/if}
 						</button>

@@ -238,7 +238,7 @@
 	const measureTools = new Set(['ruler', 'note', 'count']);
 	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 	const zoomMenuItemClass =
-		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[10px] outline-none';
+		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
 	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (maskPreviewMode = mode);
 
 	$effect(() => {
@@ -769,7 +769,7 @@
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							aria-label="Choose zoom level"
-							class="hover:bg-surface hover:text-text flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[10px] tabular-nums outline-none"
+							class="hover:bg-surface hover:text-text flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[11px] tabular-nums outline-none"
 						>
 							{formatZoom(viewportTransform.scale)}
 						</DropdownMenu.Trigger>
@@ -782,7 +782,7 @@
 								<DropdownMenu.Item class={zoomMenuItemClass} onSelect={fitPhoto}>
 									<span class="text-accent w-3">{viewportMode === 'fit' ? '•' : ''}</span>
 									<span class="flex-1">fit</span>
-									<kbd class="text-muted font-mono text-[9px]">0</kbd>
+									<kbd class="text-muted font-mono text-[10px]">0</kbd>
 								</DropdownMenu.Item>
 								<DropdownMenu.Item class={zoomMenuItemClass} onSelect={showActualPixels}>
 									<span class="text-accent w-3"
@@ -791,7 +791,7 @@
 											: ''}</span
 									>
 									<span class="flex-1">actual pixels</span>
-									<kbd class="text-muted font-mono text-[9px]">1</kbd>
+									<kbd class="text-muted font-mono text-[10px]">1</kbd>
 								</DropdownMenu.Item>
 								<DropdownMenu.Separator class="bg-subtle my-1 h-px" />
 								{#each ZOOM_MENU_PRESETS as scale}
@@ -819,7 +819,7 @@
 				</div>
 
 				{#if active}
-					<p class="text-muted max-w-64 truncate font-mono text-[10px] tracking-wide">
+					<p class="text-muted max-w-64 truncate font-mono text-[11px] tracking-wide">
 						{active.name}
 					</p>
 				{/if}
@@ -827,7 +827,7 @@
 				<!-- TODO(WASM_TODOS.previewRendering): switch between original and rendered Wasm output. -->
 				<button
 					type="button"
-					class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 text-[10px] transition-colors"
+					class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors"
 					onclick={() => (before = !before)}
 				>
 					<Columns2 size={11} />
@@ -836,7 +836,7 @@
 			</div>
 
 			<div
-				class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[10px]"
+				class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[11px]"
 			>
 				<span class="text-text shrink-0 font-medium">{activeToolLabel}</span>
 				<span class="bg-subtle h-4 w-px shrink-0"></span>
@@ -1108,7 +1108,7 @@
 							{/key}
 							{#if before}
 								<span
-									class="pointer-events-none absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
+									class="pointer-events-none absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[11px] tracking-wide text-white backdrop-blur"
 								>
 									before
 								</span>
@@ -1125,10 +1125,10 @@
 									class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
 								>
 									<div class="motion-enter flex flex-col items-center gap-2.5">
-										<p class="text-[11px]">development stopped</p>
+										<p class="text-[12px]">development stopped</p>
 										<button
 											type="button"
-											class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+											class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
 											onclick={workspace.reloadDocument}
 										>
 											retry
@@ -1140,13 +1140,13 @@
 									class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
 								>
 									<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
-										<p class="text-[11px]">couldn't open raw</p>
-										<p class="text-[9px] leading-relaxed text-white/55">
+										<p class="text-[12px]">couldn't open raw</p>
+										<p class="text-[10px] leading-relaxed text-white/55">
 											{workspace.documentStatus.message}
 										</p>
 										<button
 											type="button"
-											class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+											class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
 											onclick={workspace.reloadDocument}
 										>
 											retry
@@ -1155,7 +1155,7 @@
 								</div>
 							{/if}
 						{:else}
-							<p class="text-muted absolute inset-0 flex items-center justify-center text-[10px]">
+							<p class="text-muted absolute inset-0 flex items-center justify-center text-[11px]">
 								select a photo in organize.
 							</p>
 						{/if}
@@ -1164,7 +1164,7 @@
 			</ContextMenu>
 
 			<footer
-				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
+				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[11px] tracking-wide"
 			>
 				<span>display · SDR preview</span>
 				{#if active}
@@ -1194,13 +1194,13 @@
 				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-3 border-b px-2 pt-1">
 					<Tabs.Trigger
 						value="adjust"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
 					>
 						adjust
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="mask"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
 					>
 						mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
 								>{workspace.masks.length}</span
@@ -1208,7 +1208,7 @@
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="layers"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[10px] tracking-[0.03em]"
+						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
 					>
 						layers
 					</Tabs.Trigger>
@@ -1225,9 +1225,9 @@
 					<Panel title="Profile" meta="Camera look">
 						<button
 							type="button"
-							class="border-subtle bg-surface text-text/80 hover:border-muted flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[11px]"
+							class="border-subtle bg-surface text-text/80 hover:border-muted flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[12px]"
 						>
-							<span>camera standard</span><span class="text-muted font-mono text-[10px]">PF</span>
+							<span>camera standard</span><span class="text-muted font-mono text-[11px]">PF</span>
 						</button>
 					</Panel>
 
@@ -1322,7 +1322,7 @@
 						/>
 						<button
 							type="button"
-							class="border-subtle text-muted hover:text-text mt-2 flex w-full cursor-pointer items-center justify-between rounded border px-2 py-2 text-[10px]"
+							class="border-subtle text-muted hover:text-text mt-2 flex w-full cursor-pointer items-center justify-between rounded border px-2 py-2 text-[11px]"
 						>
 							color mixer <SlidersHorizontal size={12} />
 						</button>
@@ -1369,10 +1369,10 @@
 					</Panel>
 
 					<Panel title="Optics" open={false}>
-						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[10px]">
+						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[11px]">
 							<input type="checkbox" checked class="accent-accent" /> remove chromatic aberration
 						</label>
-						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[10px]">
+						<label class="text-muted flex cursor-pointer items-center gap-2 py-1 text-[11px]">
 							<input type="checkbox" checked class="accent-accent" /> use lens profile
 						</label>
 					</Panel>
@@ -1382,7 +1382,7 @@
 							{#each ['Clean color', 'Soft highlight', 'Neutral portrait', 'Cinematic dusk'] as preset}
 								<button
 									type="button"
-									class="text-muted hover:bg-surface hover:text-text flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[10px] lowercase"
+									class="text-muted hover:bg-surface hover:text-text flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] lowercase"
 								>
 									<Sparkles size={11} />
 									{preset}
@@ -1395,7 +1395,7 @@
 						<div class="border-subtle space-y-2 border-l pl-3">
 							{#each [...workspace.history].reverse() as item, index}
 								<div
-									class="flex items-center gap-2 text-[10px] lowercase {index === 0
+									class="flex items-center gap-2 text-[11px] lowercase {index === 0
 										? 'text-text'
 										: 'text-muted'}"
 								>
@@ -1409,7 +1409,7 @@
 
 				<Tabs.Content value="mask" class="motion-tab">
 					<div class="border-subtle border-b p-3">
-						<p class="text-muted mb-2 text-[10px] tracking-[0.03em]">new mask</p>
+						<p class="text-muted mb-2 text-[11px] tracking-[0.03em]">new mask</p>
 						<div class="grid grid-cols-3 gap-1.5">
 							<button type="button" class="mask-choice" onclick={() => addMask('brush')}
 								><Brush size={15} /><span>brush</span></button
@@ -1437,11 +1437,11 @@
 
 					<div class="border-subtle border-b p-3">
 						<div class="mb-2 flex items-center justify-between">
-							<p class="text-muted text-[10px] tracking-[0.03em]">layers</p>
+							<p class="text-muted text-[11px] tracking-[0.03em]">layers</p>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger
 									aria-label="Choose mask preview"
-									class="text-muted hover:bg-surface hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[9px] lowercase outline-none"
+									class="text-muted hover:bg-surface hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] lowercase outline-none"
 								>
 									{#if maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 									<span>{maskPreviewMode ?? 'off'}</span>
@@ -1486,7 +1486,7 @@
 										class="bg-elevated text-muted flex size-7 items-center justify-center rounded-sm"
 										><Scan size={13} /></span
 									>
-									<span class="min-w-0 flex-1 truncate text-[10px] lowercase">{mask.name}</span>
+									<span class="min-w-0 flex-1 truncate text-[11px] lowercase">{mask.name}</span>
 									<button
 										type="button"
 										aria-label={mask.visible ? 'Hide mask' : 'Show mask'}
@@ -1514,7 +1514,7 @@
 							{#if workspace.masks.length === 0}
 								<div class="border-subtle rounded border border-dashed px-3 py-5 text-center">
 									<CircleDashed size={18} strokeWidth={1} class="text-muted mx-auto mb-2" />
-									<p class="text-muted text-[10px]">choose a tool to create a mask.</p>
+									<p class="text-muted text-[11px]">choose a tool to create a mask.</p>
 								</div>
 							{/if}
 						</div>
@@ -1535,7 +1535,7 @@
 									>
 										<ChevronLeft size={12} />
 									</button>
-									<span class="text-muted text-[9px] lowercase">
+									<span class="text-muted text-[10px] lowercase">
 										candidate
 										<span class="text-text font-mono"
 											>{selectedObjectComponent.alternatives.index + 1}/{selectedObjectComponent
@@ -1553,7 +1553,7 @@
 									</button>
 								</div>
 							{/if}
-							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">edge</p>
+							<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">edge</p>
 							<AdjustmentSlider
 								label="Definition"
 								value={selectedMask.edge.contrast}
@@ -1588,7 +1588,7 @@
 							<button
 								type="button"
 								disabled={!canRefineSelectedMask || smartMaskWorking}
-								class="border-subtle text-muted hover:border-muted hover:text-text mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[10px] lowercase transition-colors disabled:cursor-default disabled:opacity-40 {activeTool ===
+								class="border-subtle text-muted hover:border-muted hover:text-text mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[11px] lowercase transition-colors disabled:cursor-default disabled:opacity-40 {activeTool ===
 								'mask-refine'
 									? 'border-accent bg-surface text-text'
 									: ''}"
@@ -1611,7 +1611,7 @@
 								</div>
 							{/if}
 							<div class="bg-subtle my-2 h-px"></div>
-							<p class="text-muted pb-1 text-[9px] tracking-[0.03em] lowercase">light</p>
+							<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">light</p>
 							<AdjustmentSlider
 								label="Exposure"
 								value={selectedMask.adjustments.light.exposure}
@@ -1678,7 +1678,7 @@
 					<div class="border-subtle flex items-center gap-2 border-b p-2">
 						<select
 							aria-label="Layer blend mode"
-							class="border-subtle bg-surface text-text h-7 min-w-0 flex-1 cursor-pointer rounded border px-2 text-[10px] focus:outline-none"
+							class="border-subtle bg-surface text-text h-7 min-w-0 flex-1 cursor-pointer rounded border px-2 text-[11px] focus:outline-none"
 						>
 							<option>normal</option>
 							<option>multiply</option>
@@ -1686,8 +1686,8 @@
 							<option>overlay</option>
 							<option>soft light</option>
 						</select>
-						<span class="text-muted text-[10px]">opacity</span>
-						<span class="font-mono text-[10px]">100%</span>
+						<span class="text-muted text-[11px]">opacity</span>
+						<span class="font-mono text-[11px]">100%</span>
 					</div>
 
 					<div class="space-y-1 p-2">
@@ -1698,7 +1698,7 @@
 							>
 								<SlidersHorizontal size={12} />
 							</div>
-							<span class="min-w-0 flex-1 truncate text-[10px]">color & tone</span>
+							<span class="min-w-0 flex-1 truncate text-[11px]">color & tone</span>
 							<div class="size-6 rounded-sm bg-white"></div>
 						</div>
 
@@ -1713,7 +1713,7 @@
 								>
 									<CircleDashed size={12} />
 								</div>
-								<span class="min-w-0 flex-1 truncate text-[10px]">{mask.name}</span>
+								<span class="min-w-0 flex-1 truncate text-[11px]">{mask.name}</span>
 								<button type="button" aria-label="Layer options" class="text-muted hover:text-text">
 									<MoreHorizontal size={12} />
 								</button>
@@ -1725,7 +1725,7 @@
 							<div class="bg-canvas size-7 shrink-0 overflow-hidden rounded-sm">
 								{#if active}<PhotoVisual photo={active} onRequest={workspace.loadThumbnail} />{/if}
 							</div>
-							<span class="min-w-0 flex-1 truncate font-mono text-[10px]">
+							<span class="min-w-0 flex-1 truncate font-mono text-[11px]">
 								{active?.name ?? 'photograph'}
 							</span>
 							<Lock size={11} class="text-muted" />
@@ -1785,11 +1785,11 @@
 						>
 							<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
 							<span
-								class="absolute top-1 left-1 rounded-sm bg-black/65 px-1 font-mono text-[10px] text-white"
+								class="absolute top-1 left-1 rounded-sm bg-black/65 px-1 font-mono text-[11px] text-white"
 								>{index + 1}</span
 							>
 							<span
-								class="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 font-mono text-[10px] text-white/80"
+								class="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 font-mono text-[11px] text-white/80"
 								>{photo.name}</span
 							>
 						</button>

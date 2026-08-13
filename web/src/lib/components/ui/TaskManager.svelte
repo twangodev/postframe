@@ -29,7 +29,7 @@
 			>
 				{#each tasks as entry (entry.key)}
 					<div>
-						<p class="text-muted mb-1 text-[9px] tracking-[0.03em]">{entry.name}</p>
+						<p class="text-muted mb-1 text-[10px] tracking-[0.03em]">{entry.name}</p>
 						<ProgressCard
 							task={entry.task}
 							variant="inline"

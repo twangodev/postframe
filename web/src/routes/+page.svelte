@@ -27,7 +27,7 @@
 	<main class="bg-bg text-text flex min-h-svh items-center justify-center">
 		<div class="motion-enter flex items-center gap-2">
 			<img src={postframeLogo} alt="" class="size-7" />
-			<span class="text-[13px] font-medium tracking-tight">postframe</span>
+			<span class="text-[14px] font-medium tracking-tight">postframe</span>
 		</div>
 	</main>
 {:else if workspace.mode === 'welcome'}
@@ -68,7 +68,7 @@
 		class="bg-bg flex min-h-svh flex-col items-center justify-center px-8 text-center min-[900px]:hidden"
 	>
 		<MonitorUp size={30} strokeWidth={1} class="text-muted mb-5" />
-		<p class="text-accent text-[10px] tracking-[0.04em]">desktop workspace</p>
+		<p class="text-accent text-[11px] tracking-[0.04em]">desktop workspace</p>
 		<h1 class="mt-3 text-xl font-medium tracking-tight">a little more room, please.</h1>
 		<p class="text-muted mt-3 max-w-sm text-xs leading-relaxed">
 			postframe's editing workspace is designed for displays at least 900 pixels wide. your files
@@ -76,7 +76,7 @@
 		</p>
 		<button
 			type="button"
-			class="border-subtle text-muted hover:text-text mt-6 cursor-pointer rounded border px-4 py-2 text-[10px] tracking-wide"
+			class="border-subtle text-muted hover:text-text mt-6 cursor-pointer rounded border px-4 py-2 text-[11px] tracking-wide"
 			onclick={workspace.reset}
 		>
 			back to start

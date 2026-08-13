@@ -39,7 +39,7 @@
 				</span>
 				<span class="flex-1">{entry.label}</span>
 				{#if entry.shortcut}
-					<kbd class="text-muted ml-5 font-mono text-[9px]">{entry.shortcut}</kbd>
+					<kbd class="text-muted ml-5 font-mono text-[10px]">{entry.shortcut}</kbd>
 				{/if}
 			</ContextMenu.Item>
 		{/if}
