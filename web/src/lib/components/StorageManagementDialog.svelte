@@ -73,7 +73,7 @@
 <Dialog.Root {open} onOpenChange={closeChanged}>
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<CenteredDialogContent size="sm">
+		<CenteredDialogContent size="lg">
 			<div class="border-subtle flex items-start justify-between border-b p-5">
 				<div>
 					<div class="text-muted mb-2 flex items-center gap-2">
