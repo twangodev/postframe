@@ -8,5 +8,8 @@ test('maps model resources to stable storage-safe names', async () => {
 	const second = await modelCacheName('https://models.postframe.twango.dev/slimsam/model.onnx');
 	assert.equal(first, second);
 	assert.match(first, /^[a-f0-9]{64}$/);
-	assert.notEqual(first, await modelCacheName('https://models.postframe.twango.dev/u2net/model.onnx'));
+	assert.notEqual(
+		first,
+		await modelCacheName('https://models.postframe.twango.dev/u2net/model.onnx')
+	);
 });
