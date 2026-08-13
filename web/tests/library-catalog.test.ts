@@ -199,7 +199,7 @@ test('queues asset deletion with the photo catalog transaction', async () => {
 				{ kind: 'original', storageName: 'asset-one.dng' },
 				{ kind: 'thumbnail', storageName: 'photo-one.jpg' },
 				{ kind: 'edit', storageName: 'photo-one.json' },
-				{ kind: 'derived', storageName: 'render-v1-photo-one.pfc' }
+				{ kind: 'derived', storageName: 'render-v2-photo-one.pfc' }
 			]
 		);
 		assert.equal((await catalog.loadLibrary())?.photos.length, 0);
