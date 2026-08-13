@@ -8,13 +8,22 @@ interface SegmentDefinition {
 }
 
 const SEGMENT_DEFINITIONS = [
-	{ id: 'photos', label: 'photos', color: 'bg-accent', folders: ['originals', 'thumbnails'] },
-	{ id: 'edits', label: 'edits', color: 'bg-positive', folders: ['edits', 'masks'] },
-	{ id: 'models', label: 'ai models', color: 'bg-warning', folders: ['models'] },
-	{ id: 'cache', label: 'render cache', color: 'bg-control-active', folders: ['derived'] }
+	{
+		id: 'photos',
+		label: 'photos',
+		color: 'var(--color-accent)',
+		folders: ['originals', 'thumbnails']
+	},
+	{ id: 'edits', label: 'edits', color: 'var(--color-positive)', folders: ['edits', 'masks'] },
+	{ id: 'models', label: 'ai models', color: 'var(--color-warning)', folders: ['models'] },
+	{ id: 'cache', label: 'render cache', color: 'var(--color-control-active)', folders: ['derived'] }
 ] as const satisfies readonly SegmentDefinition[];
 
-const OTHER_SEGMENT = { id: 'other', label: 'other site data', color: 'bg-control-edge' } as const;
+const OTHER_SEGMENT = {
+	id: 'other',
+	label: 'other site data',
+	color: 'var(--color-control-edge)'
+} as const;
 
 export type StorageSegmentId = (typeof SEGMENT_DEFINITIONS)[number]['id'] | typeof OTHER_SEGMENT.id;
 
