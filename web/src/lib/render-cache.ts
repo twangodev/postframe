@@ -1,5 +1,5 @@
-const RENDER_CACHE_VERSION = 2;
+const RENDERS_VALID_SINCE = '2026-08-13';
 
 export function renderCacheStorageName(photoId: string) {
-	return `render-v${RENDER_CACHE_VERSION}-${photoId}.pfc`;
+	return `render-${RENDERS_VALID_SINCE}-${photoId}.pfc`;
 }
