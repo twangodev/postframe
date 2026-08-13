@@ -1813,7 +1813,7 @@
 		border-radius: 0.25rem;
 		background: var(--color-surface);
 		color: var(--color-muted);
-		font-size: 0.625rem;
+		font-size: 0.6875rem;
 		transition:
 			color 150ms ease,
 			border-color 150ms ease;
