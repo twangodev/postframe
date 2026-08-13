@@ -95,11 +95,23 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
         &mut planar,
     )
     .map_err(|e| Error::Encode(e.to_string()))?;
-    drop(mosaic);
 
     let (r, gb) = planar.split_at(width * height);
     let (g, b) = gb.split_at(width * height);
-    let rgb = (0..width * height).map(|i| [r[i], g[i], b[i]]).collect();
+    let mut rgb = Vec::with_capacity(width * height);
+    for y in 0..height {
+        for x in 0..width {
+            let i = y * width + x;
+            rgb.push(clamp_interpolated(
+                [r[i], g[i], b[i]],
+                &mosaic,
+                width,
+                height,
+                x,
+                y,
+            ));
+        }
+    }
 
     let mut clipped = Vec::with_capacity(width * height);
     for y in 0..height {
@@ -121,6 +133,52 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
         rgb,
         clipped,
     })
+}
+
+const CROSS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+const DIAGONAL: [(isize, isize); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
+const HORIZONTAL: [(isize, isize); 2] = [(-1, 0), (1, 0)];
+const VERTICAL: [(isize, isize); 2] = [(0, -1), (0, 1)];
+
+// MHC kernels carry negative taps, so interpolated channels can overshoot at
+// hard edges; keep each one inside the range its measured neighbors span.
+fn clamp_interpolated(
+    rgb: [f32; 3],
+    mosaic: &[f32],
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+) -> [f32; 3] {
+    let clamp = |channel: f32, offsets: &[(isize, isize)]| {
+        let mut lo = f32::INFINITY;
+        let mut hi = f32::NEG_INFINITY;
+        for &(dx, dy) in offsets {
+            let sample =
+                mosaic[reflect(y as isize + dy, height) * width + reflect(x as isize + dx, width)];
+            lo = lo.min(sample);
+            hi = hi.max(sample);
+        }
+        channel.clamp(lo, hi)
+    };
+    let [r, g, b] = rgb;
+    match (y % 2, x % 2) {
+        (0, 0) => [r, clamp(g, &CROSS), clamp(b, &DIAGONAL)],
+        (1, 1) => [clamp(r, &DIAGONAL), clamp(g, &CROSS), b],
+        (0, 1) => [clamp(r, &HORIZONTAL), g, clamp(b, &VERTICAL)],
+        _ => [clamp(r, &VERTICAL), g, clamp(b, &HORIZONTAL)],
+    }
+}
+
+fn reflect(i: isize, len: usize) -> usize {
+    let last = len as isize - 1;
+    (if i < 0 {
+        -i
+    } else if i > last {
+        2 * last - i
+    } else {
+        i
+    }) as usize
 }
 
 fn quad_black(black: &BlackLevel) -> Result<[f32; 4]> {
@@ -192,5 +250,48 @@ mod tests {
         assert!(!out.clipped[0] && !out.clipped[1]);
         assert!(out.clipped[2], "one clipped green must flag the whole quad");
         assert_eq!(out.rgb[2][1], (0.996 + 0.0) / 2.0);
+    }
+
+    // 4x4 RGGB mosaic, row-major. Sites: (even,even)=R, odd/even mixes=G, (odd,odd)=B.
+    fn mosaic() -> Vec<f32> {
+        vec![
+            0.50, 0.20, 0.50, 0.30, // R G R G
+            0.10, 0.60, 0.40, 0.60, // G B G B
+            0.50, 0.25, 0.50, 0.35, // R G R G
+            0.15, 0.60, 0.45, 0.60, // G B G B
+        ]
+    }
+
+    #[test]
+    fn clamps_interpolated_channels_to_measured_neighbors() {
+        // R site at (2, 2): G measured on the cross, B on the diagonals.
+        let clamped = clamp_interpolated([0.9, 2.0, -0.2], &mosaic(), 4, 4, 2, 2);
+        assert_eq!(clamped[0], 0.9); // measured channel untouched
+        assert_eq!(clamped[1], 0.45); // max of G cross (0.25, 0.35, 0.40, 0.45)
+        assert_eq!(clamped[2], 0.6); // min of B diagonals (all 0.6)
+    }
+
+    #[test]
+    fn keeps_values_already_inside_the_neighbor_range() {
+        let clamped = clamp_interpolated([0.9, 0.3, 0.6], &mosaic(), 4, 4, 2, 2);
+        assert_eq!(clamped[1], 0.3);
+        assert_eq!(clamped[2], 0.6);
+    }
+
+    #[test]
+    fn reflects_at_borders_onto_same_color_sites() {
+        // R site at (0, 0): reflected G cross is (1,0) and (0,1); B diagonal is (1,1).
+        let clamped = clamp_interpolated([0.5, 1.0, 1.0], &mosaic(), 4, 4, 0, 0);
+        assert_eq!(clamped[1], 0.2); // max of G at (1,0)=0.2 and (0,1)=0.1
+        assert_eq!(clamped[2], 0.6); // B at (1,1)
+    }
+
+    #[test]
+    fn green_sites_clamp_red_and_blue_along_their_rows() {
+        // G site at (1, 0) (red row): R measured at (0,0),(2,0); B at (1,1).
+        let clamped = clamp_interpolated([2.0, 0.2, -1.0], &mosaic(), 4, 4, 1, 0);
+        assert_eq!(clamped[0], 0.5);
+        assert_eq!(clamped[1], 0.2);
+        assert_eq!(clamped[2], 0.6);
     }
 }
