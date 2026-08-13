@@ -51,8 +51,3 @@ export function normalizedRawExtensions(extensions: Iterable<string>) {
 		.filter((extension) => /^[a-z0-9]+$/.test(extension))
 		.sort();
 }
-
-// Cameras encode unknown capture values (adapted or manual lenses) as zero.
-export function positiveOrNull(value: number | null | undefined): number | null {
-	return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
-}

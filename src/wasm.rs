@@ -386,13 +386,14 @@ fn inspection(
             .date_time_original
             .clone()
             .or_else(|| exif.create_date.clone()),
-        exposure_seconds: exif.exposure_time.and_then(rational),
-        f_number: exif.fnumber.and_then(rational),
+        exposure_seconds: exif.exposure_time.and_then(positive_rational),
+        f_number: exif.fnumber.and_then(positive_rational),
         iso: exif
             .iso_speed
             .or(exif.recommended_exposure_index)
-            .or(exif.iso_speed_ratings.map(u32::from)),
-        focal_length_mm: exif.focal_length.and_then(rational),
+            .or(exif.iso_speed_ratings.map(u32::from))
+            .filter(|iso| *iso > 0),
+        focal_length_mm: exif.focal_length.and_then(positive_rational),
     }
 }
 
@@ -400,9 +401,9 @@ fn non_empty(value: String) -> Option<String> {
     (!value.trim().is_empty()).then_some(value)
 }
 
-fn rational(value: Rational) -> Option<f64> {
+fn positive_rational(value: Rational) -> Option<f64> {
     let value = value.n as f64 / value.d as f64;
-    value.is_finite().then_some(value)
+    (value.is_finite() && value > 0.0).then_some(value)
 }
 
 fn rawler_err(error: rawler::RawlerError) -> JsError {
@@ -977,5 +978,23 @@ fn light_settings(
         shadows,
         whites,
         blacks,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn positive_rational_keeps_real_capture_values() {
+        assert_eq!(positive_rational(Rational { n: 35, d: 1 }), Some(35.0));
+        assert_eq!(positive_rational(Rational { n: 1, d: 4000 }), Some(0.00025));
+    }
+
+    #[test]
+    fn positive_rational_treats_zero_and_undefined_as_unknown() {
+        assert_eq!(positive_rational(Rational { n: 0, d: 1 }), None);
+        assert_eq!(positive_rational(Rational { n: 0, d: 0 }), None);
+        assert_eq!(positive_rational(Rational { n: 1, d: 0 }), None);
     }
 }
