@@ -85,6 +85,7 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
             mosaic[y * width + x] = v.normalized(x, y);
         }
     }
+    suppress_impulses(&mut mosaic, width, height);
     let mut planar = vec![0.0f32; 3 * width * height];
     demosaic::demosaic(
         &mosaic,
@@ -165,6 +166,58 @@ fn clamp_interpolated(
         (1, 1) => [clamp(r, &DIAGONAL), clamp(g, &CROSS), b],
         (0, 1) => [clamp(r, &HORIZONTAL), g, clamp(b, &VERTICAL)],
         _ => [clamp(r, &VERTICAL), g, clamp(b, &HORIZONTAL)],
+    }
+}
+
+const GREEN_LATTICE: [(isize, isize); 8] = [
+    (-1, -1),
+    (1, -1),
+    (-1, 1),
+    (1, 1),
+    (-2, 0),
+    (2, 0),
+    (0, -2),
+    (0, 2),
+];
+const QUAD_LATTICE: [(isize, isize); 8] = [
+    (-2, 0),
+    (2, 0),
+    (0, -2),
+    (0, 2),
+    (-2, -2),
+    (2, -2),
+    (-2, 2),
+    (2, 2),
+];
+const IMPULSE_FLOOR: f32 = 0.04;
+const IMPULSE_RATIO: f32 = 4.0;
+
+fn suppress_impulses(mosaic: &mut [f32], width: usize, height: usize) {
+    let mut fixes = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let center = mosaic[y * width + x];
+            if center < IMPULSE_FLOOR {
+                continue;
+            }
+            let same_color = if y % 2 != x % 2 {
+                &GREEN_LATTICE
+            } else {
+                &QUAD_LATTICE
+            };
+            let mut ceiling = 0.0f32;
+            for &(dx, dy) in same_color {
+                let sample = mosaic
+                    [reflect(y as isize + dy, height) * width + reflect(x as isize + dx, width)];
+                ceiling = ceiling.max(sample);
+            }
+            if center > IMPULSE_RATIO * ceiling.max(IMPULSE_FLOOR / IMPULSE_RATIO) {
+                fixes.push((y * width + x, ceiling));
+            }
+        }
+    }
+    for (i, ceiling) in fixes {
+        mosaic[i] = ceiling;
     }
 }
 
@@ -285,5 +338,37 @@ mod tests {
         assert_eq!(clamped[0], 0.5);
         assert_eq!(clamped[1], 0.2);
         assert_eq!(clamped[2], 0.6);
+    }
+
+    #[test]
+    fn suppresses_a_hot_photosite_to_its_neighbor_ceiling() {
+        let mut mosaic = vec![0.1; 36];
+        mosaic[2 * 6 + 3] = 0.9;
+        suppress_impulses(&mut mosaic, 6, 6);
+        assert_eq!(mosaic[2 * 6 + 3], 0.1);
+    }
+
+    #[test]
+    fn keeps_bright_photosites_with_bright_neighbors() {
+        let mut mosaic = vec![0.4; 36];
+        mosaic[2 * 6 + 3] = 0.9;
+        suppress_impulses(&mut mosaic, 6, 6);
+        assert_eq!(mosaic[2 * 6 + 3], 0.9);
+    }
+
+    #[test]
+    fn keeps_faint_noise_below_the_floor() {
+        let mut mosaic = vec![0.001; 36];
+        mosaic[2 * 6 + 3] = 0.03;
+        suppress_impulses(&mut mosaic, 6, 6);
+        assert_eq!(mosaic[2 * 6 + 3], 0.03);
+    }
+
+    #[test]
+    fn suppresses_hot_corners_through_reflection() {
+        let mut mosaic = vec![0.1; 36];
+        mosaic[0] = 0.9;
+        suppress_impulses(&mut mosaic, 6, 6);
+        assert_eq!(mosaic[0], 0.1);
     }
 }
