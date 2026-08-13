@@ -140,8 +140,6 @@ const DIAGONAL: [(isize, isize); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
 const HORIZONTAL: [(isize, isize); 2] = [(-1, 0), (1, 0)];
 const VERTICAL: [(isize, isize); 2] = [(0, -1), (0, 1)];
 
-// MHC kernels carry negative taps, so interpolated channels can overshoot at
-// hard edges; keep each one inside the range its measured neighbors span.
 fn clamp_interpolated(
     rgb: [f32; 3],
     mosaic: &[f32],
@@ -252,44 +250,38 @@ mod tests {
         assert_eq!(out.rgb[2][1], (0.996 + 0.0) / 2.0);
     }
 
-    // 4x4 RGGB mosaic, row-major. Sites: (even,even)=R, odd/even mixes=G, (odd,odd)=B.
-    fn mosaic() -> Vec<f32> {
+    fn rggb_mosaic() -> Vec<f32> {
         vec![
-            0.50, 0.20, 0.50, 0.30, // R G R G
-            0.10, 0.60, 0.40, 0.60, // G B G B
-            0.50, 0.25, 0.50, 0.35, // R G R G
-            0.15, 0.60, 0.45, 0.60, // G B G B
+            0.50, 0.20, 0.50, 0.30, 0.10, 0.60, 0.40, 0.60, 0.50, 0.25, 0.50, 0.35, 0.15, 0.60,
+            0.45, 0.60,
         ]
     }
 
     #[test]
     fn clamps_interpolated_channels_to_measured_neighbors() {
-        // R site at (2, 2): G measured on the cross, B on the diagonals.
-        let clamped = clamp_interpolated([0.9, 2.0, -0.2], &mosaic(), 4, 4, 2, 2);
-        assert_eq!(clamped[0], 0.9); // measured channel untouched
-        assert_eq!(clamped[1], 0.45); // max of G cross (0.25, 0.35, 0.40, 0.45)
-        assert_eq!(clamped[2], 0.6); // min of B diagonals (all 0.6)
+        let clamped = clamp_interpolated([0.9, 2.0, -0.2], &rggb_mosaic(), 4, 4, 2, 2);
+        assert_eq!(clamped[0], 0.9);
+        assert_eq!(clamped[1], 0.45);
+        assert_eq!(clamped[2], 0.6);
     }
 
     #[test]
     fn keeps_values_already_inside_the_neighbor_range() {
-        let clamped = clamp_interpolated([0.9, 0.3, 0.6], &mosaic(), 4, 4, 2, 2);
+        let clamped = clamp_interpolated([0.9, 0.3, 0.6], &rggb_mosaic(), 4, 4, 2, 2);
         assert_eq!(clamped[1], 0.3);
         assert_eq!(clamped[2], 0.6);
     }
 
     #[test]
     fn reflects_at_borders_onto_same_color_sites() {
-        // R site at (0, 0): reflected G cross is (1,0) and (0,1); B diagonal is (1,1).
-        let clamped = clamp_interpolated([0.5, 1.0, 1.0], &mosaic(), 4, 4, 0, 0);
-        assert_eq!(clamped[1], 0.2); // max of G at (1,0)=0.2 and (0,1)=0.1
-        assert_eq!(clamped[2], 0.6); // B at (1,1)
+        let clamped = clamp_interpolated([0.5, 1.0, 1.0], &rggb_mosaic(), 4, 4, 0, 0);
+        assert_eq!(clamped[1], 0.2);
+        assert_eq!(clamped[2], 0.6);
     }
 
     #[test]
     fn green_sites_clamp_red_and_blue_along_their_rows() {
-        // G site at (1, 0) (red row): R measured at (0,0),(2,0); B at (1,1).
-        let clamped = clamp_interpolated([2.0, 0.2, -1.0], &mosaic(), 4, 4, 1, 0);
+        let clamped = clamp_interpolated([2.0, 0.2, -1.0], &rggb_mosaic(), 4, 4, 1, 0);
         assert_eq!(clamped[0], 0.5);
         assert_eq!(clamped[1], 0.2);
         assert_eq!(clamped[2], 0.6);
