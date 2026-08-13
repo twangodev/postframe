@@ -1,4 +1,4 @@
-import type { WasmTodoName } from './wasm-bindings';
+import { separator, type MenuEntry } from './menu.ts';
 
 export type EditorMenuAction =
 	| 'new-collection'
@@ -11,42 +11,13 @@ export type EditorMenuAction =
 	| 'undo'
 	| 'redo';
 
-interface MenuAction {
-	kind: 'action';
-	label: string;
-	action: EditorMenuAction;
-	shortcut?: string;
-}
-
-interface MenuTodo {
-	kind: 'todo';
-	label: string;
-	todo: WasmTodoName;
-	shortcut?: string;
-	checked?: boolean;
-}
-
-interface MenuSeparator {
-	kind: 'separator';
-}
-
-type MenuLeaf = MenuAction | MenuTodo | MenuSeparator;
-
-interface MenuSubmenu {
-	kind: 'submenu';
-	label: string;
-	items: MenuLeaf[];
-}
-
-export type EditorMenuEntry = MenuLeaf | MenuSubmenu;
+export type EditorMenuEntry = MenuEntry<EditorMenuAction>;
 
 export interface EditorMenu {
 	id: string;
 	label: string;
 	items: EditorMenuEntry[];
 }
-
-const separator = (): MenuSeparator => ({ kind: 'separator' });
 
 export const EDITOR_MENUS: EditorMenu[] = [
 	{

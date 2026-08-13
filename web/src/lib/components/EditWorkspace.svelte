@@ -34,10 +34,12 @@
 	import MaskPromptOverlay from './MaskPromptOverlay.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import ContextMenu from './ui/ContextMenu.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
 	import ProgressCard from './ui/ProgressCard.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
+	import { separator, type MenuEntry } from '$lib/menu';
 	import { type MaskKind, type WorkspaceState } from '$lib/workspace.svelte';
 	import type { LightControlName } from '$lib/develop-settings';
 	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
@@ -63,9 +65,44 @@
 
 	interface Props {
 		workspace: WorkspaceState;
+		onExport: () => void;
 	}
 
-	let { workspace }: Props = $props();
+	let { workspace, onExport }: Props = $props();
+
+	type ViewportMenuAction = 'undo' | 'redo' | 'export';
+	const viewportMenu: MenuEntry<ViewportMenuAction>[] = $derived([
+		{ kind: 'action', label: 'undo', action: 'undo', shortcut: '⌘Z', disabled: !workspace.canUndo },
+		{
+			kind: 'action',
+			label: 'redo',
+			action: 'redo',
+			shortcut: '⇧⌘Z',
+			disabled: !workspace.canRedo
+		},
+		separator(),
+		{ kind: 'action', label: 'export…', action: 'export', shortcut: '⇧⌘E' }
+	]);
+
+	function runViewportAction(action: ViewportMenuAction) {
+		if (action === 'undo') workspace.undo();
+		else if (action === 'redo') workspace.redo();
+		else onExport();
+	}
+
+	type FilmstripMenuAction = 'open' | 'organize';
+	const filmstripMenu: MenuEntry<FilmstripMenuAction>[] = [
+		{ kind: 'action', label: 'open photo', action: 'open' },
+		{ kind: 'action', label: 'show in organizer', action: 'organize' }
+	];
+
+	function runFilmstripAction(action: FilmstripMenuAction, photoId: string) {
+		if (action === 'open') workspace.selectPhoto(photoId);
+		else {
+			workspace.setMode('organize');
+			workspace.selectPhoto(photoId);
+		}
+	}
 	const previewLight = (control: LightControlName) => (value: number) =>
 		workspace.previewLight(control, value);
 	const commitLight = (control: LightControlName) => (value: number) =>
@@ -914,212 +951,217 @@
 				{/if}
 			</div>
 
-			<div
-				bind:this={viewportElement}
-				role="application"
-				aria-label="Photo viewport"
-				class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {panning
-					? 'cursor-grabbing'
-					: activeTool === 'hand' || spaceHeld
-						? 'cursor-grab'
-						: activeTool === 'zoom'
-							? 'cursor-zoom-in'
-							: activeTool === 'mask-refine' && maskBrushPoint
-								? 'cursor-none'
-								: activeTool === 'object-select' || activeTool === 'mask-refine'
-									? 'cursor-crosshair'
-									: 'cursor-default'}"
-				onwheel={handleWheel}
-				onpointerdown={handlePointerDown}
-				onpointermove={handlePointerMove}
-				onpointerleave={handlePointerLeave}
-				onpointerup={handlePointerUp}
-				onpointercancel={handlePointerUp}
-				onlostpointercapture={handlePointerUp}
-				ondblclick={handleDoubleClick}
-			>
-				<div
-					class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
-				></div>
-				{#if active}
-					{#key `${active.id}:${active.src}`}
+			<ContextMenu items={viewportMenu} onAction={runViewportAction}>
+				{#snippet children({ props })}
+					<div
+						{...props}
+						bind:this={viewportElement}
+						role="application"
+						aria-label="Photo viewport"
+						class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {panning
+							? 'cursor-grabbing'
+							: activeTool === 'hand' || spaceHeld
+								? 'cursor-grab'
+								: activeTool === 'zoom'
+									? 'cursor-zoom-in'
+									: activeTool === 'mask-refine' && maskBrushPoint
+										? 'cursor-none'
+										: activeTool === 'object-select' || activeTool === 'mask-refine'
+											? 'cursor-crosshair'
+											: 'cursor-default'}"
+						onwheel={handleWheel}
+						onpointerdown={handlePointerDown}
+						onpointermove={handlePointerMove}
+						onpointerleave={handlePointerLeave}
+						onpointerup={handlePointerUp}
+						onpointercancel={handlePointerUp}
+						onlostpointercapture={handlePointerUp}
+						ondblclick={handleDoubleClick}
+					>
 						<div
-							class:viewport-pixelated={pixelGridStrength > 0}
-							class="motion-viewport-photo absolute top-0 left-0 z-0 overflow-hidden bg-black shadow-2xl will-change-transform"
-							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
-						>
-							<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-							{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
-								<div class="absolute inset-0 z-20 overflow-hidden text-white">
-									<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
-									<div
-										class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
-									>
-										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-									</div>
-									<div
-										class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
-									>
-										<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-									</div>
-									<div class="develop-dither pointer-events-none absolute inset-0"></div>
-									<div class="develop-glimmer pointer-events-none absolute"></div>
+							class="pointer-events-none absolute inset-0 [background-image:radial-gradient(#3c3a34_0.7px,transparent_0.7px)] [background-size:8px_8px] opacity-20"
+						></div>
+						{#if active}
+							{#key `${active.id}:${active.src}`}
+								<div
+									class:viewport-pixelated={pixelGridStrength > 0}
+									class="motion-viewport-photo absolute top-0 left-0 z-0 overflow-hidden bg-black shadow-2xl will-change-transform"
+									style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
+								>
+									<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
+									{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
+										<div class="absolute inset-0 z-20 overflow-hidden text-white">
+											<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
+											<div
+												class="develop-pixel-shift develop-pixel-shift-a pointer-events-none absolute inset-0"
+											>
+												<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
+											</div>
+											<div
+												class="develop-pixel-shift develop-pixel-shift-b pointer-events-none absolute inset-0"
+											>
+												<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
+											</div>
+											<div class="develop-dither pointer-events-none absolute inset-0"></div>
+											<div class="develop-glimmer pointer-events-none absolute"></div>
+										</div>
+									{/if}
 								</div>
-							{/if}
-						</div>
-						<PhotoPyramidLayer
-							photoId={active.id}
-							enabled={workspace.documentStatus.kind === 'ready' &&
-								workspace.documentStatus.photoId === active.id}
-							viewport={viewportSize}
-							image={imageSize}
-							transform={viewportTransform}
-							renderTile={workspace.renderTile}
-							renderRevision={workspace.renderSettings.revision}
-							settings={workspace.renderSettings.settings}
-							onRenderSettled={workspace.settleDevelopRender}
-						/>
-						{#if workspace.developPreview?.photoId === active.id}
-							<div
-								class="motion-viewport-photo pointer-events-none absolute top-0 left-0 z-[15] overflow-hidden will-change-transform"
-								class:bg-black={workspace.developPreview.src !== null}
-								style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
-							>
-								{#if workspace.developPreview.src}
-									<img
-										src={workspace.developPreview.src}
-										alt=""
-										draggable="false"
-										class="size-full object-fill"
-									/>
+								<PhotoPyramidLayer
+									photoId={active.id}
+									enabled={workspace.documentStatus.kind === 'ready' &&
+										workspace.documentStatus.photoId === active.id}
+									viewport={viewportSize}
+									image={imageSize}
+									transform={viewportTransform}
+									renderTile={workspace.renderTile}
+									renderRevision={workspace.renderSettings.revision}
+									settings={workspace.renderSettings.settings}
+									onRenderSettled={workspace.settleDevelopRender}
+								/>
+								{#if workspace.developPreview?.photoId === active.id}
+									<div
+										class="motion-viewport-photo pointer-events-none absolute top-0 left-0 z-[15] overflow-hidden will-change-transform"
+										class:bg-black={workspace.developPreview.src !== null}
+										style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
+									>
+										{#if workspace.developPreview.src}
+											<img
+												src={workspace.developPreview.src}
+												alt=""
+												draggable="false"
+												class="size-full object-fill"
+											/>
+										{/if}
+										<div class="develop-soft-focus absolute inset-0"></div>
+										<div class="develop-dither absolute inset-0"></div>
+										<div class="develop-glimmer absolute"></div>
+									</div>
 								{/if}
-								<div class="develop-soft-focus absolute inset-0"></div>
-								<div class="develop-dither absolute inset-0"></div>
-								<div class="develop-glimmer absolute"></div>
-							</div>
-						{/if}
-						<div
-							class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
-							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
-						>
-							{#if pixelGridStrength > 0}
 								<div
-									data-pixel-grid
-									class="viewport-pixel-grid pointer-events-none absolute inset-0"
-									style:opacity={pixelGridStrength}
-								></div>
-							{/if}
-							{#if cropTools.has(activeTool)}
-								<div
-									class="viewport-hairline pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"
-								></div>
-							{:else if retouchTools.has(activeTool) || ['brush', 'pencil', 'mixer-brush', 'eraser'].includes(activeTool)}
-								<div
-									class="viewport-hairline pointer-events-none absolute top-[46%] left-[58%] rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
-									style="width: calc(40px / var(--viewport-scale)); height: calc(40px / var(--viewport-scale));"
-								></div>
-							{:else if selectionTools.has(activeTool) && activeTool !== 'object-select'}
-								<div
-									class="viewport-hairline pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
-								></div>
-							{:else if typeTools.has(activeTool)}
-								<div
-									class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
+									class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
+									style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${viewportTransform.scale}); transform-origin: top left; --viewport-scale: ${viewportTransform.scale};`}
 								>
-									<span class="absolute top-1 left-1 text-2xl font-medium text-white/90"
-										>postframe</span
-									>
+									{#if pixelGridStrength > 0}
+										<div
+											data-pixel-grid
+											class="viewport-pixel-grid pointer-events-none absolute inset-0"
+											style:opacity={pixelGridStrength}
+										></div>
+									{/if}
+									{#if cropTools.has(activeTool)}
+										<div
+											class="viewport-hairline pointer-events-none absolute inset-[8%] border border-white/80 [background-image:linear-gradient(to_right,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%),linear-gradient(to_bottom,transparent_33.2%,rgba(255,255,255,0.45)_33.2%,rgba(255,255,255,0.45)_33.5%,transparent_33.5%,transparent_66.4%,rgba(255,255,255,0.45)_66.4%,rgba(255,255,255,0.45)_66.7%,transparent_66.7%)] shadow-[0_0_0_999px_rgba(0,0,0,0.4)]"
+										></div>
+									{:else if retouchTools.has(activeTool) || ['brush', 'pencil', 'mixer-brush', 'eraser'].includes(activeTool)}
+										<div
+											class="viewport-hairline pointer-events-none absolute top-[46%] left-[58%] rounded-full border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
+											style="width: calc(40px / var(--viewport-scale)); height: calc(40px / var(--viewport-scale));"
+										></div>
+									{:else if selectionTools.has(activeTool) && activeTool !== 'object-select'}
+										<div
+											class="viewport-hairline pointer-events-none absolute inset-[20%] rounded-[45%_55%_48%_52%/52%_42%_58%_48%] border border-dashed border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.45)]"
+										></div>
+									{:else if typeTools.has(activeTool)}
+										<div
+											class="pointer-events-none absolute top-[38%] left-[30%] h-16 w-56 border border-white/75"
+										>
+											<span class="absolute top-1 left-1 text-2xl font-medium text-white/90"
+												>postframe</span
+											>
+										</div>
+									{/if}
+									{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id}
+										{#key maskPreviewMode}
+											<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
+										{/key}
+									{/if}
+									{#if objectStroke}
+										<MaskPromptOverlay
+											points={objectStroke.points}
+											label={objectStroke.label}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											viewportScale={viewportTransform.scale}
+										/>
+									{/if}
+									{#if edgeRefinementStroke}
+										<MaskPromptOverlay
+											points={edgeRefinementStroke.points}
+											label="refine"
+											brushRadius={edgeRefinementStroke.radius}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											viewportScale={viewportTransform.scale}
+										/>
+									{/if}
+									{#if activeTool === 'mask-refine' && maskBrushPoint && !smartMaskWorking}
+										<MaskBrushCursor
+											point={maskBrushPoint}
+											radius={edgeRefinementStroke?.radius ?? refineBrushRadius}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											viewportScale={viewportTransform.scale}
+										/>
+									{/if}
+								</div>
+							{/key}
+							{#if before}
+								<span
+									class="pointer-events-none absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
+								>
+									before
+								</span>
+							{/if}
+							{#if workspace.viewportProgress}
+								<div
+									class="pointer-events-none absolute right-3 bottom-3 left-3 z-30 flex justify-center"
+								>
+									<ProgressCard task={workspace.viewportProgress} variant="floating" />
 								</div>
 							{/if}
-							{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id}
-								{#key maskPreviewMode}
-									<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
-								{/key}
-							{/if}
-							{#if objectStroke}
-								<MaskPromptOverlay
-									points={objectStroke.points}
-									label={objectStroke.label}
-									imageWidth={imageSize.width}
-									imageHeight={imageSize.height}
-									viewportScale={viewportTransform.scale}
-								/>
-							{/if}
-							{#if edgeRefinementStroke}
-								<MaskPromptOverlay
-									points={edgeRefinementStroke.points}
-									label="refine"
-									brushRadius={edgeRefinementStroke.radius}
-									imageWidth={imageSize.width}
-									imageHeight={imageSize.height}
-									viewportScale={viewportTransform.scale}
-								/>
-							{/if}
-							{#if activeTool === 'mask-refine' && maskBrushPoint && !smartMaskWorking}
-								<MaskBrushCursor
-									point={maskBrushPoint}
-									radius={edgeRefinementStroke?.radius ?? refineBrushRadius}
-									imageWidth={imageSize.width}
-									imageHeight={imageSize.height}
-									viewportScale={viewportTransform.scale}
-								/>
-							{/if}
-						</div>
-					{/key}
-					{#if before}
-						<span
-							class="pointer-events-none absolute top-3 left-3 rounded-sm bg-black/65 px-2 py-1 text-[10px] tracking-wide text-white backdrop-blur"
-						>
-							before
-						</span>
-					{/if}
-					{#if workspace.viewportProgress}
-						<div
-							class="pointer-events-none absolute right-3 bottom-3 left-3 z-30 flex justify-center"
-						>
-							<ProgressCard task={workspace.viewportProgress} variant="floating" />
-						</div>
-					{/if}
-					{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
-						<div
-							class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
-						>
-							<div class="motion-enter flex flex-col items-center gap-2.5">
-								<p class="text-[11px]">development stopped</p>
-								<button
-									type="button"
-									class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
-									onclick={workspace.reloadDocument}
+							{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
+								<div
+									class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
 								>
-									retry
-								</button>
-							</div>
-						</div>
-					{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
-						<div
-							class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
-						>
-							<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
-								<p class="text-[11px]">couldn't open raw</p>
-								<p class="text-[9px] leading-relaxed text-white/55">
-									{workspace.documentStatus.message}
-								</p>
-								<button
-									type="button"
-									class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
-									onclick={workspace.reloadDocument}
+									<div class="motion-enter flex flex-col items-center gap-2.5">
+										<p class="text-[11px]">development stopped</p>
+										<button
+											type="button"
+											class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+											onclick={workspace.reloadDocument}
+										>
+											retry
+										</button>
+									</div>
+								</div>
+							{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
+								<div
+									class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
 								>
-									retry
-								</button>
-							</div>
-						</div>
-					{/if}
-				{:else}
-					<p class="text-muted absolute inset-0 flex items-center justify-center text-[10px]">
-						select a photo in organize.
-					</p>
-				{/if}
-			</div>
+									<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
+										<p class="text-[11px]">couldn't open raw</p>
+										<p class="text-[9px] leading-relaxed text-white/55">
+											{workspace.documentStatus.message}
+										</p>
+										<button
+											type="button"
+											class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[10px] transition-colors hover:bg-white/10"
+											onclick={workspace.reloadDocument}
+										>
+											retry
+										</button>
+									</div>
+								</div>
+							{/if}
+						{:else}
+							<p class="text-muted absolute inset-0 flex items-center justify-center text-[10px]">
+								select a photo in organize.
+							</p>
+						{/if}
+					</div>
+				{/snippet}
+			</ContextMenu>
 
 			<footer
 				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[10px] tracking-wide"
@@ -1726,25 +1768,33 @@
 		</div>
 		<div class="flex min-w-0 flex-1 gap-2 overflow-x-auto p-2">
 			{#each workspace.photos as photo, index (photo.id)}
-				<button
-					type="button"
-					class="motion-card group bg-canvas relative w-24 shrink-0 cursor-pointer overflow-hidden rounded border {workspace.activePhotoId ===
-					photo.id
-						? 'border-accent'
-						: 'border-subtle hover:border-muted'}"
-					style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
-					onclick={() => workspace.selectPhoto(photo.id)}
+				<ContextMenu
+					items={filmstripMenu}
+					onAction={(action) => runFilmstripAction(action, photo.id)}
 				>
-					<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
-					<span
-						class="absolute top-1 left-1 rounded-sm bg-black/65 px-1 font-mono text-[10px] text-white"
-						>{index + 1}</span
-					>
-					<span
-						class="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 font-mono text-[10px] text-white/80"
-						>{photo.name}</span
-					>
-				</button>
+					{#snippet children({ props })}
+						<button
+							{...props}
+							type="button"
+							class="motion-card group bg-canvas relative w-24 shrink-0 cursor-pointer overflow-hidden rounded border {workspace.activePhotoId ===
+							photo.id
+								? 'border-accent'
+								: 'border-subtle hover:border-muted'}"
+							style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
+							onclick={() => workspace.selectPhoto(photo.id)}
+						>
+							<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
+							<span
+								class="absolute top-1 left-1 rounded-sm bg-black/65 px-1 font-mono text-[10px] text-white"
+								>{index + 1}</span
+							>
+							<span
+								class="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 font-mono text-[10px] text-white/80"
+								>{photo.name}</span
+							>
+						</button>
+					{/snippet}
+				</ContextMenu>
 			{/each}
 		</div>
 	</section>

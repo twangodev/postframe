@@ -18,7 +18,9 @@
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import ContextMenu from './ui/ContextMenu.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
+	import { contextTargets, photoMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import {
 		formatBytes,
 		type ColorLabel,
@@ -39,6 +41,7 @@
 	let collectionName = $state('');
 	let collectionBusy = $state(false);
 	let importing = $state(false);
+	let removalIds = $state<string[] | null>(null);
 	const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
 	const active = $derived(workspace.selectedPhoto);
@@ -80,6 +83,64 @@
 
 	function stackFor(photo: Photo) {
 		return workspace.stacks.find((stack) => stack.id === photo.stackId);
+	}
+
+	function menuTargets(photo: Photo) {
+		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
+		return workspace.photos.filter(({ id }) => targetIds.includes(id));
+	}
+
+	function cardMenu(photo: Photo) {
+		const targets = menuTargets(photo);
+		const stackId = targets[0]?.stackId ?? null;
+		const stack =
+			stackId && targets.every((target) => target.stackId === stackId)
+				? (workspace.stacks.find(({ id }) => id === stackId) ?? null)
+				: null;
+		return photoMenu({ targets, stack, collections: workspace.collections });
+	}
+
+	function openCardMenu(photo: Photo) {
+		if (contextTargets(photo.id, workspace.selectedIds).moveSelection) {
+			workspace.selectPhoto(photo.id);
+		}
+	}
+
+	function runPhotoAction(action: PhotoMenuAction, photo: Photo) {
+		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
+		switch (action.type) {
+			case 'edit':
+				workspace.editPhoto(photo.id);
+				break;
+			case 'flag':
+				workspace.applyFlag(targetIds, action.flagged);
+				break;
+			case 'rate':
+				workspace.applyRating(targetIds, action.rating);
+				break;
+			case 'label':
+				workspace.applyColorLabel(targetIds, action.label);
+				break;
+			case 'collection':
+				workspace.applyCollectionMembership(targetIds, action.collectionId, action.member);
+				break;
+			case 'create-collection':
+				workspace.requestCollectionCreation();
+				break;
+			case 'group-stack':
+				workspace.createStack();
+				break;
+			case 'ungroup-stack':
+				workspace.ungroupStack(action.stackId);
+				break;
+			case 'remove':
+				removalIds = targetIds;
+		}
+	}
+
+	function confirmRemoval() {
+		if (removalIds) workspace.deletePhotos(removalIds);
+		removalIds = null;
 	}
 
 	async function createCollection(event: SubmitEvent) {
@@ -332,78 +393,91 @@
 				>
 					{#each visiblePhotos as photo, index (photo.id)}
 						{@const stack = stackFor(photo)}
-						<div
-							role="button"
-							tabindex="0"
-							aria-label={`Select ${photo.name}`}
-							class={view === 'grid'
-								? `motion-card group bg-bg min-w-0 cursor-pointer rounded border p-1.5 ${workspace.selectedIds.includes(photo.id) ? 'border-accent' : 'border-subtle hover:border-muted'}`
-								: `motion-card group bg-bg grid h-14 cursor-pointer grid-cols-[3.75rem_minmax(0,1fr)_5rem_5rem] items-center gap-3 px-2 ${workspace.selectedIds.includes(photo.id) ? 'bg-surface' : 'hover:bg-surface/65'}`}
-							style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
-							onclick={(event) => workspace.selectPhoto(photo.id, event.metaKey || event.ctrlKey)}
-							ondblclick={() => workspace.editPhoto(photo.id)}
-							onkeydown={(event) => event.key === 'Enter' && workspace.editPhoto(photo.id)}
+						<ContextMenu
+							items={cardMenu(photo)}
+							onOpen={() => openCardMenu(photo)}
+							onAction={(action) => runPhotoAction(action, photo)}
 						>
-							<div
-								class={view === 'grid'
-									? 'bg-surface relative aspect-[4/3] overflow-hidden rounded-sm'
-									: 'bg-surface relative h-11 overflow-hidden rounded-sm'}
-							>
-								<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
-								{#if stack}
-									<button
-										type="button"
-										aria-label={stack.collapsed ? 'Expand stack' : 'Collapse stack'}
-										class="absolute right-1 bottom-1 flex h-5 cursor-pointer items-center gap-1 rounded-sm bg-black/65 px-1.5 font-mono text-[10px] text-white backdrop-blur"
-										onclick={(event) => {
-											event.stopPropagation();
-											workspace.toggleStack(stack.id);
-										}}
+							{#snippet children({ props })}
+								<div
+									{...props}
+									role="button"
+									tabindex="0"
+									aria-label={`Select ${photo.name}`}
+									class={view === 'grid'
+										? `motion-card group bg-bg min-w-0 cursor-pointer rounded border p-1.5 ${workspace.selectedIds.includes(photo.id) ? 'border-accent' : 'border-subtle hover:border-muted'}`
+										: `motion-card group bg-bg grid h-14 cursor-pointer grid-cols-[3.75rem_minmax(0,1fr)_5rem_5rem] items-center gap-3 px-2 ${workspace.selectedIds.includes(photo.id) ? 'bg-surface' : 'hover:bg-surface/65'}`}
+									style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
+									onclick={(event) =>
+										workspace.selectPhoto(photo.id, event.metaKey || event.ctrlKey)}
+									ondblclick={() => workspace.editPhoto(photo.id)}
+									onkeydown={(event) => event.key === 'Enter' && workspace.editPhoto(photo.id)}
+								>
+									<div
+										class={view === 'grid'
+											? 'bg-surface relative aspect-[4/3] overflow-hidden rounded-sm'
+											: 'bg-surface relative h-11 overflow-hidden rounded-sm'}
 									>
-										<Layers3 size={9} />
-										{stack.photoIds.length}
-									</button>
-								{/if}
-								{#if photo.flagged}
-									<Flag size={11} class="absolute top-1 left-1 fill-white text-white drop-shadow" />
-								{/if}
-							</div>
-
-							<div class={view === 'grid' ? 'min-w-0 px-0.5 pt-2 pb-0.5' : 'min-w-0'}>
-								<p class="text-text truncate font-mono text-[10px]">{photo.name}</p>
-								{#if view === 'grid'}
-									<div class="mt-1.5 flex items-center justify-between">
-										<div class="flex">
-											{#each [1, 2, 3, 4, 5] as rating}
-												<button
-													type="button"
-													aria-label={`Rate ${rating} stars`}
-													class="text-muted/55 hover:text-text cursor-pointer transition-colors"
-													onclick={(event) => {
-														event.stopPropagation();
-														workspace.setRating(photo.id, rating);
-													}}
-												>
-													<Star
-														size={10}
-														class={photo.rating >= rating ? 'fill-text text-text' : ''}
-													/>
-												</button>
-											{/each}
-										</div>
-										<span
-											class="size-1.5 rounded-full"
-											style:background={labelColors[photo.colorLabel]}
-											style:opacity={photo.colorLabel === 'none' ? 0.3 : 1}
-										></span>
+										<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
+										{#if stack}
+											<button
+												type="button"
+												aria-label={stack.collapsed ? 'Expand stack' : 'Collapse stack'}
+												class="absolute right-1 bottom-1 flex h-5 cursor-pointer items-center gap-1 rounded-sm bg-black/65 px-1.5 font-mono text-[10px] text-white backdrop-blur"
+												onclick={(event) => {
+													event.stopPropagation();
+													workspace.toggleStack(stack.id);
+												}}
+											>
+												<Layers3 size={9} />
+												{stack.photoIds.length}
+											</button>
+										{/if}
+										{#if photo.flagged}
+											<Flag
+												size={11}
+												class="absolute top-1 left-1 fill-white text-white drop-shadow"
+											/>
+										{/if}
 									</div>
-								{/if}
-							</div>
-							{#if view === 'list'}
-								<span class="text-muted font-mono text-[10px]">{photo.extension}</span>
-								<span class="text-muted font-mono text-[10px]">{formatBytes(photo.size)}</span>
-							{/if}
-						</div>
+
+									<div class={view === 'grid' ? 'min-w-0 px-0.5 pt-2 pb-0.5' : 'min-w-0'}>
+										<p class="text-text truncate font-mono text-[10px]">{photo.name}</p>
+										{#if view === 'grid'}
+											<div class="mt-1.5 flex items-center justify-between">
+												<div class="flex">
+													{#each [1, 2, 3, 4, 5] as rating}
+														<button
+															type="button"
+															aria-label={`Rate ${rating} stars`}
+															class="text-muted/55 hover:text-text cursor-pointer transition-colors"
+															onclick={(event) => {
+																event.stopPropagation();
+																workspace.setRating(photo.id, rating);
+															}}
+														>
+															<Star
+																size={10}
+																class={photo.rating >= rating ? 'fill-text text-text' : ''}
+															/>
+														</button>
+													{/each}
+												</div>
+												<span
+													class="size-1.5 rounded-full"
+													style:background={labelColors[photo.colorLabel]}
+													style:opacity={photo.colorLabel === 'none' ? 0.3 : 1}
+												></span>
+											</div>
+										{/if}
+									</div>
+									{#if view === 'list'}
+										<span class="text-muted font-mono text-[10px]">{photo.extension}</span>
+										<span class="text-muted font-mono text-[10px]">{formatBytes(photo.size)}</span>
+									{/if}
+								</div>
+							{/snippet}
+						</ContextMenu>
 					{/each}
 				</div>
 			{:else}
@@ -576,6 +650,49 @@
 					</button>
 				</div>
 			</form>
+		</CenteredDialogContent>
+	</Dialog.Portal>
+</Dialog.Root>
+
+<Dialog.Root
+	open={removalIds !== null}
+	onOpenChange={(open) => {
+		if (!open) removalIds = null;
+	}}
+>
+	<Dialog.Portal>
+		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
+		<CenteredDialogContent size="sm" class="p-5">
+			<div class="flex items-start justify-between">
+				<div>
+					<Dialog.Title class="text-sm font-medium tracking-tight">
+						remove {removalIds?.length === 1 ? 'photo' : `${removalIds?.length} photos`} from library
+					</Dialog.Title>
+					<Dialog.Description class="text-muted mt-1 text-xs">
+						local files and edits are deleted. this cannot be undone.
+					</Dialog.Description>
+				</div>
+				<Dialog.Close
+					class="text-muted hover:text-text cursor-pointer rounded p-1"
+					aria-label="Close"
+				>
+					<X size={15} />
+				</Dialog.Close>
+			</div>
+			<div class="mt-5 flex justify-end gap-2">
+				<Dialog.Close
+					class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[10px]"
+				>
+					cancel
+				</Dialog.Close>
+				<button
+					type="button"
+					class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[10px]"
+					onclick={confirmRemoval}
+				>
+					remove
+				</button>
+			</div>
 		</CenteredDialogContent>
 	</Dialog.Portal>
 </Dialog.Root>

@@ -58,7 +58,7 @@
 				{#if workspace.mode === 'organize'}
 					<OrganizeWorkspace {workspace} onImport={workspace.importFiles} />
 				{:else}
-					<EditWorkspace {workspace} />
+					<EditWorkspace {workspace} onExport={() => (exportOpen = true)} />
 				{/if}
 			</div>
 		{/key}

@@ -67,9 +67,11 @@ import {
 	type MaskRasterData,
 	type MaskRasterLayer
 } from './mask-raster';
+import { removePhotos } from './photo-removal';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type ColorLabel = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
+export type { PhotoCollection } from './library-schema';
 export type { MaskKind } from './edit-document';
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 export type DevelopPreviewPhase = 'applying' | 'refining';
@@ -593,32 +595,101 @@ export class WorkspaceState {
 	setRating(photoId: string, rating: number) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
-		photo.rating = photo.rating === rating ? 0 : rating;
-		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
+		this.applyRating([photoId], photo.rating === rating ? 0 : rating);
+	}
+
+	applyRating(photoIds: readonly string[], rating: number) {
+		this.applyPhotoState(photoIds, (photo) => (photo.rating = rating));
 	}
 
 	toggleFlag(photoId: string) {
 		const photo = this.photos.find((candidate) => candidate.id === photoId);
 		if (!photo) return;
-		photo.flagged = !photo.flagged;
-		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
+		this.applyFlag([photoId], !photo.flagged);
+	}
+
+	applyFlag(photoIds: readonly string[], flagged: boolean) {
+		this.applyPhotoState(photoIds, (photo) => (photo.flagged = flagged));
 	}
 
 	setColorLabel(photoId: string, colorLabel: ColorLabel) {
-		const photo = this.photos.find((candidate) => candidate.id === photoId);
-		if (!photo) return;
-		photo.colorLabel = colorLabel;
-		void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
+		this.applyColorLabel([photoId], colorLabel);
+	}
+
+	applyColorLabel(photoIds: readonly string[], colorLabel: ColorLabel) {
+		this.applyPhotoState(photoIds, (photo) => (photo.colorLabel = colorLabel));
+	}
+
+	private applyPhotoState(photoIds: readonly string[], mutate: (photo: Photo) => void) {
+		for (const photoId of photoIds) {
+			const photo = this.photos.find((candidate) => candidate.id === photoId);
+			if (!photo) continue;
+			mutate(photo);
+			void this.queueCatalogMutation((store) => store.updatePhotoState(this.storedPhoto(photo)));
+		}
 	}
 
 	toggleCollection(photoId: string, collectionId: string) {
 		const collection = this.collections.find((candidate) => candidate.id === collectionId);
-		if (!collection || !this.photos.some((photo) => photo.id === photoId)) return;
-		collection.photoIds = collection.photoIds.includes(photoId)
-			? collection.photoIds.filter((id) => id !== photoId)
-			: [...collection.photoIds, photoId];
+		if (!collection) return;
+		this.applyCollectionMembership([photoId], collectionId, !collection.photoIds.includes(photoId));
+	}
+
+	applyCollectionMembership(photoIds: readonly string[], collectionId: string, member: boolean) {
+		const collection = this.collections.find((candidate) => candidate.id === collectionId);
+		if (!collection) return;
+		const valid = photoIds.filter((photoId) => this.photos.some(({ id }) => id === photoId));
+		if (valid.length === 0) return;
+		collection.photoIds = member
+			? [...collection.photoIds, ...valid.filter((id) => !collection.photoIds.includes(id))]
+			: collection.photoIds.filter((id) => !valid.includes(id));
 		collection.updatedAt = Date.now();
 		void this.queueCatalogMutation((store) => store.saveCollection(collection));
+	}
+
+	deletePhotos(photoIds: readonly string[]) {
+		const removed = photoIds.filter((photoId) => this.photos.some(({ id }) => id === photoId));
+		if (removed.length === 0) return;
+		if (this.documentStatus.kind === 'loading' && removed.includes(this.documentStatus.photoId)) {
+			this.cancelDocument();
+		}
+		const previousActiveId = this.activePhotoId;
+		const removedPhotos = this.photos.filter(({ id }) => removed.includes(id));
+		const next = removePhotos(
+			{
+				photos: this.photos,
+				collections: this.collections,
+				stacks: this.stacks,
+				selectedIds: this.selectedIds,
+				activePhotoId: this.activePhotoId
+			},
+			removed
+		);
+		this.photos = next.photos;
+		this.collections = next.collections;
+		this.stacks = next.stacks;
+		this.selectedIds = next.selectedIds;
+		this.activePhotoId = next.activePhotoId;
+		this.releaseRemovedPhotos(removedPhotos);
+		if (this.mode === 'edit') {
+			if (!next.activePhotoId) this.setMode('organize');
+			else if (previousActiveId && removed.includes(previousActiveId)) {
+				void this.openDocument(next.activePhotoId);
+			}
+		}
+		void this.queueCatalogMutation(async (store) => {
+			for (const photoId of removed) await store.deletePhoto(photoId);
+		});
+	}
+
+	private releaseRemovedPhotos(photos: readonly Photo[]) {
+		for (const photo of photos) {
+			this.thumbnailLoads.delete(photo.id);
+			if (photo.src && this.objectUrls.has(photo.src)) {
+				URL.revokeObjectURL(photo.src);
+				this.objectUrls.delete(photo.src);
+			}
+		}
 	}
 
 	createStack = () => {

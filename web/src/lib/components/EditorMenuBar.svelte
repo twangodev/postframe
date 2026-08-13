@@ -2,6 +2,7 @@
 	import { Menubar } from 'bits-ui';
 	import { Check, ChevronRight } from '@lucide/svelte';
 	import { EDITOR_MENUS, type EditorMenuAction, type EditorMenuEntry } from '$lib/editor-menu';
+	import { menuContentClass as contentClass, menuItemClass as itemClass } from '$lib/menu';
 
 	interface Props {
 		onAction: (action: EditorMenuAction) => void;
@@ -10,11 +11,6 @@
 	}
 
 	let { onAction, canUndo, canRedo }: Props = $props();
-
-	const itemClass =
-		'data-[highlighted]:bg-elevated data-[highlighted]:text-text data-[disabled]:text-muted/45 flex h-7 min-w-52 items-center gap-2 rounded-sm px-2 text-[11px] outline-none data-[disabled]:cursor-default';
-	const contentClass =
-		'motion-menu border-subtle bg-bg z-50 min-w-52 rounded border p-1 shadow-2xl';
 
 	function select(entry: EditorMenuEntry) {
 		if (entry.kind === 'action') onAction(entry.action);
