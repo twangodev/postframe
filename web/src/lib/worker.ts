@@ -14,6 +14,7 @@ import {
 } from './webgpu-renderer.ts';
 import { adjustMaskEdges } from './mask-edge-adjustment.ts';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
+import { positiveOrNull } from './photo-source.ts';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -320,10 +321,10 @@ function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 						cameraModel: result.camera_model ?? null,
 						lens: result.lens ?? null,
 						capturedAt: result.captured_at ?? null,
-						exposureSeconds: result.exposure_seconds ?? null,
-						fNumber: result.f_number ?? null,
-						iso: result.iso ?? null,
-						focalLengthMm: result.focal_length_mm ?? null
+						exposureSeconds: positiveOrNull(result.exposure_seconds),
+						fNumber: positiveOrNull(result.f_number),
+						iso: positiveOrNull(result.iso),
+						focalLengthMm: positiveOrNull(result.focal_length_mm)
 					}
 				}
 			},
