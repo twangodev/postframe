@@ -252,9 +252,8 @@ export class LibraryService {
 		return mergeCleanupResults(library, maskFiles);
 	}
 
-	async modelCacheUsage() {
-		const files = await this.assets.listModels();
-		return files.reduce((total, file) => total + file.size, 0);
+	storageUsage() {
+		return this.assets.usage();
 	}
 
 	async clearModelCache(): Promise<CleanupResult> {

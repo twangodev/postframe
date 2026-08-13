@@ -3,7 +3,10 @@
 	import { Database, RefreshCw, ShieldCheck, Trash2, X } from '@lucide/svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
 	import type { CleanupResult } from '$lib/library-service';
+	import { segmentBytes, type StorageBreakdown } from '$lib/storage-breakdown';
+	import { formatBytes } from '$lib/format-bytes';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import StorageBar from './StorageBar.svelte';
 
 	type Action = 'refresh' | 'persist' | 'cleanup' | 'models' | 'clear';
 	type Callback = () => void | Promise<void>;
@@ -11,9 +14,9 @@
 	interface Props {
 		open?: boolean;
 		status: BrowserStorageStatus | null;
+		breakdown?: StorageBreakdown | null;
 		error?: string | null;
 		cleanupResult?: CleanupResult | null;
-		modelCacheBytes?: number;
 		onRefresh: Callback;
 		onRequestPersistence: Callback;
 		onCleanup: Callback;
@@ -24,9 +27,9 @@
 	let {
 		open = $bindable(false),
 		status,
+		breakdown = null,
 		error = null,
 		cleanupResult = null,
-		modelCacheBytes = 0,
 		onRefresh,
 		onRequestPersistence,
 		onCleanup,
@@ -38,14 +41,7 @@
 	let confirmingClear = $state(false);
 
 	const busy = $derived(action !== null);
-	const usageRatio = $derived(
-		status?.originUsageBytes !== null &&
-			status?.originUsageBytes !== undefined &&
-			status.quotaBytes !== null &&
-			status.quotaBytes > 0
-			? Math.min(1, status.originUsageBytes / status.quotaBytes)
-			: null
-	);
+	const modelBytes = $derived(breakdown ? segmentBytes(breakdown, 'models') : 0);
 
 	async function run(nextAction: Action, callback: Callback) {
 		if (busy) return;
@@ -71,16 +67,6 @@
 			confirmingClear = false;
 			actionError = null;
 		}
-	}
-
-	function formatBytes(bytes: number | null | undefined) {
-		if (bytes === null || bytes === undefined) return '—';
-		if (bytes === 0) return '0 B';
-
-		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-		const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-		const value = bytes / 1024 ** unit;
-		return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 	}
 </script>
 
@@ -111,22 +97,16 @@
 			<div class="space-y-5 p-5">
 				{#if status}
 					<div class="border-subtle bg-surface/45 rounded border p-3">
-						<div class="flex items-center justify-between gap-4">
-							<span class="text-muted text-[11px]">postframe</span>
-							<span class="font-mono text-[11px]">{formatBytes(status.appUsageBytes)}</span>
-						</div>
-						<div class="mt-3 flex items-center justify-between gap-4">
-							<span class="text-muted text-[11px]">site usage</span>
-							<span class="font-mono text-[11px]">
-								{formatBytes(status.originUsageBytes)} / {formatBytes(status.quotaBytes)}
-							</span>
-						</div>
-						<div class="bg-subtle mt-2 h-1 overflow-hidden rounded-full">
-							<div
-								class="bg-accent h-full rounded-full transition-[width] duration-300"
-								style={`width: ${usageRatio === null ? 0 : Math.max(1, usageRatio * 100)}%`}
-							></div>
-						</div>
+						{#if breakdown}
+							<StorageBar {breakdown} />
+						{:else}
+							<div class="flex items-center justify-between gap-4">
+								<span class="text-muted text-[11px]">site usage</span>
+								<span class="font-mono text-[11px]">
+									{formatBytes(status.originUsageBytes)} / {formatBytes(status.quotaBytes)}
+								</span>
+							</div>
+						{/if}
 					</div>
 
 					<div class="flex items-start gap-3">
@@ -173,11 +153,11 @@
 				<div class="border-subtle flex items-center justify-between rounded border px-3 py-2.5">
 					<div>
 						<p class="text-xs">ai models</p>
-						<p class="text-muted mt-0.5 font-mono text-[10px]">{formatBytes(modelCacheBytes)}</p>
+						<p class="text-muted mt-0.5 font-mono text-[10px]">{formatBytes(modelBytes)}</p>
 					</div>
 					<button
 						type="button"
-						disabled={busy || modelCacheBytes === 0}
+						disabled={busy || modelBytes === 0}
 						class="text-muted hover:text-negative cursor-pointer rounded px-2 py-1 text-[11px] transition-colors disabled:cursor-default disabled:opacity-35"
 						onclick={() => run('models', onClearModelCache)}
 					>

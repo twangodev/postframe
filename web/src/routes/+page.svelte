@@ -38,9 +38,9 @@
 		libraryError={workspace.libraryError}
 		localStorageAvailable={workspace.localStorageAvailable}
 		storageStatus={workspace.browserStorageStatus}
+		storageBreakdown={workspace.browserStorageBreakdown}
 		storageError={workspace.browserStorageError}
 		cleanupResult={workspace.storageCleanupResult}
-		modelCacheBytes={workspace.modelCacheBytes}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
 		onEnterLibrary={workspace.enterLibrary}

@@ -24,7 +24,21 @@ class MemoryAssetStore {
 	readonly thumbnails = new Map<string, Blob>();
 	readonly edits = new Map<string, Blob>();
 	readonly derived = new Map<string, Blob>();
+	readonly models = new Map<string, Blob>();
 	readonly masks = new Map<string, Blob>();
+
+	async usage() {
+		const folderBytes = (blobs: Map<string, Blob | File>) =>
+			[...blobs.values()].reduce((total, blob) => total + blob.size, 0);
+		return {
+			originals: folderBytes(this.originals),
+			thumbnails: folderBytes(this.thumbnails),
+			edits: folderBytes(this.edits),
+			derived: folderBytes(this.derived),
+			models: folderBytes(this.models),
+			masks: folderBytes(this.masks)
+		};
+	}
 
 	async readEdit(storageName: string) {
 		const blob = this.edits.get(storageName);
@@ -113,6 +127,7 @@ class MemoryAssetStore {
 		this.thumbnails.clear();
 		this.edits.clear();
 		this.derived.clear();
+		this.models.clear();
 		this.masks.clear();
 	}
 }
@@ -140,6 +155,28 @@ test('round-trips versioned edit documents and migrates legacy develop settings'
 		const migrated = await service.loadEditDocument('photo-two');
 		assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
 		assert.equal(migrated.adjustments.light.contrast, 25);
+	} finally {
+		await service.clearAll();
+	}
+});
+
+test('reports per-folder storage usage from the asset store', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	const assets = new MemoryAssetStore();
+	const service = new LibraryService(catalog, assets as unknown as AssetStore);
+	try {
+		assets.originals.set('photo-one.raf', new File(['x'.repeat(50)], 'photo-one.raf'));
+		assets.thumbnails.set('photo-one.jpg', new Blob(['x'.repeat(5)]));
+		assets.models.set('sam2.onnx', new Blob(['x'.repeat(20)]));
+
+		assert.deepEqual(await service.storageUsage(), {
+			originals: 50,
+			thumbnails: 5,
+			edits: 0,
+			derived: 0,
+			models: 20,
+			masks: 0
+		});
 	} finally {
 		await service.clearAll();
 	}

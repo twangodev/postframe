@@ -7,6 +7,7 @@
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
 	import type { CleanupResult } from '$lib/library-service';
+	import type { StorageBreakdown } from '$lib/storage-breakdown';
 
 	interface Props {
 		acceptedPhotos: string;
@@ -15,9 +16,9 @@
 		libraryError: string | null;
 		localStorageAvailable: boolean;
 		storageStatus: BrowserStorageStatus | null;
+		storageBreakdown: StorageBreakdown | null;
 		storageError: string | null;
 		cleanupResult: CleanupResult | null;
-		modelCacheBytes: number;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onEnterLibrary: () => void;
@@ -35,9 +36,9 @@
 		libraryError,
 		localStorageAvailable,
 		storageStatus,
+		storageBreakdown,
 		storageError,
 		cleanupResult,
-		modelCacheBytes,
 		onOpenPhoto,
 		onCreateCollection,
 		onEnterLibrary,
@@ -256,9 +257,9 @@
 <StorageManagementDialog
 	bind:open={storageOpen}
 	status={storageStatus}
+	breakdown={storageBreakdown}
 	error={storageError}
 	{cleanupResult}
-	{modelCacheBytes}
 	onRefresh={onRefreshStorage}
 	{onRequestPersistence}
 	{onCleanup}

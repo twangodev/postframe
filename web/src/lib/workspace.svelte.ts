@@ -38,6 +38,7 @@ import {
 	storageErrorMessage,
 	type BrowserStorageStatus
 } from './browser-storage';
+import { storageBreakdown, type StorageBreakdown } from './storage-breakdown';
 import {
 	defaultLightSettings,
 	LIGHT_CONTROL_NAMES,
@@ -235,9 +236,9 @@ export class WorkspaceState {
 	storageStatus = $state<StorageStatus>(this.libraryService ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
+	browserStorageBreakdown = $state<StorageBreakdown | null>(null);
 	browserStorageError = $state<string | null>(null);
 	storageCleanupResult = $state<CleanupResult | null>(null);
-	modelCacheBytes = $state(0);
 	documentStatus = $state<DocumentStatus>({ kind: 'idle' });
 	editPreview = $state<{ src: string; width: number; height: number } | null>(null);
 	developPreview = $state<{
@@ -401,12 +402,12 @@ export class WorkspaceState {
 	refreshBrowserStorage = async () => {
 		this.browserStorageError = null;
 		try {
-			const [status, modelCacheBytes] = await Promise.all([
+			const [status, usage] = await Promise.all([
 				this.browserStorage.status(),
-				this.libraryService?.modelCacheUsage() ?? 0
+				this.libraryService?.storageUsage() ?? null
 			]);
 			this.browserStorageStatus = status;
-			this.modelCacheBytes = modelCacheBytes;
+			this.browserStorageBreakdown = usage ? storageBreakdown(usage, status) : null;
 		} catch (error) {
 			this.browserStorageError = storageErrorMessage(error);
 			throw error;
@@ -417,7 +418,6 @@ export class WorkspaceState {
 		const store = this.libraryService;
 		if (!store) return;
 		this.storageCleanupResult = await store.clearModelCache();
-		this.modelCacheBytes = 0;
 		await this.refreshBrowserStorage();
 	};
 

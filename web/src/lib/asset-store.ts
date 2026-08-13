@@ -8,6 +8,18 @@ const DERIVED_DIRECTORY = 'derived';
 const MODELS_DIRECTORY = 'models';
 const MASKS_DIRECTORY = 'masks';
 
+const ASSET_FOLDERS = [
+	ORIGINALS_DIRECTORY,
+	THUMBNAILS_DIRECTORY,
+	EDITS_DIRECTORY,
+	DERIVED_DIRECTORY,
+	MODELS_DIRECTORY,
+	MASKS_DIRECTORY
+] as const;
+
+export type AssetFolder = (typeof ASSET_FOLDERS)[number];
+export type AssetUsage = Record<AssetFolder, number>;
+
 export interface OriginalWrite {
 	storageName: string;
 	file: File;
@@ -168,6 +180,16 @@ export class AssetStore {
 
 	listDerived() {
 		return this.listFiles(DERIVED_DIRECTORY);
+	}
+
+	async usage(): Promise<AssetUsage> {
+		const folderSizes = await Promise.all(
+			ASSET_FOLDERS.map(async (folder) => {
+				const files = await this.listFiles(folder);
+				return [folder, files.reduce((total, file) => total + file.size, 0)] as const;
+			})
+		);
+		return Object.fromEntries(folderSizes) as AssetUsage;
 	}
 
 	async clearAll() {

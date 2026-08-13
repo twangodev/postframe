@@ -234,9 +234,9 @@
 <StorageManagementDialog
 	bind:open={storageOpen}
 	status={workspace.browserStorageStatus}
+	breakdown={workspace.browserStorageBreakdown}
 	error={workspace.browserStorageError}
 	cleanupResult={workspace.storageCleanupResult}
-	modelCacheBytes={workspace.modelCacheBytes}
 	onRefresh={workspace.refreshBrowserStorage}
 	onRequestPersistence={workspace.requestPersistentStorage}
 	onCleanup={workspace.cleanupLocalData}
