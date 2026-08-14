@@ -93,18 +93,16 @@
 
 			<div class="space-y-4 p-4">
 				{#if status}
-					<div class="border-subtle bg-surface/45 rounded border p-3">
-						{#if breakdown}
-							<StorageBar {breakdown} />
-						{:else}
-							<div class="flex items-center justify-between gap-4">
-								<span class="text-muted text-[11px]">site usage</span>
-								<span class="font-mono text-[11px]">
-									{formatBytes(status.originUsageBytes)} / {formatBytes(status.quotaBytes)}
-								</span>
-							</div>
-						{/if}
-					</div>
+					{#if breakdown}
+						<StorageBar {breakdown} />
+					{:else}
+						<div class="flex items-center justify-between gap-4">
+							<span class="text-muted text-[11px]">site usage</span>
+							<span class="font-mono text-[11px]">
+								{formatBytes(status.originUsageBytes)} / {formatBytes(status.quotaBytes)}
+							</span>
+						</div>
+					{/if}
 
 					<div class="flex items-start gap-3">
 						<ShieldCheck
