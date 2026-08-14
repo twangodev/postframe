@@ -257,6 +257,7 @@
 
 	function chooseTool(tool: string, label = tool) {
 		// TODO(WASM_TODOS.editorTools): start the selected tool in the Wasm document.
+		if (tool === 'object-select' && activeTool !== 'object-select') workspace.selectMask(null);
 		activeTool = tool;
 		activeToolLabel = label;
 		maskBrushPoint = null;
@@ -723,6 +724,7 @@
 	}
 
 	function beginObjectMask() {
+		workspace.selectMask(null);
 		chooseTool('object-select', 'object selection');
 		inspectorTab = 'mask';
 		maskPreviewMode = 'overlay';
