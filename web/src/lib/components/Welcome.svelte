@@ -26,7 +26,6 @@
 		onRefreshStorage: () => Promise<void>;
 		onRequestPersistence: () => Promise<void>;
 		onCleanup: () => Promise<void>;
-		onClearModelCache: () => Promise<void>;
 	}
 
 	let {
@@ -45,8 +44,7 @@
 		onClearLocalData,
 		onRefreshStorage,
 		onRequestPersistence,
-		onCleanup,
-		onClearModelCache
+		onCleanup
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
 	let storageOpen = $state(false);
@@ -263,6 +261,5 @@
 	onRefresh={onRefreshStorage}
 	{onRequestPersistence}
 	{onCleanup}
-	{onClearModelCache}
 	{onClearLocalData}
 />

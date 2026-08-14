@@ -3,12 +3,12 @@
 	import { Database, RefreshCw, ShieldCheck, Trash2, X } from '@lucide/svelte';
 	import type { BrowserStorageStatus } from '$lib/browser-storage';
 	import type { CleanupResult } from '$lib/library-service';
-	import { segmentBytes, type StorageBreakdown } from '$lib/storage-breakdown';
+	import type { StorageBreakdown } from '$lib/storage-breakdown';
 	import { formatBytes } from '$lib/format-bytes';
 	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
 	import StorageBar from './StorageBar.svelte';
 
-	type Action = 'refresh' | 'persist' | 'cleanup' | 'models' | 'clear';
+	type Action = 'refresh' | 'persist' | 'cleanup' | 'clear';
 	type Callback = () => void | Promise<void>;
 
 	interface Props {
@@ -20,7 +20,6 @@
 		onRefresh: Callback;
 		onRequestPersistence: Callback;
 		onCleanup: Callback;
-		onClearModelCache: Callback;
 		onClearLocalData: Callback;
 	}
 
@@ -33,7 +32,6 @@
 		onRefresh,
 		onRequestPersistence,
 		onCleanup,
-		onClearModelCache,
 		onClearLocalData
 	}: Props = $props();
 	let action = $state<Action | null>(null);
@@ -41,7 +39,6 @@
 	let confirmingClear = $state(false);
 
 	const busy = $derived(action !== null);
-	const modelBytes = $derived(breakdown ? segmentBytes(breakdown, 'models') : 0);
 
 	async function run(nextAction: Action, callback: Callback) {
 		if (busy) return;
@@ -149,21 +146,6 @@
 						{/if}
 					</p>
 				{/if}
-
-				<div class="border-subtle flex items-center justify-between rounded border px-3 py-2.5">
-					<div>
-						<p class="text-xs">ai models</p>
-						<p class="text-muted mt-0.5 font-mono text-[10px]">{formatBytes(modelBytes)}</p>
-					</div>
-					<button
-						type="button"
-						disabled={busy || modelBytes === 0}
-						class="text-muted hover:text-negative cursor-pointer rounded px-2 py-1 text-[11px] transition-colors disabled:cursor-default disabled:opacity-35"
-						onclick={() => run('models', onClearModelCache)}
-					>
-						{action === 'models' ? 'clearing…' : 'clear models'}
-					</button>
-				</div>
 
 				{#if confirmingClear}
 					<div class="border-negative/40 bg-negative/5 rounded border p-3">

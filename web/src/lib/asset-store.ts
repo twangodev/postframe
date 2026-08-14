@@ -99,20 +99,6 @@ export class AssetStore {
 		await this.writeFiles(MODELS_DIRECTORY, [{ storageName, contents }]);
 	}
 
-	listModels() {
-		return this.listFiles(MODELS_DIRECTORY);
-	}
-
-	async clearModels() {
-		const root = await this.root();
-		try {
-			const app = await root.getDirectoryHandle(APP_DIRECTORY);
-			await app.removeEntry(MODELS_DIRECTORY, { recursive: true });
-		} catch (error) {
-			if (!isNotFoundError(error)) throw error;
-		}
-	}
-
 	async readMask(storageName: string) {
 		return this.fileHandle(MASKS_DIRECTORY, storageName).then((handle) => handle.getFile());
 	}

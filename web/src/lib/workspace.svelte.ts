@@ -414,13 +414,6 @@ export class WorkspaceState {
 		}
 	};
 
-	clearModelCache = async () => {
-		const store = this.libraryService;
-		if (!store) return;
-		this.storageCleanupResult = await store.clearModelCache();
-		await this.refreshBrowserStorage();
-	};
-
 	cleanupLocalData = async () => {
 		const store = this.libraryService;
 		if (!store) return;

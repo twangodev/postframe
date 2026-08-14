@@ -240,6 +240,5 @@
 	onRefresh={workspace.refreshBrowserStorage}
 	onRequestPersistence={workspace.requestPersistentStorage}
 	onCleanup={workspace.cleanupLocalData}
-	onClearModelCache={workspace.clearModelCache}
 	onClearLocalData={workspace.clearLocalData}
 />

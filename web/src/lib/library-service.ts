@@ -256,16 +256,6 @@ export class LibraryService {
 		return this.assets.usage();
 	}
 
-	async clearModelCache(): Promise<CleanupResult> {
-		const files = await this.assets.listModels();
-		await this.assets.clearModels();
-		return {
-			deletedFiles: files.length,
-			failedFiles: 0,
-			reclaimedBytes: files.reduce((total, file) => total + file.size, 0)
-		};
-	}
-
 	async resumePendingDeletions(): Promise<CleanupResult> {
 		const [deletions, originals, thumbnails, edits, derived] = await Promise.all([
 			this.catalog.pendingDeletions(),
