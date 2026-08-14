@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { BarChart } from 'layerchart/svg';
+	import Tooltip from './ui/Tooltip.svelte';
 	import { formatBytes } from '$lib/format-bytes';
 	import type { StorageBreakdown } from '$lib/storage-breakdown';
 
@@ -12,6 +13,15 @@
 		Object.fromEntries(occupied.map(({ id, bytes }) => [id, Math.max(bytes, visibleFloor)]))
 	);
 	const series = $derived(occupied.map(({ id, color }) => ({ key: id, color })));
+	const regions = $derived.by(() => {
+		let offset = 0;
+		return occupied.map((segment) => {
+			const width = Math.max(segment.bytes, visibleFloor) / scaleBytes;
+			const region = { segment, left: offset, width };
+			offset += width;
+			return region;
+		});
+	});
 	const usedBytes = $derived(breakdown.originBytes ?? breakdown.appBytes);
 	const summary = $derived(
 		breakdown.freeBytes === null
@@ -20,7 +30,7 @@
 	);
 </script>
 
-<div class="group">
+<div class="relative">
 	<div class="bg-subtle h-1.5 overflow-hidden rounded-full">
 		{#if occupied.length > 0}
 			<BarChart
@@ -40,24 +50,24 @@
 			/>
 		{/if}
 	</div>
-	<div class="relative mt-2 h-4">
-		<p
-			class="text-muted absolute inset-0 text-[11px] transition-opacity duration-150 group-hover:opacity-0"
-		>
-			{summary}
-		</p>
-		<div
-			class="absolute inset-0 flex items-center gap-x-4 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-		>
-			{#each occupied as segment (segment.id)}
-				<div class="flex items-center gap-1.5 whitespace-nowrap">
-					<span class="h-1.5 w-1.5 rounded-full" style:background={segment.color}></span>
-					<span class="text-muted text-[11px]">{segment.label}</span>
-					<span class="font-mono text-[11px]">{formatBytes(segment.bytes)}</span>
-				</div>
-			{:else}
-				<span class="text-muted text-[11px]">nothing stored yet</span>
-			{/each}
-		</div>
+	<div class="absolute inset-x-0 -inset-y-1.5">
+		{#each regions as { segment, left, width } (segment.id)}
+			<Tooltip text={`${segment.label} · ${formatBytes(segment.bytes)}`}>
+				{#snippet children(props)}
+					<div
+						{...props}
+						class="absolute inset-y-0"
+						style:left={`${left * 100}%`}
+						style:width={`${width * 100}%`}
+					></div>
+				{/snippet}
+			</Tooltip>
+		{/each}
 	</div>
 </div>
+<p class="text-muted mt-2 text-[11px]">{summary}</p>
+<ul class="sr-only">
+	{#each occupied as segment (segment.id)}
+		<li>{segment.label}: {formatBytes(segment.bytes)}</li>
+	{/each}
+</ul>
