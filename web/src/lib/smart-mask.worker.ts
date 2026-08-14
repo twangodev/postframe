@@ -28,9 +28,10 @@ interface PreparedImage {
 	selection: { id: string; prompt: string; result: Sam2Selection } | null;
 }
 
-let objectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
-let subjectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
-let detectorDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
+let preferredDevice: Promise<SmartMaskDevice> | null = null;
+let objectDevice: SmartMaskDevice | null = null;
+let subjectDevice: SmartMaskDevice | null = null;
+let detectorDevice: SmartMaskDevice | null = null;
 let objectModel: Sam2ObjectRuntime | null = null;
 let objectModelLoading: Promise<void> | null = null;
 let subjectModel: SubjectPipeline | null = null;
@@ -92,7 +93,7 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 		id: request.id,
 		type: 'prepared',
 		modelVersion: SMART_MASK_PACK.version,
-		device: objectDevice
+		device: objectDevice ?? (await detectPreferredDevice())
 	});
 }
 
@@ -245,6 +246,7 @@ function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>)
 
 async function loadObjectModel(requestId: number) {
 	objectModelLoading ??= (async () => {
+		objectDevice ??= await detectPreferredDevice();
 		try {
 			objectModel = await createObjectModel(requestId);
 		} catch (error) {
@@ -260,7 +262,7 @@ async function loadObjectModel(requestId: number) {
 }
 
 function createObjectModel(requestId: number) {
-	return Sam2ObjectRuntime.load(SMART_MASK_PACK.object, objectDevice, (progress) =>
+	return Sam2ObjectRuntime.load(SMART_MASK_PACK.object, objectDevice ?? 'wasm', (progress) =>
 		reportDownload(requestId, progress)
 	);
 }
@@ -279,10 +281,11 @@ async function fallBackObjectModel(requestId: number, active: PreparedImage) {
 async function loadSubjectModel(requestId: number) {
 	const load = async () => {
 		subjectModel = await pipeline('background-removal', SMART_MASK_PACK.subject.id, {
-			...modelOptions(SMART_MASK_PACK.subject, subjectDevice, requestId)
+			...modelOptions(SMART_MASK_PACK.subject, subjectDevice ?? 'wasm', requestId)
 		});
 	};
 	subjectModelLoading ??= (async () => {
+		subjectDevice ??= await detectPreferredDevice();
 		try {
 			await load();
 		} catch (error) {
@@ -300,10 +303,11 @@ async function loadSubjectModel(requestId: number) {
 async function loadDetectorModel(requestId: number) {
 	const load = async () => {
 		detectorModel = await pipeline('object-detection', SMART_MASK_PACK.detector.id, {
-			...modelOptions(SMART_MASK_PACK.detector, detectorDevice, requestId)
+			...modelOptions(SMART_MASK_PACK.detector, detectorDevice ?? 'wasm', requestId)
 		});
 	};
 	detectorModelLoading ??= (async () => {
+		detectorDevice ??= await detectPreferredDevice();
 		try {
 			await load();
 		} catch (error) {
@@ -385,8 +389,16 @@ function resetPreparedImage() {
 	prepared = null;
 }
 
-function supportsWebGpu() {
-	return 'gpu' in navigator && navigator.gpu !== undefined;
+function detectPreferredDevice() {
+	preferredDevice ??= (async () => {
+		if (!('gpu' in navigator) || !navigator.gpu) return 'wasm';
+		try {
+			return (await navigator.gpu.requestAdapter()) ? 'webgpu' : 'wasm';
+		} catch {
+			return 'wasm';
+		}
+	})();
+	return preferredDevice;
 }
 
 function positiveModulo(value: number, divisor: number) {
