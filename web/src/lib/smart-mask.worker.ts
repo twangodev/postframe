@@ -3,6 +3,7 @@ import { refineObjectMask, refinePaintedMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
 import { usableSam2Mask } from './sam2-candidates.ts';
+import { detectedSubjects, type RawDetection } from './subject-detection.ts';
 import {
 	Sam2ObjectRuntime,
 	type Sam2ImageEmbedding,
@@ -16,6 +17,9 @@ import {
 } from './smart-mask.ts';
 
 type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>>;
+type DetectorPipeline = Awaited<ReturnType<typeof pipeline<'object-detection'>>>;
+
+const DETECTION_THRESHOLD = 0.5;
 
 interface PreparedImage {
 	photoId: string;
@@ -26,10 +30,13 @@ interface PreparedImage {
 
 let objectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
 let subjectDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
+let detectorDevice: SmartMaskDevice = supportsWebGpu() ? 'webgpu' : 'wasm';
 let objectModel: Sam2ObjectRuntime | null = null;
 let objectModelLoading: Promise<void> | null = null;
 let subjectModel: SubjectPipeline | null = null;
 let subjectModelLoading: Promise<void> | null = null;
+let detectorModel: DetectorPipeline | null = null;
+let detectorModelLoading: Promise<void> | null = null;
 let prepared: PreparedImage | null = null;
 
 env.useBrowserCache = false;
@@ -52,6 +59,12 @@ self.onmessage = async (event: MessageEvent<SmartMaskRequest>) => {
 				break;
 			case 'subject':
 				await selectSubject(request);
+				break;
+			case 'detect-subjects':
+				await detectSubjectsInPhoto(request);
+				break;
+			case 'instance':
+				await selectInstance(request);
 				break;
 			case 'refine-edge':
 				refineEdge(request);
@@ -88,6 +101,8 @@ async function warmup(request: Extract<SmartMaskRequest, { type: 'warmup' }>) {
 	await loadObjectModel(request.id);
 	postProgress(request.id, 'loading', null, 'loading subject model');
 	await loadSubjectModel(request.id);
+	postProgress(request.id, 'loading', null, 'loading detection model');
+	await loadDetectorModel(request.id);
 	postProgress(request.id, 'ready', 100, 'smart mask models ready');
 	post({ id: request.id, type: 'warmed' });
 }
@@ -142,6 +157,67 @@ async function selectObjectWithActiveDevice(
 		index,
 		count: viable.length
 	});
+	postProgress(request.id, 'ready', 100, 'smart mask ready');
+}
+
+async function detectSubjectsInPhoto(
+	request: Extract<SmartMaskRequest, { type: 'detect-subjects' }>
+) {
+	const active = preparedImage(request.photoId);
+	postProgress(request.id, 'loading', null, 'loading detection model');
+	await loadDetectorModel(request.id);
+	postProgress(request.id, 'refining', null, 'finding subjects');
+	const detections = (await detectorModel!(active.image, {
+		threshold: DETECTION_THRESHOLD
+	})) as RawDetection[];
+	post({
+		id: request.id,
+		type: 'detections',
+		modelVersion: SMART_MASK_PACK.version,
+		subjects: detectedSubjects(detections, active.image.width, active.image.height)
+	});
+	postProgress(request.id, 'ready', 100, 'subjects ready');
+}
+
+async function selectInstance(request: Extract<SmartMaskRequest, { type: 'instance' }>) {
+	const active = preparedImage(request.photoId);
+	try {
+		await selectInstanceWithActiveDevice(request, active);
+	} catch (error) {
+		if (objectDevice === 'wasm') throw error;
+		postProgress(request.id, 'loading', null, 'retrying with compatible runtime');
+		await fallBackObjectModel(request.id, active);
+		await selectInstanceWithActiveDevice(request, active);
+	}
+}
+
+async function selectInstanceWithActiveDevice(
+	request: Extract<SmartMaskRequest, { type: 'instance' }>,
+	active: PreparedImage
+) {
+	postProgress(request.id, 'loading', null, 'loading object model');
+	await loadObjectModel(request.id);
+	if (!active.embedding) {
+		postProgress(request.id, 'encoding', null, 'analyzing photo');
+		active.embedding = await objectModel!.encode(active.image);
+	}
+
+	postProgress(request.id, 'refining', null, 'isolating subject');
+	const selection = await objectModel!.selectBox(
+		active.embedding,
+		request.box,
+		active.image.width,
+		active.image.height
+	);
+	const viable = selection.candidates.filter((candidate) =>
+		usableSam2Mask(candidate, selection.prompts)
+	);
+	const best = viable[0] ?? selection.candidates[0];
+	if (!best) throw new Error('The object model returned an unusable mask');
+	const coarseAlpha = await objectModel!.render(best, active.embedding);
+	postProgress(request.id, 'refining', null, 'refining subject edges');
+	const alpha = refineObjectMask(active.image, coarseAlpha);
+	postMask(request.id, active.image.width, active.image.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
 
@@ -219,6 +295,27 @@ async function loadSubjectModel(requestId: number) {
 		throw error;
 	});
 	await subjectModelLoading;
+}
+
+async function loadDetectorModel(requestId: number) {
+	const load = async () => {
+		detectorModel = await pipeline('object-detection', SMART_MASK_PACK.detector.id, {
+			...modelOptions(SMART_MASK_PACK.detector, detectorDevice, requestId)
+		});
+	};
+	detectorModelLoading ??= (async () => {
+		try {
+			await load();
+		} catch (error) {
+			if (detectorDevice === 'wasm') throw error;
+			detectorDevice = 'wasm';
+			await load();
+		}
+	})().catch((error) => {
+		detectorModelLoading = null;
+		throw error;
+	});
+	await detectorModelLoading;
 }
 
 function modelOptions(

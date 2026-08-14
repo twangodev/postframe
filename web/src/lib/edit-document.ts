@@ -76,15 +76,19 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 	})
 ]);
 
-export const normalizedCropSchema = z
-	.object({
-		x: z.number().finite().min(0).max(1),
-		y: z.number().finite().min(0).max(1),
-		width: z.number().finite().positive().max(1),
-		height: z.number().finite().positive().max(1)
-	})
-	.refine(({ x, width }) => x + width <= 1, { message: 'crop exceeds image width' })
-	.refine(({ y, height }) => y + height <= 1, { message: 'crop exceeds image height' });
+const boundedRegionSchema = (subject: string) =>
+	z
+		.object({
+			x: z.number().finite().min(0).max(1),
+			y: z.number().finite().min(0).max(1),
+			width: z.number().finite().positive().max(1),
+			height: z.number().finite().positive().max(1)
+		})
+		.refine(({ x, width }) => x + width <= 1, { message: `${subject} exceeds image width` })
+		.refine(({ y, height }) => y + height <= 1, { message: `${subject} exceeds image height` });
+
+export const normalizedRegionSchema = boundedRegionSchema('region');
+export const normalizedCropSchema = boundedRegionSchema('crop');
 
 const versionThreeEditMaskSchema = z.object({
 	id: z.string().min(1),
@@ -129,6 +133,7 @@ export const editDocumentSchema = z
 export type MaskKind = z.infer<typeof maskKindSchema>;
 export type MaskOperation = z.infer<typeof maskOperationSchema>;
 export type NormalizedPoint = z.infer<typeof normalizedPointSchema>;
+export type NormalizedRegion = z.infer<typeof normalizedRegionSchema>;
 export type MaskComponent = z.infer<typeof maskComponentSchema>;
 export type MaskRaster = z.infer<typeof maskRasterSchema>;
 export type EditMask = z.infer<typeof editMaskSchema>;

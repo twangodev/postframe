@@ -1,4 +1,4 @@
-import type { NormalizedPoint } from './edit-document.ts';
+import type { NormalizedPoint, NormalizedRegion } from './edit-document.ts';
 import type { SmartMaskStroke } from './smart-mask.ts';
 
 const MAX_PROMPT_POINTS = 16;
@@ -13,6 +13,33 @@ export interface Sam2PointPrompt {
 	points: Sam2PromptPoint[];
 	coordinates: [number, number][][][];
 	labels: (0 | 1)[][][];
+}
+
+export interface Sam2BoxPrompt {
+	center: Sam2PromptPoint;
+	coordinates: [number, number, number, number][][];
+}
+
+export function createSam2BoxPrompt(
+	box: NormalizedRegion,
+	imageWidth: number,
+	imageHeight: number
+): Sam2BoxPrompt {
+	const scaleX = Math.max(0, imageWidth - 1);
+	const scaleY = Math.max(0, imageHeight - 1);
+	return {
+		center: { x: box.x + box.width / 2, y: box.y + box.height / 2, label: 1 },
+		coordinates: [
+			[
+				[
+					box.x * scaleX,
+					box.y * scaleY,
+					(box.x + box.width) * scaleX,
+					(box.y + box.height) * scaleY
+				]
+			]
+		]
+	};
 }
 
 export function fitSam2PromptToPaddedImage(

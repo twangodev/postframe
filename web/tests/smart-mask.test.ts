@@ -12,3 +12,12 @@ test('pins the interactive object model to the validated SAM 2.1 export', () => 
 	});
 	assert.match(SMART_MASK_PACK.version, /^sam2\.1-hiera-tiny-/);
 });
+
+test('pins the detector that finds individual subjects', () => {
+	assert.deepEqual(SMART_MASK_PACK.detector, {
+		id: 'Xenova/detr-resnet-50',
+		revision: 'main',
+		license: 'Apache-2.0',
+		dtype: 'q8'
+	});
+});

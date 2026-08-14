@@ -9,6 +9,7 @@ import {
 	type SmartMaskResponse,
 	type SmartMaskStroke
 } from './smart-mask.ts';
+import { normalizedRegionSchema, type NormalizedRegion } from './edit-document.ts';
 import type { MaskRasterData } from './mask-raster.ts';
 
 type Completion = Exclude<SmartMaskResponse, { type: 'progress' | 'error' }>;
@@ -68,6 +69,23 @@ export class SmartMaskClient {
 
 	async selectSubject(photoId: string) {
 		const response = await this.send((id) => ({ id, type: 'subject', photoId }), 'mask');
+		return rasterFromResponse(response);
+	}
+
+	async detectSubjects(photoId: string) {
+		const response = await this.send(
+			(id) => ({ id, type: 'detect-subjects', photoId }),
+			'detections'
+		);
+		return response.subjects;
+	}
+
+	async selectInstance(photoId: string, selectionId: string, box: NormalizedRegion) {
+		const parsed = normalizedRegionSchema.parse(box);
+		const response = await this.send(
+			(id) => ({ id, type: 'instance', photoId, selectionId, box: parsed }),
+			'mask'
+		);
 		return rasterFromResponse(response);
 	}
 

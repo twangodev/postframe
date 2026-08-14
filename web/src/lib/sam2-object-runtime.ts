@@ -5,8 +5,10 @@ import {
 	type ProgressInfo,
 	type RawImage
 } from '@huggingface/transformers';
+import type { NormalizedRegion } from './edit-document.ts';
 import { rankSam2MaskCandidates, type RankedSam2MaskCandidate } from './sam2-candidates.ts';
 import {
+	createSam2BoxPrompt,
 	createSam2PointPrompt,
 	fitSam2PromptToPaddedImage,
 	type Sam2PromptPoint
@@ -103,6 +105,42 @@ export class Sam2ObjectRuntime {
 		} finally {
 			inputPoints.dispose();
 			inputLabels.dispose();
+		}
+	}
+
+	async selectBox(
+		embedding: Sam2ImageEmbedding,
+		box: NormalizedRegion,
+		imageWidth: number,
+		imageHeight: number
+	): Promise<Sam2Selection> {
+		const prompt = createSam2BoxPrompt(box, imageWidth, imageHeight);
+		const inputBoxes = this.processor.reshape_input_points(
+			prompt.coordinates,
+			embedding.originalSizes,
+			embedding.reshapedInputSizes,
+			true
+		);
+		try {
+			const output = await this.model.forward({
+				...embedding.tensors,
+				input_boxes: inputBoxes
+			});
+			try {
+				const scoringPrompts = fitSam2PromptToPaddedImage(
+					[prompt.center],
+					embedding.reshapedInputSizes[0]!,
+					embedding.paddedSize
+				);
+				return {
+					prompts: scoringPrompts,
+					candidates: rankSam2MaskCandidates(candidatesFrom(output), scoringPrompts)
+				};
+			} finally {
+				disposeOutput(output);
+			}
+		} finally {
+			inputBoxes.dispose();
 		}
 	}
 

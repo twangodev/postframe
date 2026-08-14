@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { normalizedPointSchema, maskPromptLabelSchema } from './edit-document.ts';
+import {
+	normalizedPointSchema,
+	maskPromptLabelSchema,
+	type NormalizedRegion
+} from './edit-document.ts';
+import type { DetectedSubject } from './subject-detection.ts';
 
 const smartMaskModelSchema = z.object({
 	id: z.string().min(1),
@@ -12,11 +17,12 @@ export const smartMaskPackSchema = z.object({
 	version: z.string().min(1),
 	modelHost: z.string().url(),
 	object: smartMaskModelSchema,
-	subject: smartMaskModelSchema
+	subject: smartMaskModelSchema,
+	detector: smartMaskModelSchema
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main',
+	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main-detr50-q8',
 	modelHost: 'https://huggingface.co/',
 	object: {
 		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
@@ -26,6 +32,12 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 	},
 	subject: {
 		id: 'onnx-community/ormbg-ONNX',
+		revision: 'main',
+		license: 'Apache-2.0',
+		dtype: 'q8'
+	},
+	detector: {
+		id: 'Xenova/detr-resnet-50',
 		revision: 'main',
 		license: 'Apache-2.0',
 		dtype: 'q8'
@@ -76,6 +88,8 @@ export type SmartMaskRequest =
 			candidate: number;
 	  }
 	| { id: number; type: 'subject'; photoId: string }
+	| { id: number; type: 'detect-subjects'; photoId: string }
+	| { id: number; type: 'instance'; photoId: string; selectionId: string; box: NormalizedRegion }
 	| {
 			id: number;
 			type: 'refine-edge';
@@ -92,6 +106,7 @@ export type SmartMaskResponse =
 	| ({ id: number; type: 'progress' } & SmartMaskProgress)
 	| { id: number; type: 'warmed' }
 	| { id: number; type: 'prepared'; modelVersion: string; device: SmartMaskDevice }
+	| { id: number; type: 'detections'; modelVersion: string; subjects: DetectedSubject[] }
 	| {
 			id: number;
 			type: 'mask';

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createSam2PointPrompt, fitSam2PromptToPaddedImage } from '../src/lib/sam2-prompt.ts';
+import {
+	createSam2BoxPrompt,
+	createSam2PointPrompt,
+	fitSam2PromptToPaddedImage
+} from '../src/lib/sam2-prompt.ts';
 
 test('maps prompts into the valid region of the padded mask grid', () => {
 	const [point] = fitSam2PromptToPaddedImage(
@@ -52,4 +56,11 @@ test('requires at least one included point', () => {
 		() => createSam2PointPrompt([{ label: 'background', points: [{ x: 0.5, y: 0.5 }] }], 100, 100),
 		/Paint over the object/
 	);
+});
+
+test('turns a normalized region into a pixel-space box prompt with a scoring center', () => {
+	const prompt = createSam2BoxPrompt({ x: 0.1, y: 0.2, width: 0.4, height: 0.6 }, 1001, 501);
+
+	assert.deepEqual(prompt.coordinates, [[[100, 100, 500, 400]]]);
+	assert.deepEqual(prompt.center, { x: 0.30000000000000004, y: 0.5, label: 1 });
 });
