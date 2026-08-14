@@ -8,7 +8,7 @@ import {
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 4;
+export const EDIT_DOCUMENT_VERSION = 5;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -26,6 +26,20 @@ export const normalizedPointSchema = z.object({
 	x: z.number().finite().min(0).max(1),
 	y: z.number().finite().min(0).max(1)
 });
+
+const boundedRegionSchema = (subject: string) =>
+	z
+		.object({
+			x: z.number().finite().min(0).max(1),
+			y: z.number().finite().min(0).max(1),
+			width: z.number().finite().positive().max(1),
+			height: z.number().finite().positive().max(1)
+		})
+		.refine(({ x, width }) => x + width <= 1, { message: `${subject} exceeds image width` })
+		.refine(({ y, height }) => y + height <= 1, { message: `${subject} exceeds image height` });
+
+export const normalizedRegionSchema = boundedRegionSchema('region');
+export const normalizedCropSchema = boundedRegionSchema('crop');
 
 export const maskRasterSchema = z.object({
 	storageName: z.string().min(1),
@@ -64,6 +78,12 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 		)
 	}),
 	maskComponentBaseSchema.extend({
+		type: z.literal('ai-instance'),
+		label: z.string().min(1),
+		box: normalizedRegionSchema,
+		modelVersion: z.string().min(1).nullable()
+	}),
+	maskComponentBaseSchema.extend({
 		type: z.literal('brush'),
 		strokes: z.array(
 			z.object({
@@ -75,20 +95,6 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 		)
 	})
 ]);
-
-const boundedRegionSchema = (subject: string) =>
-	z
-		.object({
-			x: z.number().finite().min(0).max(1),
-			y: z.number().finite().min(0).max(1),
-			width: z.number().finite().positive().max(1),
-			height: z.number().finite().positive().max(1)
-		})
-		.refine(({ x, width }) => x + width <= 1, { message: `${subject} exceeds image width` })
-		.refine(({ y, height }) => y + height <= 1, { message: `${subject} exceeds image height` });
-
-export const normalizedRegionSchema = boundedRegionSchema('region');
-export const normalizedCropSchema = boundedRegionSchema('crop');
 
 const versionThreeEditMaskSchema = z.object({
 	id: z.string().min(1),
@@ -168,6 +174,13 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 	const legacy = developSettingsSchema.safeParse(value);
 	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
 
+	const versionFour = versionFourEditDocumentSchema.safeParse(value);
+	if (versionFour.success) {
+		if (versionFour.data.photoId !== photoId)
+			throw new Error(`Edit document belongs to another photo`);
+		return editDocumentSchema.parse({ ...versionFour.data, version: EDIT_DOCUMENT_VERSION });
+	}
+
 	const versionThree = versionThreeEditDocumentSchema.safeParse(value);
 	if (versionThree.success) {
 		if (versionThree.data.photoId !== photoId)
@@ -227,6 +240,19 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 export function editDocumentStorageName(photoId: string) {
 	return `${photoId}.json`;
 }
+
+const versionFourEditDocumentSchema = z.object({
+	version: z.literal(4),
+	photoId: z.string().min(1),
+	adjustments: z.object({ light: lightSettingsSchema }),
+	geometry: z.object({
+		rotation: z.number().finite().min(-180).max(180),
+		flipHorizontal: z.boolean(),
+		flipVertical: z.boolean(),
+		crop: normalizedCropSchema.nullable()
+	}),
+	masks: z.array(editMaskSchema)
+});
 
 const versionThreeEditDocumentSchema = z.object({
 	version: z.literal(3),

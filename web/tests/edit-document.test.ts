@@ -7,6 +7,7 @@ import {
 	defaultEditDocument,
 	editDocumentStorageName,
 	editDocumentSchema,
+	editMaskSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
 import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
@@ -87,4 +88,36 @@ test('rejects mismatched photos, duplicate masks, and invalid normalized crops',
 		raster: null
 	});
 	assert.equal(editDocumentSchema.safeParse({ ...document, masks: [object] }).success, false);
+});
+
+test('carries version-four documents forward unchanged', () => {
+	const mask = createEditMask('mask-one', 'subject');
+	const previous = { ...defaultEditDocument('photo-one'), version: 4, masks: [mask] };
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
+	assert.deepEqual(migrated.masks, [mask]);
+	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
+});
+
+test('accepts detected-subject components with their originating box', () => {
+	const mask = createEditMask('mask-one', 'subject');
+	mask.name = 'person 1';
+	mask.components.push({
+		id: 'component-one',
+		type: 'ai-instance',
+		operation: 'add',
+		label: 'person',
+		box: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+		modelVersion: 'pack-version',
+		raster: null
+	});
+	const document = { ...defaultEditDocument('photo-one'), masks: [mask] };
+	assert.deepEqual(parseEditDocument(document, 'photo-one').masks, [mask]);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...mask,
+			components: [{ ...mask.components[0], box: { x: 0.75, y: 0, width: 0.5, height: 0.5 } }]
+		}).success,
+		false
+	);
 });
