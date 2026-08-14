@@ -71,9 +71,9 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
 		<CenteredDialogContent size="lg">
-			<div class="border-subtle flex items-start justify-between border-b p-5">
+			<div class="border-subtle flex items-start justify-between border-b p-4">
 				<div>
-					<div class="text-muted mb-2 flex items-center gap-2">
+					<div class="text-muted mb-1.5 flex items-center gap-2">
 						<Database size={14} strokeWidth={1.4} />
 						<span class="text-[11px] tracking-[0.04em]">local storage</span>
 					</div>
@@ -91,7 +91,7 @@
 				</Dialog.Close>
 			</div>
 
-			<div class="space-y-5 p-5">
+			<div class="space-y-4 p-4">
 				{#if status}
 					<div class="border-subtle bg-surface/45 rounded border p-3">
 						{#if breakdown}
@@ -176,7 +176,7 @@
 			</div>
 
 			{#if !confirmingClear}
-				<div class="border-subtle flex items-center justify-between border-t p-4">
+				<div class="border-subtle flex flex-wrap items-center justify-between gap-y-2 border-t p-4">
 					<button
 						type="button"
 						disabled={busy}
