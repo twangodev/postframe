@@ -56,6 +56,7 @@ import {
 	type MaskKind,
 	type NormalizedPoint
 } from './edit-document';
+import { detectedSubjectName, type DetectedSubject } from './subject-detection';
 import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
 import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
@@ -79,6 +80,11 @@ export type DevelopPreviewPhase = 'applying' | 'refining';
 export type SmartMaskStatus = SmartMaskProgress & { error: string | null };
 export interface SelectedMaskRaster extends MaskRasterData {
 	maskId: string;
+}
+export interface SubjectChoices {
+	photoId: string;
+	subjects: DetectedSubject[];
+	created: number[];
 }
 export type DocumentStatus =
 	| { kind: 'idle' }
@@ -260,6 +266,7 @@ export class WorkspaceState {
 		error: null
 	});
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
+	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
 	renderSettings = $state({ settings: defaultLightSettings(), revision: 0 });
 	history = $state<string[]>(['imported']);
@@ -731,7 +738,11 @@ export class WorkspaceState {
 	}
 
 	createMask(kind: MaskKind) {
-		if (kind === 'subject' || kind === 'background') {
+		if (kind === 'subject') {
+			void this.beginSubjectMasks();
+			return;
+		}
+		if (kind === 'background') {
 			void this.createSemanticMask(kind);
 			return;
 		}
@@ -1048,6 +1059,7 @@ export class WorkspaceState {
 		this.releaseEditPreview();
 		this.imageScope = null;
 		this.selectedMaskRaster = null;
+		this.subjectChoices = null;
 		this.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
 		this.documentStatus = { kind: 'idle' };
 		if (hadDocument) this.workerClient?.restart('Document closed');
@@ -1317,6 +1329,72 @@ export class WorkspaceState {
 		});
 		return { storageName, width: raster.width, height: raster.height, digest };
 	}
+
+	private async beginSubjectMasks() {
+		const photo = this.smartMaskPhoto();
+		if (!photo) return;
+		this.subjectChoices = null;
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const subjects = await this.smartMaskClient!.detectSubjects(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			if (subjects.length < 2) {
+				await this.createSemanticMask('subject');
+				return;
+			}
+			this.subjectChoices = { photoId: photo.id, subjects, created: [] };
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	}
+
+	chooseDetectedSubject = async (index: number) => {
+		const choices = this.subjectChoices;
+		const subject = choices?.subjects[index];
+		const photo = this.smartMaskPhoto();
+		if (!choices || !subject || !photo || photo.id !== choices.photoId) return;
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const componentId = id('component');
+			const raster = await this.smartMaskClient!.selectInstance(photo.id, componentId, subject.box);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const mask = createEditMask(id('mask'), 'subject');
+			mask.name = detectedSubjectName(choices.subjects, index);
+			mask.components.push({
+				id: componentId,
+				type: 'ai-instance',
+				operation: 'add',
+				label: subject.label,
+				box: subject.box,
+				modelVersion: this.smartMaskClient!.modelVersion,
+				raster: await this.persistMaskRaster(photo.id, componentId, raster)
+			});
+			this.dispatchEditorCommand({ type: 'mask.create', mask });
+			if (this.subjectChoices === choices) {
+				this.subjectChoices = { ...choices, created: [...choices.created, index] };
+			}
+			this.selectMask(mask.id);
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	};
+
+	chooseAllSubjects = () => {
+		this.subjectChoices = null;
+		void this.createSemanticMask('subject');
+	};
+
+	dismissSubjectChoices = () => {
+		this.subjectChoices = null;
+	};
 
 	private async createSemanticMask(kind: 'subject' | 'background') {
 		const photo = this.smartMaskPhoto();

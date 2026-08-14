@@ -32,6 +32,7 @@
 	import MaskBrushCursor from './MaskBrushCursor.svelte';
 	import MaskOverlay from './MaskOverlay.svelte';
 	import MaskPromptOverlay from './MaskPromptOverlay.svelte';
+	import SubjectPicker from './SubjectPicker.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import ContextMenu from './ui/ContextMenu.svelte';
@@ -60,7 +61,7 @@
 		type Size,
 		type ViewportTransform
 	} from '$lib/photo-viewport';
-	import type { NormalizedPoint } from '$lib/edit-document';
+	import type { NormalizedPoint, NormalizedRegion } from '$lib/edit-document';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 
 	interface Props {
@@ -139,6 +140,7 @@
 		radius: number;
 	} | null>(null);
 	let maskBrushPoint = $state<NormalizedPoint | null>(null);
+	let hoveredSubjectBox = $state<NormalizedRegion | null>(null);
 	let refineBrushSize = $state(42);
 	let pinch: {
 		origin: Point;
@@ -160,6 +162,11 @@
 	);
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
+	);
+	const subjectChoices = $derived(
+		workspace.subjectChoices?.photoId === workspace.editingPhoto?.id
+			? workspace.subjectChoices
+			: null
 	);
 	const selectedObjectComponent = $derived(
 		selectedMask?.components.find((component) => component.type === 'ai-object') ?? null
@@ -1104,6 +1111,25 @@
 											viewportScale={viewportTransform.scale}
 										/>
 									{/if}
+									{#if subjectChoices && hoveredSubjectBox}
+										<svg
+											aria-hidden="true"
+											class="pointer-events-none absolute inset-0 size-full overflow-visible"
+											viewBox={`0 0 ${imageSize.width} ${imageSize.height}`}
+											preserveAspectRatio="none"
+										>
+											<rect
+												x={hoveredSubjectBox.x * imageSize.width}
+												y={hoveredSubjectBox.y * imageSize.height}
+												width={hoveredSubjectBox.width * imageSize.width}
+												height={hoveredSubjectBox.height * imageSize.height}
+												fill="none"
+												class="stroke-accent"
+												stroke-width={2 / viewportTransform.scale}
+												stroke-dasharray={`${6 / viewportTransform.scale} ${4 / viewportTransform.scale}`}
+											/>
+										</svg>
+									{/if}
 								</div>
 							{/key}
 							{#if before}
@@ -1408,6 +1434,21 @@
 				</Tabs.Content>
 
 				<Tabs.Content value="mask" class="motion-tab">
+					{#if subjectChoices && workspace.editPreview}
+						<SubjectPicker
+							subjects={subjectChoices.subjects}
+							created={subjectChoices.created}
+							previewSrc={workspace.editPreview.src}
+							busy={smartMaskWorking}
+							onChoose={(index) => void workspace.chooseDetectedSubject(index)}
+							onChooseAll={workspace.chooseAllSubjects}
+							onDismiss={() => {
+								hoveredSubjectBox = null;
+								workspace.dismissSubjectChoices();
+							}}
+							onHover={(box) => (hoveredSubjectBox = box)}
+						/>
+					{/if}
 					<div class="border-subtle border-b p-3">
 						<p class="text-muted mb-2 text-[11px] tracking-[0.03em]">new mask</p>
 						<div class="grid grid-cols-3 gap-1.5">
