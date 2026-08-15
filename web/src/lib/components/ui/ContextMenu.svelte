@@ -3,6 +3,7 @@
 	import { Check, ChevronRight } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 	import { menuContentClass, menuItemClass, type MenuEntry, type MenuLeaf } from '$lib/menu';
+	import ShortcutHint from './ShortcutHint.svelte';
 
 	interface Props {
 		items: MenuEntry<A>[];
@@ -39,7 +40,9 @@
 				</span>
 				<span class="flex-1">{entry.label}</span>
 				{#if entry.shortcut}
-					<kbd class="text-muted ml-5 font-mono text-[10px]">{entry.shortcut}</kbd>
+					<kbd class="text-muted ml-5 font-mono text-[10px]"
+						><ShortcutHint shortcut={entry.shortcut} /></kbd
+					>
 				{/if}
 			</ContextMenu.Item>
 		{/if}

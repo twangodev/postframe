@@ -3,6 +3,7 @@
 	import { Check, ChevronRight } from '@lucide/svelte';
 	import { EDITOR_MENUS, type EditorMenuAction, type EditorMenuEntry } from '$lib/editor-menu';
 	import { menuContentClass as contentClass, menuItemClass as itemClass } from '$lib/menu';
+	import ShortcutHint from './ui/ShortcutHint.svelte';
 
 	interface Props {
 		onAction: (action: EditorMenuAction) => void;
@@ -67,7 +68,7 @@
 														<span class="flex-1">{child.label}</span>
 														{#if child.shortcut}
 															<kbd class="text-muted ml-5 font-mono text-[10px]"
-																>{child.shortcut}</kbd
+																><ShortcutHint shortcut={child.shortcut} /></kbd
 															>
 														{/if}
 													</Menubar.Item>
@@ -88,7 +89,9 @@
 									</span>
 									<span class="flex-1">{entry.label}</span>
 									{#if entry.shortcut}
-										<kbd class="text-muted ml-5 font-mono text-[10px]">{entry.shortcut}</kbd>
+										<kbd class="text-muted ml-5 font-mono text-[10px]"
+											><ShortcutHint shortcut={entry.shortcut} /></kbd
+										>
 									{/if}
 								</Menubar.Item>
 							{/if}
