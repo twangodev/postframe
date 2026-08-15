@@ -63,6 +63,7 @@ import {
 	rasterizeRadialGradient,
 	type MaskBrushStroke
 } from './mask-rasterizer';
+import { exportFileName, type ExportProgress } from './export';
 import { detectedSubjectName, type DetectedSubject } from './subject-detection';
 import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
 import { EditorHistory } from './editor-history';
@@ -576,6 +577,27 @@ export class WorkspaceState {
 		if (this.refinementRevision !== revision) return;
 		this.refinementRevision = null;
 		this.releaseDevelopPreview();
+	};
+
+	exportPhoto = async (
+		options: { quality: number },
+		onProgress?: (progress: ExportProgress) => void
+	): Promise<{ jpeg: ArrayBuffer; fileName: string }> => {
+		const photo = this.selectedPhoto;
+		if (!photo || !this.workerClient || !this.canAdjustLight) {
+			throw new Error('Open the photograph in the edit view before exporting');
+		}
+		const edit = cloneEditDocument(photo.edit);
+		const jpeg = await this.workerClient.exportPhoto(
+			{
+				settings: edit.adjustments.light,
+				masks: await this.renderMasks(edit),
+				geometry: edit.geometry,
+				quality: options.quality
+			},
+			onProgress
+		);
+		return { jpeg, fileName: exportFileName(photo.name) };
 	};
 
 	renderTile = async (photoId: string, tile: RenderTileRequest, signal: AbortSignal) => {
