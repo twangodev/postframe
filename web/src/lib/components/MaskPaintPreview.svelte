@@ -21,6 +21,7 @@
 	let { paint, imageWidth, imageHeight, mode }: Props = $props();
 	let canvas = $state<HTMLCanvasElement | null>(null);
 	const dims = $derived(paintRasterDimensions(imageWidth, imageHeight));
+	const replacesCommittedMask = $derived(paint.kind !== 'brush');
 
 	let shape: HTMLCanvasElement | null = null;
 	let sprite: HTMLCanvasElement | null = null;
@@ -151,8 +152,10 @@
 	) {
 		context.clearRect(0, 0, width, height);
 		if (mode === 'matte') {
-			context.fillStyle = 'black';
-			context.fillRect(0, 0, width, height);
+			if (replacesCommittedMask) {
+				context.fillStyle = 'black';
+				context.fillRect(0, 0, width, height);
+			}
 			context.drawImage(source, 0, 0);
 			return;
 		}
