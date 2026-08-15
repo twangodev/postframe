@@ -2,12 +2,76 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	paintRasterDimensions,
 	rasterizeBrushStrokes,
 	rasterizeLinearGradient,
-	rasterizeRadialGradient
+	rasterizeRadialGradient,
+	rasterizeStrokeOnto,
+	stampCenters
 } from '../src/lib/mask-rasterizer.ts';
 
 const point = (x: number, y: number) => ({ x, y });
+
+test('caps paint raster dimensions at the maximum edge', () => {
+	assert.deepEqual(paintRasterDimensions(8736, 5856), { width: 2048, height: 1373 });
+	assert.deepEqual(paintRasterDimensions(5856, 8736), { width: 1373, height: 2048 });
+});
+
+test('keeps paint raster dimensions below the cap untouched', () => {
+	assert.deepEqual(paintRasterDimensions(1600, 900), { width: 1600, height: 900 });
+});
+
+test('clamps extreme aspect ratios to at least one pixel per edge', () => {
+	assert.deepEqual(paintRasterDimensions(10000, 2), { width: 2048, height: 1 });
+});
+
+test('stamping strokes one at a time matches full re-rasterization', () => {
+	const strokes = [
+		{ points: [point(0.2, 0.3), point(0.7, 0.4)], size: 0.3, feather: 0.5, flow: 0.6 },
+		{
+			points: [point(0.5, 0.5), point(0.4, 0.8), point(0.8, 0.7)],
+			size: 0.4,
+			feather: 0.3,
+			flow: 0.8
+		},
+		{ points: [point(0.6, 0.35)], size: 0.5, feather: 1, flow: 0.5 }
+	];
+	const full = rasterizeBrushStrokes(strokes, 64, 48);
+	assert.deepEqual(
+		strokes.reduce<Uint8Array>(
+			(alpha, stroke) => rasterizeStrokeOnto(alpha, stroke, 64, 48),
+			new Uint8Array(64 * 48)
+		),
+		full
+	);
+	assert.deepEqual(
+		rasterizeStrokeOnto(
+			rasterizeBrushStrokes(strokes.slice(0, -1), 64, 48),
+			strokes.at(-1)!,
+			64,
+			48
+		),
+		full
+	);
+});
+
+test('stamps a single point once at its pixel position', () => {
+	assert.deepEqual(stampCenters([point(0.5, 0.5)], 10, 10, 2), [{ x: 5, y: 5 }]);
+});
+
+test('spaces stamps at exact intervals along a straight segment', () => {
+	assert.deepEqual(
+		stampCenters([point(0.25, 0.5), point(0.75, 0.5)], 16, 1, 2),
+		[4, 6, 8, 10, 12].map((x) => ({ x, y: 0.5 }))
+	);
+});
+
+test('carries stamp spacing across polyline vertices', () => {
+	assert.deepEqual(stampCenters([point(0, 0), point(0.375, 0), point(0.375, 0.5)], 8, 8, 4), [
+		{ x: 0, y: 0 },
+		{ x: 3, y: 1 }
+	]);
+});
 
 test('stamps a hard brush dab sized against the longest dimension', () => {
 	const alpha = rasterizeBrushStrokes(

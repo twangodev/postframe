@@ -18,13 +18,27 @@ export interface RadialMaskGeometry {
 	feather: number;
 }
 
+export const PAINT_RASTER_MAX_DIMENSION = 2048;
+
+export function paintRasterDimensions(
+	width: number,
+	height: number,
+	maxDimension = PAINT_RASTER_MAX_DIMENSION
+): { width: number; height: number } {
+	const scale = Math.min(1, maxDimension / Math.max(width, height));
+	return {
+		width: Math.max(1, Math.round(width * scale)),
+		height: Math.max(1, Math.round(height * scale))
+	};
+}
+
 export function rasterizeBrushStrokes(
 	strokes: readonly MaskBrushStroke[],
 	width: number,
 	height: number
 ): Uint8Array {
 	const alpha = emptyPlane(width, height);
-	for (const stroke of strokes) paintStroke(alpha, stroke, width, height);
+	for (const stroke of strokes) rasterizeStrokeOnto(alpha, stroke, width, height);
 	return alpha;
 }
 
@@ -65,19 +79,25 @@ export function rasterizeRadialGradient(
 	return alpha;
 }
 
-interface PixelPoint {
+export interface PixelPoint {
 	x: number;
 	y: number;
 }
 
-function paintStroke(alpha: Uint8Array, stroke: MaskBrushStroke, width: number, height: number) {
+export function rasterizeStrokeOnto(
+	alpha: Uint8Array,
+	stroke: MaskBrushStroke,
+	width: number,
+	height: number
+): Uint8Array {
 	const radius = (stroke.size / 2) * Math.max(width, height);
 	for (const center of stampCenters(stroke.points, width, height, Math.max(1, radius / 2))) {
 		stampCircle(alpha, center, radius, stroke.feather, stroke.flow, width, height);
 	}
+	return alpha;
 }
 
-function stampCenters(
+export function stampCenters(
 	points: readonly NormalizedPoint[],
 	width: number,
 	height: number,
