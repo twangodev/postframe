@@ -18,6 +18,7 @@ import {
 	createEditMask,
 	defaultEditDocument
 } from '../src/lib/edit-document.ts';
+import { renderCacheStorageName } from '../src/lib/render-cache.ts';
 
 class MemoryAssetStore {
 	readonly originals = new Map<string, File>();
@@ -318,6 +319,41 @@ test('cleans only unreferenced OPFS files', async () => {
 		assert.deepEqual([...assets.edits.keys()], ['photo-one.json']);
 		assert.deepEqual([...assets.derived.keys()], []);
 		assert.deepEqual([...assets.masks.keys()], [storageName]);
+	} finally {
+		await service.clearAll();
+	}
+});
+
+test('reclaims stale render caches once per session when the library loads', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	const assets = new MemoryAssetStore();
+	const service = new LibraryService(catalog, assets as unknown as AssetStore);
+	try {
+		const photo = storedPhoto('photo-one', 'asset-one', '0'.repeat(64));
+		const photoWrites = writes(photo);
+		await service.importPhotos(1, [photo], photoWrites.originals, photoWrites.thumbnails);
+		const referenced = renderCacheStorageName(photo.id);
+		assets.derived.set(referenced, new Blob(['fresh']));
+		assets.derived.set('render-v0-stale.pfc', new Blob(['stale cache']));
+		assets.originals.set('orphan.dng', new File(['orphan'], 'orphan.dng'));
+
+		await service.loadLibrary();
+		const result = await service.reclaimStaleRenderCaches();
+		assert.equal(result.deletedFiles, 1);
+		assert.equal(result.failedFiles, 0);
+		assert.equal(result.reclaimedBytes, 11);
+		assert.deepEqual([...assets.derived.keys()], [referenced]);
+		assert.ok(assets.originals.has('orphan.dng'));
+
+		assets.derived.set('render-v0-later.pfc', new Blob(['stale cache']));
+		await service.loadLibrary();
+		assert.ok(assets.derived.has('render-v0-later.pfc'));
+
+		const cleanup = await service.cleanup();
+		assert.equal(cleanup.deletedFiles, 2);
+		assert.equal(cleanup.failedFiles, 0);
+		assert.equal(cleanup.reclaimedBytes, 17);
+		assert.deepEqual([...assets.derived.keys()], [referenced]);
 	} finally {
 		await service.clearAll();
 	}

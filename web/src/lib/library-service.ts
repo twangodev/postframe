@@ -41,6 +41,7 @@ export interface CleanupResult {
 export class LibraryService {
 	readonly catalog: LibraryCatalog;
 	readonly assets: AssetStore;
+	private staleRenderCacheReclaim: Promise<CleanupResult> | null = null;
 
 	constructor(catalog = new LibraryCatalog(), assets = new AssetStore()) {
 		this.catalog = catalog;
@@ -51,8 +52,14 @@ export class LibraryService {
 		return typeof indexedDB !== 'undefined' && AssetStore.supported();
 	}
 
-	loadLibrary() {
-		return this.catalog.loadLibrary();
+	async loadLibrary() {
+		const library = await this.catalog.loadLibrary();
+		this.reclaimStaleRenderCaches().catch(() => undefined);
+		return library;
+	}
+
+	reclaimStaleRenderCaches(): Promise<CleanupResult> {
+		return (this.staleRenderCacheReclaim ??= this.deleteStaleRenderCaches());
 	}
 
 	readOriginal(storageName: string) {
@@ -219,32 +226,15 @@ export class LibraryService {
 		for (const file of edits) files.set(deletionKey('edit', file.storageName), file);
 		for (const file of derived) files.set(deletionKey('derived', file.storageName), file);
 		const deletions = new Map<string, PendingDeleteRecord>();
-		for (const deletion of pending)
+		const orphans = [
+			...pending,
+			...orphanDeletions('original', originals, references.originals),
+			...orphanDeletions('thumbnail', thumbnails, references.thumbnails),
+			...orphanDeletions('edit', edits, references.edits),
+			...orphanDeletions('derived', derived, references.derived)
+		];
+		for (const deletion of orphans)
 			deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
-		for (const file of originals) {
-			if (!references.originals.has(file.storageName)) {
-				const deletion = pendingDeletion('original', file.storageName);
-				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
-			}
-		}
-		for (const file of thumbnails) {
-			if (!references.thumbnails.has(file.storageName)) {
-				const deletion = pendingDeletion('thumbnail', file.storageName);
-				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
-			}
-		}
-		for (const file of edits) {
-			if (!references.edits.has(file.storageName)) {
-				const deletion = pendingDeletion('edit', file.storageName);
-				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
-			}
-		}
-		for (const file of derived) {
-			if (!references.derived.has(file.storageName)) {
-				const deletion = pendingDeletion('derived', file.storageName);
-				deletions.set(deletionKey(deletion.kind, deletion.storageName), deletion);
-			}
-		}
 		const [library, maskFiles] = await Promise.all([
 			this.flushDeletions([...deletions.values()], files),
 			this.deleteMaskFiles(masks.filter(({ storageName }) => !referencedMasks.has(storageName)))
@@ -282,6 +272,15 @@ export class LibraryService {
 
 	close() {
 		this.catalog.close();
+	}
+
+	private async deleteStaleRenderCaches(): Promise<CleanupResult> {
+		const [references, derived] = await Promise.all([
+			this.catalog.storageReferences(),
+			this.assets.listDerived()
+		]);
+		const files = new Map(derived.map((file) => [deletionKey('derived', file.storageName), file]));
+		return this.flushDeletions(orphanDeletions('derived', derived, references.derived), files);
 	}
 
 	private async flushDeletions(
@@ -370,6 +369,16 @@ function mergeCleanupResults(...results: CleanupResult[]): CleanupResult {
 		}),
 		{ deletedFiles: 0, failedFiles: 0, reclaimedBytes: 0 }
 	);
+}
+
+function orphanDeletions(
+	kind: PendingDeleteRecord['kind'],
+	files: readonly StoredFile[],
+	referenced: ReadonlySet<string>
+): PendingDeleteRecord[] {
+	return files
+		.filter(({ storageName }) => !referenced.has(storageName))
+		.map(({ storageName }) => pendingDeletion(kind, storageName));
 }
 
 function pendingDeletion(
