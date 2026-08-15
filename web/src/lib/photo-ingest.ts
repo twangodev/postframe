@@ -10,6 +10,7 @@ import type { PostframeWorkerClient } from './worker-client';
 import { defaultEditDocument } from './edit-document';
 import { entityId } from './entity-id';
 import type { ObjectUrlRegistry } from './object-url-registry';
+import { photoMetadata } from './photo-exif';
 import { captureLabel, groupLabel, storedMetadata, type Photo } from './photo-record';
 
 export interface PhotoImport {
@@ -108,8 +109,11 @@ export class PhotoIngest {
 		if (src) this.objectUrls.add(src);
 
 		const dimensions = inspection?.metadata ?? displayDimensions;
-		// TODO(WASM_TODOS.metadata): inspect EXIF for display-only assets with a dedicated parser.
-		const metadata = inspection ? storedMetadata(inspection.metadata) : null;
+		const metadata = inspection
+			? storedMetadata(inspection.metadata)
+			: selectedFrame.displayFile
+				? await photoMetadata(selectedFrame.displayFile)
+				: null;
 		const frameAssets = importedFrames.flatMap(({ frame }) =>
 			[frame.raw, frame.display].filter((asset): asset is StoredAsset => asset !== null)
 		);
