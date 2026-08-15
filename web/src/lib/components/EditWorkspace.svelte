@@ -43,6 +43,17 @@
 	import ProgressCard from './ui/ProgressCard.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import { separator, type MenuEntry } from '$lib/menu';
+	import {
+		cropTools,
+		generativeTools,
+		measureTools,
+		paintTools,
+		retouchTools,
+		selectionTools,
+		toolShortcutHandlers,
+		typeTools,
+		vectorTools
+	} from '$lib/editor-tools';
 	import { type MaskKind, type WorkspaceState } from '$lib/workspace.svelte';
 	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
 	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
@@ -256,69 +267,6 @@
 	const smartMaskWorking = $derived(
 		['downloading', 'loading', 'encoding', 'refining'].includes(workspace.smartMaskStatus.phase)
 	);
-	const selectionTools = new Set([
-		'object-select',
-		'quick-select',
-		'magic-wand',
-		'marquee',
-		'ellipse-marquee',
-		'single-row-marquee',
-		'single-column-marquee',
-		'lasso',
-		'polygon-lasso',
-		'magnetic-lasso'
-	]);
-	const cropTools = new Set(['crop', 'perspective-crop', 'slice', 'slice-select', 'frame']);
-	const retouchTools = new Set([
-		'remove',
-		'spot-heal',
-		'healing-brush',
-		'patch',
-		'content-aware-move',
-		'clone-stamp',
-		'red-eye',
-		'blur',
-		'sharpen',
-		'smudge',
-		'dodge',
-		'burn',
-		'sponge',
-		'background-eraser',
-		'magic-eraser'
-	]);
-	const paintTools = new Set([
-		'brush',
-		'pencil',
-		'mixer-brush',
-		'color-replacement',
-		'history-brush',
-		'art-history-brush',
-		'eraser',
-		'gradient',
-		'paint-bucket',
-		'eyedropper',
-		'color-sampler',
-		'pattern-stamp'
-	]);
-	const vectorTools = new Set([
-		'pen',
-		'freeform-pen',
-		'curvature-pen',
-		'add-anchor',
-		'delete-anchor',
-		'convert-point',
-		'path-select',
-		'shape',
-		'ellipse-shape',
-		'triangle-shape',
-		'polygon-shape',
-		'star-shape',
-		'line-shape',
-		'custom-shape'
-	]);
-	const typeTools = new Set(['type', 'vertical-type', 'type-mask']);
-	const measureTools = new Set(['ruler', 'note', 'count']);
-	const generativeTools = new Set(['generative-fill', 'content-aware-fill', 'remove-background']);
 	const zoomMenuItemClass =
 		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
 	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (maskPreviewMode = mode);
@@ -337,22 +285,6 @@
 		activeToolLabel = label;
 		maskBrushPoint = null;
 		if (tool.startsWith('mask')) inspectorTab = 'mask';
-	}
-
-	function selectShortcut(tool: string, label: string) {
-		return (event: KeyboardEvent) => {
-			event.preventDefault();
-			chooseTool(tool, label);
-		};
-	}
-
-	function cycleShortcut(tools: [string, string][]) {
-		return (event: KeyboardEvent) => {
-			event.preventDefault();
-			const current = tools.findIndex(([tool]) => tool === activeTool);
-			const [tool, label] = tools[(current + 1) % tools.length];
-			chooseTool(tool, label);
-		};
 	}
 
 	function fitPhoto() {
@@ -717,96 +649,10 @@
 	}
 
 	onMount(() =>
-		tinykeys(window, {
-			v: selectShortcut('move', 'move'),
-			h: selectShortcut('hand', 'hand'),
-			z: selectShortcut('zoom', 'zoom'),
-			r: selectShortcut('rotate-view', 'rotate view'),
-			w: cycleShortcut([
-				['object-select', 'object selection'],
-				['quick-select', 'quick selection'],
-				['magic-wand', 'magic wand']
-			]),
-			m: cycleShortcut([
-				['marquee', 'rectangular marquee'],
-				['ellipse-marquee', 'elliptical marquee'],
-				['single-row-marquee', 'single row marquee'],
-				['single-column-marquee', 'single column marquee']
-			]),
-			l: cycleShortcut([
-				['lasso', 'lasso'],
-				['polygon-lasso', 'polygonal lasso'],
-				['magnetic-lasso', 'magnetic lasso']
-			]),
-			c: cycleShortcut([
-				['crop', 'crop'],
-				['perspective-crop', 'perspective crop'],
-				['slice', 'slice'],
-				['slice-select', 'slice selection'],
-				['frame', 'frame']
-			]),
-			j: cycleShortcut([
-				['remove', 'remove'],
-				['spot-heal', 'spot healing brush'],
-				['healing-brush', 'healing brush'],
-				['patch', 'patch'],
-				['content-aware-move', 'content-aware move']
-			]),
-			s: cycleShortcut([
-				['clone-stamp', 'clone stamp'],
-				['pattern-stamp', 'pattern stamp']
-			]),
-			o: cycleShortcut([
-				['dodge', 'dodge'],
-				['burn', 'burn'],
-				['sponge', 'sponge']
-			]),
-			b: cycleShortcut([
-				['brush', 'brush'],
-				['pencil', 'pencil'],
-				['mixer-brush', 'mixer brush'],
-				['color-replacement', 'color replacement']
-			]),
-			e: cycleShortcut([
-				['eraser', 'eraser'],
-				['background-eraser', 'background eraser'],
-				['magic-eraser', 'magic eraser']
-			]),
-			y: cycleShortcut([
-				['history-brush', 'history brush'],
-				['art-history-brush', 'art history brush']
-			]),
-			g: cycleShortcut([
-				['gradient', 'gradient'],
-				['paint-bucket', 'paint bucket']
-			]),
-			i: cycleShortcut([
-				['eyedropper', 'eyedropper'],
-				['color-sampler', 'color sampler'],
-				['ruler', 'ruler']
-			]),
-			p: cycleShortcut([
-				['pen', 'pen'],
-				['freeform-pen', 'freeform pen'],
-				['curvature-pen', 'curvature pen']
-			]),
-			a: selectShortcut('path-select', 'path selection'),
-			t: cycleShortcut([
-				['type', 'horizontal type'],
-				['vertical-type', 'vertical type'],
-				['type-mask', 'type mask']
-			]),
-			u: cycleShortcut([
-				['shape', 'rectangle'],
-				['ellipse-shape', 'ellipse'],
-				['triangle-shape', 'triangle'],
-				['polygon-shape', 'polygon'],
-				['star-shape', 'star'],
-				['line-shape', 'line'],
-				['custom-shape', 'custom shape']
-			]),
-			q: selectShortcut('mask', 'mask brush')
-		})
+		tinykeys(
+			window,
+			toolShortcutHandlers(() => activeTool, chooseTool)
+		)
 	);
 
 	onMount(() => {
