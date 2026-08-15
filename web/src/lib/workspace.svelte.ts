@@ -805,7 +805,7 @@ export class WorkspaceState {
 			void this.beginSubjectMasks();
 			return;
 		}
-		if (kind === 'background') {
+		if (kind === 'background' || kind === 'sky') {
 			void this.createSemanticMask(kind);
 			return;
 		}
@@ -1601,7 +1601,7 @@ export class WorkspaceState {
 		this.subjectChoices = null;
 	};
 
-	private async createSemanticMask(kind: 'subject' | 'background') {
+	private async createSemanticMask(kind: 'subject' | 'background' | 'sky') {
 		const photo = this.smartMaskPhoto();
 		if (!photo) return;
 		this.beginSmartMask(photo.id);
@@ -1609,7 +1609,10 @@ export class WorkspaceState {
 		try {
 			await this.ensureSmartMaskPrepared(photo.id);
 			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
-			const raster = await this.smartMaskClient!.selectSubject(photo.id);
+			const raster =
+				kind === 'sky'
+					? await this.smartMaskClient!.selectSky(photo.id)
+					: await this.smartMaskClient!.selectSubject(photo.id);
 			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
 			const mask = createEditMask(id('mask'), kind);
 			const componentId = id('component');
