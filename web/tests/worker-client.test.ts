@@ -356,3 +356,55 @@ test('transfers one-shot validation buffers to the worker', async () => {
 	await validated;
 	client.destroy();
 });
+
+test('exports through the worker with staged progress and detached masks', async () => {
+	const { client, workers } = setup();
+	const progress: { phase: string; completed: number; total: number }[] = [];
+	const alpha = new Uint8Array([1, 2, 3, 4]).buffer;
+	const geometry = {
+		rotation: 90,
+		flipHorizontal: true,
+		flipVertical: false,
+		crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 }
+	};
+	const exported = client.exportPhoto(
+		{
+			settings: { ...neutral, exposure: 0.5 },
+			masks: [
+				{
+					id: 'mask-1',
+					width: 2,
+					height: 2,
+					alpha,
+					edge: { ...neutralEdge },
+					settings: { ...neutral }
+				}
+			],
+			geometry,
+			quality: 88
+		},
+		(update) => progress.push(update)
+	);
+
+	const message = workers[0]?.messages[0];
+	if (message?.type !== 'export') throw new Error('expected an export request');
+	assert.equal(message.quality, 88);
+	assert.deepEqual(message.geometry, geometry);
+	assert.notEqual(message.geometry, geometry);
+	assert.notEqual(message.geometry.crop, geometry.crop);
+	assert.notEqual(message.masks[0]?.alpha, alpha);
+	assert.deepEqual(workers[0]?.transfers[0], [message.masks[0]?.alpha]);
+
+	workers[0]?.respond({ id: 1, type: 'export-progress', phase: 'decode', completed: 1, total: 1 });
+	workers[0]?.respond({ id: 1, type: 'export-progress', phase: 'develop', completed: 2, total: 4 });
+	workers[0]?.respond({ id: 1, type: 'export-progress', phase: 'encode', completed: 0, total: 1 });
+	workers[0]?.respond({ id: 1, type: 'export', jpeg: new ArrayBuffer(9) });
+
+	assert.deepEqual(progress, [
+		{ phase: 'decode', completed: 1, total: 1 },
+		{ phase: 'develop', completed: 2, total: 4 },
+		{ phase: 'encode', completed: 0, total: 1 }
+	]);
+	assert.equal((await exported).byteLength, 9);
+	client.destroy();
+});

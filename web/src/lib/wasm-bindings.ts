@@ -14,17 +14,18 @@ export const WASM_BINDINGS = {
 	init_thread_pool: { rust: 'wasm_bindgen_rayon::init_thread_pool', worker: 'capabilities' },
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
+	encode_export_jpeg: { rust: 'encode_export_jpeg', worker: 'export' },
 	display_transform: {
 		rust: 'DisplayTransform::new',
-		worker: ['open-display', 'preview', 'tile']
+		worker: ['open-display', 'preview', 'tile', 'export']
 	},
 	display_free: {
 		rust: 'wasm-bindgen DisplayTransform destructor',
-		worker: ['preview', 'tile', 'close']
+		worker: ['preview', 'tile', 'export', 'close']
 	},
 	apply_display_rgba: {
 		rust: 'DisplayTransform::apply_rgba',
-		worker: ['open-display', 'preview', 'tile']
+		worker: ['open-display', 'preview', 'tile', 'export']
 	},
 	display_luminance_lut: {
 		rust: 'DisplayTransform::luminance_lut',
@@ -32,15 +33,15 @@ export const WASM_BINDINGS = {
 	},
 	developed_tile_compositor: {
 		rust: 'DevelopedTileCompositor::new',
-		worker: 'set-masks'
+		worker: ['set-masks', 'export']
 	},
 	developed_tile_compositor_free: {
 		rust: 'wasm-bindgen DevelopedTileCompositor destructor',
-		worker: ['set-masks', 'close']
+		worker: ['set-masks', 'export', 'close']
 	},
 	composite_developed_rgba: {
 		rust: 'DevelopedTileCompositor::composite_rgba',
-		worker: 'tile'
+		worker: ['tile', 'export']
 	},
 	constructor: { rust: 'Session::new', worker: 'open-raw' },
 	free: { rust: 'wasm-bindgen Session destructor', worker: 'close' },
@@ -50,16 +51,16 @@ export const WASM_BINDINGS = {
 	restore_cache: { rust: 'Session::restore_cache', worker: 'open-raw' },
 	cache_bytes: { rust: 'Session::cache_bytes', worker: 'open-raw' },
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
-	width: { rust: 'Session::width', worker: 'open-raw' },
-	height: { rust: 'Session::height', worker: 'open-raw' },
+	width: { rust: 'Session::width', worker: ['open-raw', 'export'] },
+	height: { rust: 'Session::height', worker: ['open-raw', 'export'] },
 	render_profile: { rust: 'Session::render_profile', worker: 'open-raw' },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'open-raw' },
 	preview_scope: { rust: 'Session::preview_scope', worker: 'scope' },
-	render_tile: { rust: 'Session::render_tile', worker: 'tile' },
+	render_tile: { rust: 'Session::render_tile', worker: ['tile', 'export'] },
 	render_tile_linear: { rust: 'Session::render_tile_linear', worker: 'tile' },
 	preview_ultra: { rust: 'Session::preview_ultra', worker: 'ultra' },
-	export_ultra: { rust: 'Session::export_ultra', worker: 'export' }
+	export_ultra: { rust: 'Session::export_ultra', worker: null }
 } as const satisfies Record<
 	| SessionMethod
 	| 'constructor'
@@ -67,6 +68,7 @@ export const WASM_BINDINGS = {
 	| 'init_thread_pool'
 	| 'validate_raw'
 	| 'inspect_raw'
+	| 'encode_export_jpeg'
 	| 'display_transform'
 	| 'display_free'
 	| 'apply_display_rgba'
@@ -211,9 +213,9 @@ export const WASM_TODOS = {
 		planned: ['worker job queue', 'Session::cancel']
 	},
 	export: {
-		scope: 'Render and download the selected format, color space, quality, and dimensions.',
+		scope: 'Export Ultra HDR, alternate formats, color spaces, and output dimensions.',
 		bindings: ['export_ultra'],
-		planned: ['Session::export']
+		planned: ['Ultra HDR export pipeline']
 	}
 } as const satisfies Record<string, ImplementationTodo>;
 

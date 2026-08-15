@@ -9,6 +9,7 @@ import type {
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
 import type { LightSettings } from './develop-settings.ts';
+import type { ExportGeometry, ExportProgress } from './export.ts';
 import {
 	RenderPerformanceRecorder,
 	type RenderPerformanceControls,
@@ -16,8 +17,12 @@ import {
 } from './render-performance.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
+type ExportProgressResponse = Extract<Response, { type: 'export-progress' }>;
 type ErrorResponse = Extract<Response, { type: 'error' }>;
-type CompletionResponse = Exclude<Response, ProgressResponse | ErrorResponse>;
+type CompletionResponse = Exclude<
+	Response,
+	ProgressResponse | ExportProgressResponse | ErrorResponse
+>;
 type CompletionType = CompletionResponse['type'];
 type CompletionOf<Type extends CompletionType> = Extract<CompletionResponse, { type: Type }>;
 
@@ -26,6 +31,14 @@ interface PendingRequest {
 	resolve: (response: CompletionResponse) => void;
 	reject: (error: Error) => void;
 	cleanup?: () => void;
+	onExportProgress?: (progress: ExportProgress) => void;
+}
+
+export interface ExportPhotoRequest {
+	settings: LightSettings;
+	masks: DevelopedMaskInput[];
+	geometry: ExportGeometry;
+	quality: number;
 }
 
 interface PreviewWaiter {
@@ -194,8 +207,30 @@ export class PostframeWorkerClient {
 		return response.jpeg;
 	}
 
-	async exportUltra() {
-		const response = await this.send((id) => ({ id, type: 'export' }), 'export');
+	async exportPhoto(request: ExportPhotoRequest, onProgress?: (progress: ExportProgress) => void) {
+		const masks = request.masks.map((mask) => ({
+			...mask,
+			edge: { ...mask.edge },
+			settings: { ...mask.settings },
+			alpha: mask.alpha.slice(0)
+		}));
+		const response = await this.send(
+			(id) => ({
+				id,
+				type: 'export',
+				settings: { ...request.settings },
+				masks,
+				geometry: {
+					...request.geometry,
+					crop: request.geometry.crop ? { ...request.geometry.crop } : null
+				},
+				quality: request.quality
+			}),
+			'export',
+			masks.map(({ alpha }) => alpha),
+			undefined,
+			onProgress
+		);
 		return response.jpeg;
 	}
 
@@ -250,7 +285,8 @@ export class PostframeWorkerClient {
 		request: (id: number) => Request,
 		expected: Type,
 		transfer: Transferable[] = [],
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		onExportProgress?: (progress: ExportProgress) => void
 	): Promise<CompletionOf<Type>> {
 		if (this.destroyed) return Promise.reject(new Error('Postframe worker closed'));
 		if (signal?.aborted) return Promise.reject(new Error('Tile rendering cancelled'));
@@ -259,7 +295,8 @@ export class PostframeWorkerClient {
 			const pending: PendingRequest = {
 				expected,
 				resolve: (response) => resolve(response as CompletionOf<Type>),
-				reject
+				reject,
+				onExportProgress
 			};
 			if (signal) {
 				const cancel = () => {
@@ -316,6 +353,14 @@ export class PostframeWorkerClient {
 		}
 		if (response.type === 'progress') {
 			for (const listener of this.progressListeners) listener(response);
+			return;
+		}
+		if (response.type === 'export-progress') {
+			this.pending.get(response.id)?.onExportProgress?.({
+				phase: response.phase,
+				completed: response.completed,
+				total: response.total
+			});
 			return;
 		}
 
