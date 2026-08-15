@@ -30,7 +30,9 @@
 	import PhotoVisual from './PhotoVisual.svelte';
 	import PhotoPyramidLayer from './PhotoPyramidLayer.svelte';
 	import MaskBrushCursor from './MaskBrushCursor.svelte';
+	import MaskGradientGuides from './MaskGradientGuides.svelte';
 	import MaskOverlay from './MaskOverlay.svelte';
+	import MaskPaintPreview, { type LivePaint } from './MaskPaintPreview.svelte';
 	import MaskPromptOverlay from './MaskPromptOverlay.svelte';
 	import SubjectPicker from './SubjectPicker.svelte';
 	import ToolRail from './ToolRail.svelte';
@@ -176,6 +178,56 @@
 	const maskBrushSize = $derived(Math.min(1, refineBrushRadius * 2));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
+	);
+	const radialComponent = $derived(
+		selectedMask?.components.find(
+			(component): component is Extract<MaskComponent, { type: 'radial' }> =>
+				component.type === 'radial'
+		) ?? null
+	);
+	const linearGuide = $derived(
+		activeTool === 'mask-linear' && selectedMask?.kind === 'linear'
+			? gradientDrag
+				? { start: gradientDrag.start, end: gradientDrag.current }
+				: (selectedMask.components.find(
+						(component): component is Extract<MaskComponent, { type: 'linear' }> =>
+							component.type === 'linear'
+					) ?? null)
+			: null
+	);
+	const radialGuide = $derived(
+		activeTool === 'mask-radial' && selectedMask?.kind === 'radial'
+			? gradientDrag
+				? {
+						center: gradientDrag.start,
+						radius: Math.min(
+							1,
+							Math.max(0.002, normalizedDistance(gradientDrag.start, gradientDrag.current))
+						),
+						feather: radialComponent?.feather ?? 0.5
+					}
+				: radialComponent
+			: null
+	);
+	const livePaint: LivePaint | null = $derived(
+		gradientDrag && activeTool === 'mask-linear'
+			? { kind: 'linear', start: gradientDrag.start, end: gradientDrag.current }
+			: gradientDrag && activeTool === 'mask-radial' && radialGuide
+				? {
+						kind: 'radial',
+						center: radialGuide.center,
+						radius: radialGuide.radius,
+						feather: radialGuide.feather
+					}
+				: maskStroke && activeTool === 'mask' && maskBrushOperation === 'add'
+					? {
+							kind: 'brush',
+							points: maskStroke.points,
+							size: maskBrushSize,
+							feather: MASK_BRUSH_FEATHER,
+							flow: MASK_BRUSH_FLOW
+						}
+					: null
 	);
 	const subjectChoices = $derived(
 		workspace.subjectChoices?.photoId === workspace.editingPhoto?.id
@@ -1196,10 +1248,18 @@
 											>
 										</div>
 									{/if}
-									{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id}
+									{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id && !(gradientDrag && (activeTool === 'mask-linear' || activeTool === 'mask-radial'))}
 										{#key maskPreviewMode}
 											<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
 										{/key}
+									{/if}
+									{#if livePaint}
+										<MaskPaintPreview
+											paint={livePaint}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											mode={maskPreviewMode === 'matte' ? 'matte' : 'overlay'}
+										/>
 									{/if}
 									{#if objectStroke}
 										<MaskPromptOverlay
@@ -1220,37 +1280,24 @@
 											viewportScale={viewportTransform.scale}
 										/>
 									{/if}
-									{#if maskStroke}
+									{#if maskStroke && maskBrushOperation === 'subtract'}
 										<MaskPromptOverlay
 											points={maskStroke.points}
-											label={maskBrushOperation === 'subtract' ? 'background' : 'refine'}
+											label="background"
 											brushRadius={maskBrushSize / 2}
 											imageWidth={imageSize.width}
 											imageHeight={imageSize.height}
 											viewportScale={viewportTransform.scale}
 										/>
 									{/if}
-									{#if gradientDrag}
-										{#if activeTool === 'mask-linear'}
-											<MaskPromptOverlay
-												points={[gradientDrag.start, gradientDrag.current]}
-												label="refine"
-												imageWidth={imageSize.width}
-												imageHeight={imageSize.height}
-												viewportScale={viewportTransform.scale}
-											/>
-										{:else}
-											<MaskBrushCursor
-												point={gradientDrag.start}
-												radius={Math.max(
-													0.002,
-													normalizedDistance(gradientDrag.start, gradientDrag.current)
-												)}
-												imageWidth={imageSize.width}
-												imageHeight={imageSize.height}
-												viewportScale={viewportTransform.scale}
-											/>
-										{/if}
+									{#if linearGuide || radialGuide}
+										<MaskGradientGuides
+											linear={linearGuide}
+											radial={radialGuide}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											viewportScale={viewportTransform.scale}
+										/>
 									{/if}
 									{#if maskBrushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !smartMaskWorking))}
 										<MaskBrushCursor
