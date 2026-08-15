@@ -1,0 +1,94 @@
+<script lang="ts">
+	import { Clock3, Flag, Folder, FolderPlus, Image } from '@lucide/svelte';
+	import Tooltip from './ui/Tooltip.svelte';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
+
+	interface Props {
+		workspace: WorkspaceState;
+		source: string;
+		recentCount: number;
+	}
+
+	let { workspace, source = $bindable(), recentCount }: Props = $props();
+</script>
+
+<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
+	<div class="text-muted px-3 pb-2 text-[11px] tracking-[0.04em]">library</div>
+	<nav class="space-y-0.5 px-2" aria-label="Library">
+		<button
+			type="button"
+			class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
+			'all'
+				? 'bg-surface text-text'
+				: 'text-muted hover:bg-surface/60 hover:text-text'}"
+			onclick={() => (source = 'all')}
+		>
+			<Image size={13} strokeWidth={1.5} />
+			<span class="flex-1">all photos</span>
+			<span class="font-mono text-[11px]">{workspace.photos.length}</span>
+		</button>
+		<button
+			type="button"
+			class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
+			'recent'
+				? 'bg-surface text-text'
+				: 'text-muted hover:bg-surface/60 hover:text-text'}"
+			onclick={() => (source = 'recent')}
+		>
+			<Clock3 size={13} strokeWidth={1.5} />
+			<span class="flex-1">recent</span>
+			<span class="font-mono text-[11px]">{recentCount}</span>
+		</button>
+		<button
+			type="button"
+			class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
+			'favorites'
+				? 'bg-surface text-text'
+				: 'text-muted hover:bg-surface/60 hover:text-text'}"
+			onclick={() => (source = 'favorites')}
+		>
+			<Flag size={13} strokeWidth={1.5} />
+			<span class="flex-1">favorites</span>
+			<span class="font-mono text-[11px]">
+				{workspace.photos.filter((photo) => photo.flagged).length}
+			</span>
+		</button>
+	</nav>
+
+	<div class="bg-subtle mx-3 my-3 h-px"></div>
+	<div class="flex items-center justify-between px-3 pb-2">
+		<span class="text-muted text-[11px] tracking-[0.04em]">collections</span>
+		<Tooltip text="Create collection">
+			{#snippet children(props)}
+				<button
+					{...props}
+					type="button"
+					aria-label="Create collection"
+					class="text-muted hover:text-text cursor-pointer rounded transition-colors"
+					onclick={workspace.requestCollectionCreation}
+				>
+					<FolderPlus size={13} strokeWidth={1.5} />
+				</button>
+			{/snippet}
+		</Tooltip>
+	</div>
+	<div class="space-y-0.5 px-2">
+		{#each workspace.collections as collection (collection.id)}
+			<button
+				type="button"
+				class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {source ===
+				`collection:${collection.id}`
+					? 'bg-surface text-text'
+					: 'text-muted hover:bg-surface/60 hover:text-text'}"
+				onclick={() => (source = `collection:${collection.id}`)}
+			>
+				<Folder size={13} strokeWidth={1.5} />
+				<span class="min-w-0 flex-1 truncate">{collection.name}</span>
+				<span class="font-mono text-[11px]">{collection.photoIds.length}</span>
+			</button>
+		{/each}
+		{#if workspace.collections.length === 0}
+			<p class="text-muted/65 px-2 py-2 text-[11px] leading-relaxed">no collections yet.</p>
+		{/if}
+	</div>
+</aside>
