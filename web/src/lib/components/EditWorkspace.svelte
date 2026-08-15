@@ -139,6 +139,13 @@
 		points: NormalizedPoint[];
 		radius: number;
 	} | null>(null);
+	let maskStroke = $state<{ pointerId: number; points: NormalizedPoint[] } | null>(null);
+	let maskBrushOperation = $state<'add' | 'subtract'>('add');
+	let gradientDrag = $state<{
+		pointerId: number;
+		start: NormalizedPoint;
+		current: NormalizedPoint;
+	} | null>(null);
 	let maskBrushPoint = $state<NormalizedPoint | null>(null);
 	let hoveredSubjectBox = $state<NormalizedRegion | null>(null);
 	let refineBrushSize = $state(42);
@@ -160,6 +167,9 @@
 	const refineBrushRadius = $derived(
 		refineBrushSize / 2 / viewportTransform.scale / Math.max(imageSize.width, imageSize.height)
 	);
+	const MASK_BRUSH_FEATHER = 0.45;
+	const MASK_BRUSH_FLOW = 1;
+	const maskBrushSize = $derived(Math.min(1, refineBrushRadius * 2));
 	const selectedMask = $derived(
 		workspace.masks.find((mask) => mask.id === workspace.selectedMaskId) ?? null
 	);
@@ -414,6 +424,28 @@
 			return;
 		}
 
+		if (activeTool === 'mask' && event.button === 0 && selectedMask) {
+			const imagePoint = normalizedImagePoint(point);
+			if (!imagePoint) return;
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			maskStroke = { pointerId: event.pointerId, points: [imagePoint] };
+			return;
+		}
+
+		if (
+			(activeTool === 'mask-linear' || activeTool === 'mask-radial') &&
+			event.button === 0 &&
+			selectedMask?.kind === (activeTool === 'mask-linear' ? 'linear' : 'radial')
+		) {
+			const imagePoint = normalizedImagePoint(point);
+			if (!imagePoint) return;
+			event.preventDefault();
+			viewportElement.setPointerCapture(event.pointerId);
+			gradientDrag = { pointerId: event.pointerId, start: imagePoint, current: imagePoint };
+			return;
+		}
+
 		if (activeTool === 'hand' || spaceHeld || event.button === 1) {
 			event.preventDefault();
 			viewportElement.setPointerCapture(event.pointerId);
@@ -424,7 +456,7 @@
 	function handlePointerMove(event: PointerEvent) {
 		const point = viewportPoint(event);
 		maskBrushPoint =
-			activeTool === 'mask-refine' && event.pointerType !== 'touch'
+			(activeTool === 'mask-refine' || activeTool === 'mask') && event.pointerType !== 'touch'
 				? normalizedImagePoint(point)
 				: null;
 		if (objectStroke?.pointerId === event.pointerId) {
@@ -454,6 +486,24 @@
 					points: [...edgeRefinementStroke.points, imagePoint]
 				};
 			}
+			return;
+		}
+		if (maskStroke?.pointerId === event.pointerId) {
+			event.preventDefault();
+			const imagePoint = normalizedImagePoint(point);
+			const previous = maskStroke.points.at(-1);
+			if (
+				imagePoint &&
+				(!previous || Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) > 0.003)
+			) {
+				maskStroke = { ...maskStroke, points: [...maskStroke.points, imagePoint] };
+			}
+			return;
+		}
+		if (gradientDrag?.pointerId === event.pointerId) {
+			event.preventDefault();
+			const imagePoint = normalizedImagePoint(point);
+			if (imagePoint) gradientDrag = { ...gradientDrag, current: imagePoint };
 			return;
 		}
 		if (pointers.has(event.pointerId)) pointers.set(event.pointerId, point);
@@ -504,6 +554,40 @@
 			}
 			return;
 		}
+		if (maskStroke?.pointerId === event.pointerId) {
+			const completed = maskStroke;
+			maskStroke = null;
+			if (event.type === 'pointerup') {
+				void workspace.paintBrushMask(
+					{
+						points: completed.points,
+						size: maskBrushSize,
+						feather: MASK_BRUSH_FEATHER,
+						flow: MASK_BRUSH_FLOW
+					},
+					maskBrushOperation
+				);
+			}
+			return;
+		}
+		if (gradientDrag?.pointerId === event.pointerId) {
+			const completed = gradientDrag;
+			gradientDrag = null;
+			if (
+				event.type === 'pointerup' &&
+				normalizedDistance(completed.start, completed.current) > 0.002
+			) {
+				if (activeTool === 'mask-linear') {
+					void workspace.placeLinearMask(completed.start, completed.current);
+				} else {
+					void workspace.placeRadialMask(
+						completed.start,
+						normalizedDistance(completed.start, completed.current)
+					);
+				}
+			}
+			return;
+		}
 		const wasPinching = pinch !== null;
 		pointers.delete(event.pointerId);
 		if (drag?.pointerId === event.pointerId) drag = null;
@@ -521,7 +605,7 @@
 			!active ||
 			activeTool === 'zoom' ||
 			activeTool === 'object-select' ||
-			activeTool === 'mask-refine'
+			activeTool.startsWith('mask')
 		) {
 			return;
 		}
@@ -554,6 +638,13 @@
 
 	function distance(first: Point, second: Point) {
 		return Math.hypot(second.x - first.x, second.y - first.y);
+	}
+
+	function normalizedDistance(from: NormalizedPoint, to: NormalizedPoint) {
+		return (
+			Math.hypot((to.x - from.x) * imageSize.width, (to.y - from.y) * imageSize.height) /
+			Math.max(imageSize.width, imageSize.height)
+		);
 	}
 
 	onMount(() =>
@@ -717,9 +808,15 @@
 
 	function addMask(kind: MaskKind) {
 		workspace.createMask(kind);
-		activeTool = 'mask';
-		activeToolLabel = 'mask brush';
-		inspectorTab = 'mask';
+		if (kind === 'linear') chooseTool('mask-linear', 'linear gradient');
+		else if (kind === 'radial') chooseTool('mask-radial', 'radial gradient');
+		else beginMaskBrush('add');
+		maskPreviewMode = 'overlay';
+	}
+
+	function beginMaskBrush(operation: 'add' | 'subtract') {
+		maskBrushOperation = operation;
+		chooseTool('mask', 'mask brush');
 		maskPreviewMode = 'overlay';
 	}
 
@@ -942,14 +1039,21 @@
 						class="border-subtle bg-surface placeholder:text-muted/60 focus:border-accent h-6 min-w-48 rounded border px-2 focus:outline-none"
 					/>
 					<button class="bg-text text-bg h-6 shrink-0 cursor-pointer rounded px-2">generate</button>
+				{:else if activeTool === 'mask-linear' || activeTool === 'mask-radial'}
+					<span class="shrink-0">
+						drag on the photo to place the {activeTool === 'mask-linear' ? 'linear' : 'radial'} gradient
+					</span>
 				{:else if activeTool.startsWith('mask')}
 					<span class="shrink-0"
-						>size <span class="text-text font-mono"
-							>{activeTool === 'mask-refine' ? refineBrushSize : 42} px</span
-						></span
+						>size <span class="text-text font-mono">{refineBrushSize} px</span></span
 					>
 					<span class="shrink-0">feather <span class="text-text font-mono">45%</span></span>
 					<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
+					{#if activeTool === 'mask'}
+						<span class="shrink-0"
+							>mode <span class="text-text font-mono">{maskBrushOperation}</span></span
+						>
+					{/if}
 				{:else}
 					<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
 						<input type="checkbox" checked class="accent-accent size-3" /> auto-select
@@ -973,9 +1077,9 @@
 								? 'cursor-grab'
 								: activeTool === 'zoom'
 									? 'cursor-zoom-in'
-									: activeTool === 'mask-refine' && maskBrushPoint
+									: (activeTool === 'mask-refine' || activeTool === 'mask') && maskBrushPoint
 										? 'cursor-none'
-										: activeTool === 'object-select' || activeTool === 'mask-refine'
+										: activeTool === 'object-select' || activeTool.startsWith('mask')
 											? 'cursor-crosshair'
 											: 'cursor-default'}"
 						onwheel={handleWheel}
@@ -1104,10 +1208,44 @@
 											viewportScale={viewportTransform.scale}
 										/>
 									{/if}
-									{#if activeTool === 'mask-refine' && maskBrushPoint && !smartMaskWorking}
+									{#if maskStroke}
+										<MaskPromptOverlay
+											points={maskStroke.points}
+											label={maskBrushOperation === 'subtract' ? 'background' : 'refine'}
+											brushRadius={maskBrushSize / 2}
+											imageWidth={imageSize.width}
+											imageHeight={imageSize.height}
+											viewportScale={viewportTransform.scale}
+										/>
+									{/if}
+									{#if gradientDrag}
+										{#if activeTool === 'mask-linear'}
+											<MaskPromptOverlay
+												points={[gradientDrag.start, gradientDrag.current]}
+												label="refine"
+												imageWidth={imageSize.width}
+												imageHeight={imageSize.height}
+												viewportScale={viewportTransform.scale}
+											/>
+										{:else}
+											<MaskBrushCursor
+												point={gradientDrag.start}
+												radius={Math.max(
+													0.002,
+													normalizedDistance(gradientDrag.start, gradientDrag.current)
+												)}
+												imageWidth={imageSize.width}
+												imageHeight={imageSize.height}
+												viewportScale={viewportTransform.scale}
+											/>
+										{/if}
+									{/if}
+									{#if maskBrushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !smartMaskWorking))}
 										<MaskBrushCursor
 											point={maskBrushPoint}
-											radius={edgeRefinementStroke?.radius ?? refineBrushRadius}
+											radius={activeTool === 'mask'
+												? maskBrushSize / 2
+												: (edgeRefinementStroke?.radius ?? refineBrushRadius)}
 											imageWidth={imageSize.width}
 											imageHeight={imageSize.height}
 											viewportScale={viewportTransform.scale}
@@ -1596,6 +1734,43 @@
 									</button>
 								</div>
 							{/if}
+							<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">brush</p>
+							<div class="grid grid-cols-2 gap-1.5">
+								<button
+									type="button"
+									class="border-subtle text-muted hover:border-muted hover:text-text flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border text-[11px] lowercase transition-colors {activeTool ===
+										'mask' && maskBrushOperation === 'add'
+										? 'border-accent bg-surface text-text'
+										: ''}"
+									onclick={() => beginMaskBrush('add')}
+								>
+									<Plus size={12} /> add
+								</button>
+								<button
+									type="button"
+									class="border-subtle text-muted hover:border-muted hover:text-text flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border text-[11px] lowercase transition-colors {activeTool ===
+										'mask' && maskBrushOperation === 'subtract'
+										? 'border-accent bg-surface text-text'
+										: ''}"
+									onclick={() => beginMaskBrush('subtract')}
+								>
+									<Minus size={12} /> subtract
+								</button>
+							</div>
+							{#if activeTool === 'mask'}
+								<div class="motion-enter pt-1">
+									<AdjustmentSlider
+										label="Brush"
+										bind:value={refineBrushSize}
+										min={8}
+										max={200}
+										defaultValue={42}
+										suffix=" px"
+										signed={false}
+									/>
+								</div>
+							{/if}
+							<div class="bg-subtle my-2 h-px"></div>
 							<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">edge</p>
 							<AdjustmentSlider
 								label="Definition"
