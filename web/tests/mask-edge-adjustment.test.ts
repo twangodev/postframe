@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { adjustMaskEdges } from '../src/lib/mask-edge-adjustment.ts';
-import { defaultMaskEdgeSettings } from '../src/lib/mask-edge-settings.ts';
+import { defaultMaskEdgeSettings, isNeutralMaskEdge } from '../src/lib/mask-edge-settings.ts';
 
 const raster = (alpha: number[], width = alpha.length) => ({
 	width,
@@ -15,6 +15,13 @@ test('preserves mask values with neutral edge settings', () => {
 	const adjusted = adjustMaskEdges(source, defaultMaskEdgeSettings());
 	assert.deepEqual(adjusted, source);
 	assert.notEqual(adjusted.alpha, source.alpha);
+});
+
+test('treats edge settings as neutral only when every control is zero', () => {
+	assert.equal(isNeutralMaskEdge(defaultMaskEdgeSettings()), true);
+	assert.equal(isNeutralMaskEdge({ contrast: 1, feather: 0, shift: 0 }), false);
+	assert.equal(isNeutralMaskEdge({ contrast: 0, feather: 1, shift: 0 }), false);
+	assert.equal(isNeutralMaskEdge({ contrast: 0, feather: 0, shift: -1 }), false);
 });
 
 test('expands and contracts a mask by source pixels', () => {

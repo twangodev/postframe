@@ -12,3 +12,7 @@ export type MaskEdgeControlName = keyof MaskEdgeSettings;
 export function defaultMaskEdgeSettings(): MaskEdgeSettings {
 	return { contrast: 0, feather: 0, shift: 0 };
 }
+
+export function isNeutralMaskEdge({ contrast, feather, shift }: MaskEdgeSettings): boolean {
+	return contrast === 0 && feather === 0 && shift === 0;
+}
