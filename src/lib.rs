@@ -17,6 +17,7 @@ pub mod fit;
 pub mod grade;
 pub mod hdr;
 pub mod light;
+mod parallel;
 pub mod preview;
 pub mod scope;
 #[cfg(feature = "wasm")]

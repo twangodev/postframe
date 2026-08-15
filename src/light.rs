@@ -1,8 +1,5 @@
-use crate::{Error, Result};
+use crate::{Error, Result, parallel};
 use std::sync::OnceLock;
-
-#[cfg(feature = "wasm-threads")]
-use rayon::prelude::*;
 
 const CURVE_SAMPLES: usize = 4096;
 pub const MIDDLE_GRAY: f32 = 0.18;
@@ -100,42 +97,24 @@ impl LightTransform {
         if !rgb8.len().is_multiple_of(3) {
             return Err(Error::Unsupported("RGB buffer size mismatch"));
         }
-        #[cfg(feature = "wasm-threads")]
-        return Ok(rgb8
-            .par_chunks_exact(3)
-            .flat_map_iter(|pixel| self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]))
-            .collect());
-        #[cfg(not(feature = "wasm-threads"))]
-        let mut adjusted = Vec::with_capacity(rgb8.len());
-        #[cfg(not(feature = "wasm-threads"))]
-        for pixel in rgb8.chunks_exact(3) {
-            adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
-        }
-        #[cfg(not(feature = "wasm-threads"))]
-        Ok(adjusted)
+        let (pixels, _) = rgb8.as_chunks::<3>();
+        Ok(parallel::map_pixels(pixels, |&pixel| {
+            self.apply_display_pixel(pixel)
+        }))
     }
 
     pub fn apply_display_rgba8(&self, rgba8: &[u8]) -> Result<Vec<u8>> {
         if !rgba8.len().is_multiple_of(4) {
             return Err(Error::Unsupported("RGBA buffer size mismatch"));
         }
-        #[cfg(feature = "wasm-threads")]
-        return Ok(rgba8
-            .par_chunks_exact(4)
-            .flat_map_iter(|pixel| {
-                let adjusted = self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]);
-                [adjusted[0], adjusted[1], adjusted[2], pixel[3]]
-            })
-            .collect());
-        #[cfg(not(feature = "wasm-threads"))]
-        let mut adjusted = Vec::with_capacity(rgba8.len());
-        #[cfg(not(feature = "wasm-threads"))]
-        for pixel in rgba8.chunks_exact(4) {
-            adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
-            adjusted.push(pixel[3]);
-        }
-        #[cfg(not(feature = "wasm-threads"))]
-        Ok(adjusted)
+        let (pixels, _) = rgba8.as_chunks::<4>();
+        Ok(parallel::map_pixels(
+            pixels,
+            |&[red, green, blue, alpha]| {
+                let adjusted = self.apply_display_pixel([red, green, blue]);
+                [adjusted[0], adjusted[1], adjusted[2], alpha]
+            },
+        ))
     }
 
     pub(crate) fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
