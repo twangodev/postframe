@@ -216,6 +216,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 
 [[package]]
+name = "bytes"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
 name = "cc"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -546,6 +552,17 @@ dependencies = [
  "png",
  "zune-core",
  "zune-jpeg",
+]
+
+[[package]]
+name = "img-parts"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19734e3c43b2a850f5889c077056e47c874095f2d87e853c7c41214ae67375f0"
+dependencies = [
+ "bytes",
+ "crc32fast",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -1077,6 +1094,7 @@ dependencies = [
  "clap",
  "demosaic",
  "image",
+ "img-parts",
  "jpeg-encoder",
  "lru",
  "mtb-align",
