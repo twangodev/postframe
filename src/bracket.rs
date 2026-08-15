@@ -10,6 +10,7 @@ use crate::decode::{linear, linear::Linear, sooc, sooc::Sooc};
 use crate::error::{Error, Result};
 use crate::fit::pair::{Pairing, pair};
 use crate::fit::transfer::{Report, Transfer, measure as fit_transfer};
+use crate::parallel;
 
 pub struct FrameData {
     pub raw: Arc<Vec<u8>>,
@@ -185,7 +186,7 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
     for frame in &mut frames {
         let planes = std::iter::once(&mut frame.camera).chain(frame.full.as_mut());
         for plane in planes {
-            for pixel in &mut plane.rgb {
+            parallel::for_each_pixel(&mut plane.rgb, |pixel| {
                 *pixel = color::apply(
                     &matrix,
                     [
@@ -194,7 +195,7 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
                         pixel[2] * balance[2],
                     ],
                 );
-            }
+            });
         }
     }
 
@@ -209,7 +210,9 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
 
     let (shifts, radiance) = merge_radiance(&mut frames, &exposures, reference)?;
     let radiance = upright(radiance, frames[reference].orientation);
-    let radiance_max = radiance.rgb.iter().flatten().copied().fold(0.0, f32::max);
+    let radiance_max = parallel::max_of(&radiance.rgb, |pixel| {
+        pixel.iter().copied().fold(0.0, f32::max)
+    });
 
     Ok(Merged {
         radiance,
@@ -363,11 +366,11 @@ fn merge_radiance(
 
     let t_ref = exposures[reference];
     let shortest = 0;
+    let frames = &*frames;
     let mut rgb = vec![[0.0f32; 3]; crop.width * crop.height];
     let mut clipped = vec![false; crop.width * crop.height];
-    for y in 0..crop.height {
-        for x in 0..crop.width {
-            let out = y * crop.width + x;
+    parallel::fill_zipped_rows(&mut rgb, &mut clipped, crop.width, |y, rgb, clipped| {
+        for (x, (out_pixel, out_clipped)) in rgb.iter_mut().zip(clipped).enumerate() {
             let mut sum = [0.0f64; 3];
             let mut weight = 0.0f64;
             for (i, frame) in frames.iter().enumerate() {
@@ -384,7 +387,7 @@ fn merge_radiance(
                 }
                 weight += w;
             }
-            rgb[out] = if weight > 0.0 {
+            *out_pixel = if weight > 0.0 {
                 [0, 1, 2].map(|c| (sum[c] / weight) as f32)
             } else {
                 // Clipped in every frame: the per-channel ratios are meaningless
@@ -393,14 +396,14 @@ fn merge_radiance(
                 let sx = (crop.x + x) as i64 - shifts[shortest].x as i64;
                 let sy = (crop.y + y) as i64 - shifts[shortest].y as i64;
                 let src = sy as usize * width + sx as usize;
-                clipped[out] = true;
+                *out_clipped = true;
                 let brightest = frames[shortest].image().rgb[src]
                     .iter()
                     .fold(0.0f32, |m, &v| m.max(v));
                 [brightest * t_ref / exposures[shortest]; 3]
             };
         }
-    }
+    });
 
     Ok((
         shifts,
