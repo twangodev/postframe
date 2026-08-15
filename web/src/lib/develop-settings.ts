@@ -11,12 +11,20 @@ export const lightSettingsSchema = z.object({
 	blacks: z.number().finite().min(-100).max(100)
 });
 
+export const colorSettingsSchema = z.object({
+	temperature: z.number().finite().min(-100).max(100),
+	tint: z.number().finite().min(-100).max(100),
+	vibrance: z.number().finite().min(-100).max(100),
+	saturation: z.number().finite().min(-100).max(100)
+});
+
 export const developSettingsSchema = lightSettingsSchema.extend({
 	version: z.literal(DEVELOP_SETTINGS_VERSION)
 });
 
 export type DevelopSettings = z.infer<typeof developSettingsSchema>;
 export type LightSettings = z.infer<typeof lightSettingsSchema>;
+export type ColorSettings = z.infer<typeof colorSettingsSchema>;
 
 export const LIGHT_CONTROL_NAMES = [
 	'exposure',
@@ -29,6 +37,15 @@ export const LIGHT_CONTROL_NAMES = [
 
 export type LightControlName = (typeof LIGHT_CONTROL_NAMES)[number];
 
+export const COLOR_CONTROL_NAMES = [
+	'temperature',
+	'tint',
+	'vibrance',
+	'saturation'
+] as const satisfies readonly (keyof ColorSettings)[];
+
+export type ColorControlName = (typeof COLOR_CONTROL_NAMES)[number];
+
 export function defaultLightSettings(): LightSettings {
 	return {
 		exposure: 0,
@@ -38,6 +55,10 @@ export function defaultLightSettings(): LightSettings {
 		whites: 0,
 		blacks: 0
 	};
+}
+
+export function defaultColorSettings(): ColorSettings {
+	return { temperature: 0, tint: 0, vibrance: 0, saturation: 0 };
 }
 
 export function defaultDevelopSettings(): DevelopSettings {

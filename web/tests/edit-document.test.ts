@@ -10,7 +10,7 @@ import {
 	editMaskSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
-import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
+import { defaultColorSettings, defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
 test('creates an independent versioned non-destructive document', () => {
 	const first = defaultEditDocument('photo-one');
@@ -106,6 +106,29 @@ test('carries version-five documents forward unchanged', () => {
 	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
 	assert.deepEqual(migrated.masks, [mask]);
 	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
+});
+
+test('migrates version-six masks to neutral color adjustments', () => {
+	const mask = createEditMask('mask-one', 'radial');
+	const previous = {
+		...defaultEditDocument('photo-one'),
+		version: 6,
+		masks: [{ ...mask, adjustments: { light: { ...mask.adjustments.light, exposure: 1.5 } } }]
+	};
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
+	assert.equal(migrated.masks[0]?.adjustments.light.exposure, 1.5);
+	assert.deepEqual(migrated.masks[0]?.adjustments.color, defaultColorSettings());
+	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
+});
+
+test('rejects current documents whose masks lack color adjustments', () => {
+	const mask = createEditMask('mask-one', 'radial');
+	const document = {
+		...defaultEditDocument('photo-one'),
+		masks: [{ ...mask, adjustments: { light: mask.adjustments.light } }]
+	};
+	assert.equal(editDocumentSchema.safeParse(document).success, false);
 });
 
 test('accepts gradient components carrying their geometry', () => {
