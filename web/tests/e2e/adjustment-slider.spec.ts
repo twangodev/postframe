@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { EDIT_DOCUMENT_VERSION } from '../../src/lib/edit-document.ts';
+
 function storedEdit(page: Page) {
 	return page.evaluate(async () => {
 		const root = await navigator.storage.getDirectory();
@@ -93,7 +95,7 @@ test('renders and persists every light control for a display photo', async ({ pa
 	await expect
 		.poll(() => storedEdit(page))
 		.toMatchObject({
-			version: 3,
+			version: EDIT_DOCUMENT_VERSION,
 			adjustments: {
 				light: {
 					exposure: 0.5,
