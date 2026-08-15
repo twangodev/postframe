@@ -2,6 +2,8 @@ export const MASK_PREVIEW_MODES = ['overlay', 'matte', 'edge'] as const;
 
 export type MaskPreviewMode = (typeof MASK_PREVIEW_MODES)[number];
 
+export const MASK_OVERLAY_TINT_ALPHA = 0.46;
+
 export function maskEdgePreview(alpha: Uint8Array, width: number, height: number) {
 	if (alpha.length !== width * height) throw new Error('Mask preview dimensions do not match');
 	const edge = new Uint8Array(alpha.length);

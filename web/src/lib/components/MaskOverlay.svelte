@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { SelectedMaskRaster } from '$lib/workspace.svelte';
-	import { maskEdgePreview, type MaskPreviewMode } from '$lib/mask-preview';
+	import {
+		MASK_OVERLAY_TINT_ALPHA,
+		maskEdgePreview,
+		type MaskPreviewMode
+	} from '$lib/mask-preview';
 
 	interface Props {
 		raster: SelectedMaskRaster;
@@ -35,7 +39,7 @@
 			pixels[offset] = preview === 'matte' ? value : 255;
 			pixels[offset + 1] = preview === 'matte' ? value : 255;
 			pixels[offset + 2] = preview === 'matte' ? value : 255;
-			pixels[offset + 3] = preview === 'matte' ? 255 : Math.round(value * 0.46);
+			pixels[offset + 3] = preview === 'matte' ? 255 : Math.round(value * MASK_OVERLAY_TINT_ALPHA);
 		}
 		context.putImageData(new ImageData(pixels, source.width, source.height), 0, 0);
 		if (preview === 'matte') return;
