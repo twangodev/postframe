@@ -80,10 +80,10 @@ export class SmartMaskClient {
 		return response.subjects;
 	}
 
-	async selectInstance(photoId: string, selectionId: string, box: NormalizedRegion) {
+	async selectInstance(photoId: string, selectionId: string, box: NormalizedRegion, candidate = 0) {
 		const parsed = normalizedRegionSchema.parse(box);
 		const response = await this.send(
-			(id) => ({ id, type: 'instance', photoId, selectionId, box: parsed }),
+			(id) => ({ id, type: 'instance', photoId, selectionId, box: parsed, candidate }),
 			'mask'
 		);
 		return rasterFromResponse(response);

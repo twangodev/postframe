@@ -149,6 +149,7 @@ test('accepts detected-subject components with their originating box', () => {
 		label: 'person',
 		box: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
 		modelVersion: 'pack-version',
+		alternatives: { index: 1, count: 3 },
 		raster: null
 	});
 	const document = { ...defaultEditDocument('photo-one'), masks: [mask] };
@@ -157,6 +158,13 @@ test('accepts detected-subject components with their originating box', () => {
 		editMaskSchema.safeParse({
 			...mask,
 			components: [{ ...mask.components[0], box: { x: 0.75, y: 0, width: 0.5, height: 0.5 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...mask,
+			components: [{ ...mask.components[0], alternatives: { index: 3, count: 3 } }]
 		}).success,
 		false
 	);

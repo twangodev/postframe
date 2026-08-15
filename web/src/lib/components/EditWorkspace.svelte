@@ -61,7 +61,7 @@
 		type Size,
 		type ViewportTransform
 	} from '$lib/photo-viewport';
-	import type { NormalizedPoint, NormalizedRegion } from '$lib/edit-document';
+	import type { MaskComponent, NormalizedPoint, NormalizedRegion } from '$lib/edit-document';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 
 	interface Props {
@@ -178,8 +178,16 @@
 			? workspace.subjectChoices
 			: null
 	);
-	const selectedObjectComponent = $derived(
-		selectedMask?.components.find((component) => component.type === 'ai-object') ?? null
+	const candidateComponent = $derived(
+		selectedMask?.components.find(
+			(component): component is Extract<MaskComponent, { type: 'ai-object' | 'ai-instance' }> =>
+				component.type === 'ai-object' || component.type === 'ai-instance'
+		) ?? null
+	);
+	const cycleMaskCandidate = $derived(
+		candidateComponent?.type === 'ai-instance'
+			? workspace.cycleInstanceMaskCandidate
+			: workspace.cycleObjectMaskCandidate
 	);
 	const canRefineSelectedMask = $derived(
 		selectedMask?.components.filter(
@@ -1703,32 +1711,32 @@
 
 					{#if selectedMask}
 						<Panel title="Mask adjustments" meta={selectedMask.name}>
-							{#if selectedObjectComponent?.alternatives && selectedObjectComponent.alternatives.count > 1}
+							{#if candidateComponent?.alternatives && candidateComponent.alternatives.count > 1}
 								<div
 									class="border-subtle mb-2 flex h-8 items-center justify-between rounded border px-1"
 								>
 									<button
 										type="button"
-										aria-label="Previous object candidate"
+										aria-label="Previous mask candidate"
 										disabled={smartMaskWorking}
 										class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
-										onclick={() => workspace.cycleObjectMaskCandidate(-1)}
+										onclick={() => cycleMaskCandidate(-1)}
 									>
 										<ChevronLeft size={12} />
 									</button>
 									<span class="text-muted text-[10px] lowercase">
 										candidate
 										<span class="text-text font-mono"
-											>{selectedObjectComponent.alternatives.index + 1}/{selectedObjectComponent
-												.alternatives.count}</span
+											>{candidateComponent.alternatives.index + 1}/{candidateComponent.alternatives
+												.count}</span
 										>
 									</span>
 									<button
 										type="button"
-										aria-label="Next object candidate"
+										aria-label="Next mask candidate"
 										disabled={smartMaskWorking}
 										class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
-										onclick={() => workspace.cycleObjectMaskCandidate(1)}
+										onclick={() => cycleMaskCandidate(1)}
 									>
 										<ChevronRight size={12} />
 									</button>

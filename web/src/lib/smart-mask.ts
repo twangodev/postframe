@@ -89,7 +89,14 @@ export type SmartMaskRequest =
 	  }
 	| { id: number; type: 'subject'; photoId: string }
 	| { id: number; type: 'detect-subjects'; photoId: string }
-	| { id: number; type: 'instance'; photoId: string; selectionId: string; box: NormalizedRegion }
+	| {
+			id: number;
+			type: 'instance';
+			photoId: string;
+			selectionId: string;
+			box: NormalizedRegion;
+			candidate: number;
+	  }
 	| {
 			id: number;
 			type: 'refine-edge';

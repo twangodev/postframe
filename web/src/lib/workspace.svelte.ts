@@ -1502,12 +1502,53 @@ export class WorkspaceState {
 				label: subject.label,
 				box: subject.box,
 				modelVersion: this.smartMaskClient!.modelVersion,
+				alternatives: raster.alternatives,
 				raster: await this.persistMaskRaster(photo.id, componentId, raster)
 			});
 			this.dispatchEditorCommand({ type: 'mask.create', mask });
 			if (this.subjectChoices === choices) {
 				this.subjectChoices = { ...choices, created: [...choices.created, index] };
 			}
+			this.selectMask(mask.id);
+			this.finishSmartMask();
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	};
+
+	cycleInstanceMaskCandidate = async (direction: -1 | 1) => {
+		const photo = this.smartMaskPhoto();
+		if (!photo || !this.selectedMaskId) return;
+		const mask = this.masks.find(({ id }) => id === this.selectedMaskId);
+		const component = mask?.components.find(
+			(candidate): candidate is Extract<MaskComponent, { type: 'ai-instance' }> =>
+				candidate.type === 'ai-instance'
+		);
+		if (!mask || !component?.alternatives || component.alternatives.count < 2) return;
+
+		this.beginSmartMask(photo.id);
+		const revision = ++this.smartMaskRevision;
+		try {
+			await this.ensureSmartMaskPrepared(photo.id);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			const candidate = component.alternatives.index + direction;
+			const raster = await this.smartMaskClient!.selectInstance(
+				photo.id,
+				component.id,
+				component.box,
+				candidate
+			);
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			this.dispatchEditorCommand({
+				type: 'mask.component.set',
+				maskId: mask.id,
+				component: {
+					...component,
+					modelVersion: this.smartMaskClient!.modelVersion,
+					alternatives: raster.alternatives,
+					raster: await this.persistMaskRaster(photo.id, component.id, raster)
+				}
+			});
 			this.selectMask(mask.id);
 			this.finishSmartMask();
 		} catch (error) {

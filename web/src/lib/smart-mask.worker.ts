@@ -213,12 +213,16 @@ async function selectInstanceWithActiveDevice(
 	const viable = selection.candidates.filter((candidate) =>
 		usableSam2Mask(candidate, selection.prompts)
 	);
-	const best = viable[0] ?? selection.candidates[0];
-	if (!best) throw new Error('The object model returned an unusable mask');
-	const coarseAlpha = await objectModel!.render(best, active.embedding);
+	const candidates = viable.length > 0 ? viable : selection.candidates.slice(0, 1);
+	if (candidates.length === 0) throw new Error('The object model returned an unusable mask');
+	const index = positiveModulo(request.candidate, candidates.length);
+	const coarseAlpha = await objectModel!.render(candidates[index]!, active.embedding);
 	postProgress(request.id, 'refining', null, 'refining subject edges');
 	const alpha = refineObjectMask(active.image, coarseAlpha);
-	postMask(request.id, active.image.width, active.image.height, alpha);
+	postMask(request.id, active.image.width, active.image.height, alpha, {
+		index,
+		count: candidates.length
+	});
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
 
