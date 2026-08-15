@@ -30,19 +30,19 @@ interface PreparedImage {
 	selection: { id: string; prompt: string; result: Sam2Selection } | null;
 }
 
+interface ModelSlot<Model> {
+	model: Model | null;
+	loading: Promise<void> | null;
+	device: SmartMaskDevice | null;
+}
+
+const modelSlot = <Model>(): ModelSlot<Model> => ({ model: null, loading: null, device: null });
+
 let preferredDevice: Promise<SmartMaskDevice> | null = null;
-let objectDevice: SmartMaskDevice | null = null;
-let subjectDevice: SmartMaskDevice | null = null;
-let detectorDevice: SmartMaskDevice | null = null;
-let objectModel: Sam2ObjectRuntime | null = null;
-let objectModelLoading: Promise<void> | null = null;
-let subjectModel: SubjectPipeline | null = null;
-let subjectModelLoading: Promise<void> | null = null;
-let detectorModel: DetectorPipeline | null = null;
-let detectorModelLoading: Promise<void> | null = null;
-let skyDevice: SmartMaskDevice | null = null;
-let skyModel: SkyPipeline | null = null;
-let skyModelLoading: Promise<void> | null = null;
+const objectSlot = modelSlot<Sam2ObjectRuntime>();
+const subjectSlot = modelSlot<SubjectPipeline>();
+const detectorSlot = modelSlot<DetectorPipeline>();
+const skySlot = modelSlot<SkyPipeline>();
 let prepared: PreparedImage | null = null;
 
 env.useBrowserCache = false;
@@ -101,7 +101,7 @@ async function prepare(request: Extract<SmartMaskRequest, { type: 'prepare' }>) 
 		id: request.id,
 		type: 'prepared',
 		modelVersion: SMART_MASK_PACK.version,
-		device: objectDevice ?? (await detectPreferredDevice())
+		device: objectSlot.device ?? (await detectPreferredDevice())
 	});
 }
 
@@ -123,7 +123,7 @@ async function selectObject(request: Extract<SmartMaskRequest, { type: 'object' 
 	try {
 		await selectObjectWithActiveDevice(request, active);
 	} catch (error) {
-		if (objectDevice === 'wasm') throw error;
+		if (objectSlot.device === 'wasm') throw error;
 		postProgress(request.id, 'loading', null, 'retrying with compatible runtime');
 		await fallBackObjectModel(request.id, active);
 		await selectObjectWithActiveDevice(request, active);
@@ -139,7 +139,7 @@ async function selectObjectWithActiveDevice(
 	await loadObjectModel(request.id);
 	if (!active.embedding) {
 		postProgress(request.id, 'encoding', null, 'analyzing photo');
-		active.embedding = await objectModel!.encode(active.image);
+		active.embedding = await objectSlot.model!.encode(active.image);
 	}
 
 	postProgress(request.id, 'refining', null, 'finding object');
@@ -148,7 +148,7 @@ async function selectObjectWithActiveDevice(
 		active.selection = {
 			id: request.selectionId,
 			prompt,
-			result: await objectModel!.select(
+			result: await objectSlot.model!.select(
 				active.embedding,
 				request.strokes,
 				active.image.width,
@@ -161,7 +161,7 @@ async function selectObjectWithActiveDevice(
 	);
 	if (viable.length === 0) throw new Error('The object model returned an unusable mask');
 	const index = positiveModulo(request.candidate, viable.length);
-	const coarseAlpha = await objectModel!.render(viable[index]!, active.embedding);
+	const coarseAlpha = await objectSlot.model!.render(viable[index]!, active.embedding);
 	postProgress(request.id, 'refining', null, 'refining object edges');
 	const alpha = refineObjectMask(active.image, coarseAlpha);
 	postMask(request.id, active.image.width, active.image.height, alpha, {
@@ -178,7 +178,7 @@ async function detectSubjectsInPhoto(
 	postProgress(request.id, 'loading', null, 'loading detection model');
 	await loadDetectorModel(request.id);
 	postProgress(request.id, 'refining', null, 'finding subjects');
-	const detections = (await detectorModel!(active.image, {
+	const detections = (await detectorSlot.model!(active.image, {
 		threshold: DETECTION_THRESHOLD
 	})) as RawDetection[];
 	post({
@@ -195,7 +195,7 @@ async function selectInstance(request: Extract<SmartMaskRequest, { type: 'instan
 	try {
 		await selectInstanceWithActiveDevice(request, active);
 	} catch (error) {
-		if (objectDevice === 'wasm') throw error;
+		if (objectSlot.device === 'wasm') throw error;
 		postProgress(request.id, 'loading', null, 'retrying with compatible runtime');
 		await fallBackObjectModel(request.id, active);
 		await selectInstanceWithActiveDevice(request, active);
@@ -210,11 +210,11 @@ async function selectInstanceWithActiveDevice(
 	await loadObjectModel(request.id);
 	if (!active.embedding) {
 		postProgress(request.id, 'encoding', null, 'analyzing photo');
-		active.embedding = await objectModel!.encode(active.image);
+		active.embedding = await objectSlot.model!.encode(active.image);
 	}
 
 	postProgress(request.id, 'refining', null, 'isolating subject');
-	const selection = await objectModel!.selectBox(
+	const selection = await objectSlot.model!.selectBox(
 		active.embedding,
 		request.box,
 		active.image.width,
@@ -226,7 +226,7 @@ async function selectInstanceWithActiveDevice(
 	const candidates = viable.length > 0 ? viable : selection.candidates.slice(0, 1);
 	if (candidates.length === 0) throw new Error('The object model returned an unusable mask');
 	const index = positiveModulo(request.candidate, candidates.length);
-	const coarseAlpha = await objectModel!.render(candidates[index]!, active.embedding);
+	const coarseAlpha = await objectSlot.model!.render(candidates[index]!, active.embedding);
 	postProgress(request.id, 'refining', null, 'refining subject edges');
 	const alpha = refineObjectMask(active.image, coarseAlpha);
 	postMask(request.id, active.image.width, active.image.height, alpha, {
@@ -241,7 +241,7 @@ async function selectSubject(request: Extract<SmartMaskRequest, { type: 'subject
 	postProgress(request.id, 'loading', null, 'loading subject model');
 	await loadSubjectModel(request.id);
 	postProgress(request.id, 'refining', null, 'finding subject');
-	const mask = await subjectModel!(active.image);
+	const mask = await subjectSlot.model!(active.image);
 	const alpha = alphaChannel(mask);
 	postMask(request.id, mask.width, mask.height, alpha);
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
@@ -252,7 +252,7 @@ async function selectSky(request: Extract<SmartMaskRequest, { type: 'sky' }>) {
 	postProgress(request.id, 'loading', null, 'loading sky model');
 	await loadSkyModel(request.id);
 	postProgress(request.id, 'refining', null, 'finding sky');
-	const segments = (await skyModel!(active.image)) as SkySegment[];
+	const segments = (await skySlot.model!(active.image)) as SkySegment[];
 	const coarseAlpha = skySegmentAlpha(segments, active.image.width, active.image.height);
 	if (!coarseAlpha) throw new Error('No sky was found in this photo');
 	postProgress(request.id, 'refining', null, 'refining sky edges');
@@ -284,106 +284,65 @@ function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>)
 	postProgress(request.id, 'ready', 100, 'mask edge ready');
 }
 
-async function loadObjectModel(requestId: number) {
-	objectModelLoading ??= (async () => {
-		objectDevice ??= await detectPreferredDevice();
+async function loadModel<Model>(
+	slot: ModelSlot<Model>,
+	create: (device: SmartMaskDevice) => Promise<Model>
+) {
+	slot.loading ??= (async () => {
+		slot.device ??= await detectPreferredDevice();
 		try {
-			objectModel = await createObjectModel(requestId);
+			slot.model = await create(slot.device);
 		} catch (error) {
-			if (objectDevice === 'wasm') throw error;
-			objectDevice = 'wasm';
-			objectModel = await createObjectModel(requestId);
+			if (slot.device === 'wasm') throw error;
+			slot.device = 'wasm';
+			slot.model = await create(slot.device);
 		}
 	})().catch((error) => {
-		objectModelLoading = null;
+		slot.loading = null;
 		throw error;
 	});
-	await objectModelLoading;
+	await slot.loading;
 }
 
-function createObjectModel(requestId: number) {
-	return Sam2ObjectRuntime.load(SMART_MASK_PACK.object, objectDevice ?? 'wasm', (progress) =>
-		reportDownload(requestId, progress)
+const loadObjectModel = (requestId: number) =>
+	loadModel(objectSlot, (device) =>
+		Sam2ObjectRuntime.load(SMART_MASK_PACK.object, device, (progress) =>
+			reportDownload(requestId, progress)
+		)
 	);
-}
 
-async function fallBackObjectModel(requestId: number, active: PreparedImage) {
-	objectModel?.disposeEmbedding(active.embedding);
-	active.embedding = null;
-	active.selection = null;
-	await objectModel?.dispose();
-	objectModel = null;
-	objectModelLoading = null;
-	objectDevice = 'wasm';
-	await loadObjectModel(requestId);
-}
+const loadSubjectModel = (requestId: number) =>
+	loadModel(subjectSlot, (device) =>
+		pipeline('background-removal', SMART_MASK_PACK.subject.id, {
+			...modelOptions(SMART_MASK_PACK.subject, device, requestId)
+		})
+	);
 
-async function loadSubjectModel(requestId: number) {
-	const load = async () => {
-		subjectModel = await pipeline('background-removal', SMART_MASK_PACK.subject.id, {
-			...modelOptions(SMART_MASK_PACK.subject, subjectDevice ?? 'wasm', requestId)
-		});
-	};
-	subjectModelLoading ??= (async () => {
-		subjectDevice ??= await detectPreferredDevice();
-		try {
-			await load();
-		} catch (error) {
-			if (subjectDevice === 'wasm') throw error;
-			subjectDevice = 'wasm';
-			await load();
-		}
-	})().catch((error) => {
-		subjectModelLoading = null;
-		throw error;
-	});
-	await subjectModelLoading;
-}
+const loadDetectorModel = (requestId: number) =>
+	loadModel(detectorSlot, (device) =>
+		pipeline('object-detection', SMART_MASK_PACK.detector.id, {
+			...modelOptions(SMART_MASK_PACK.detector, device, requestId)
+		})
+	);
 
-async function loadDetectorModel(requestId: number) {
-	const load = async () => {
-		detectorModel = await pipeline('object-detection', SMART_MASK_PACK.detector.id, {
-			...modelOptions(SMART_MASK_PACK.detector, detectorDevice ?? 'wasm', requestId)
-		});
-	};
-	detectorModelLoading ??= (async () => {
-		detectorDevice ??= await detectPreferredDevice();
-		try {
-			await load();
-		} catch (error) {
-			if (detectorDevice === 'wasm') throw error;
-			detectorDevice = 'wasm';
-			await load();
-		}
-	})().catch((error) => {
-		detectorModelLoading = null;
-		throw error;
-	});
-	await detectorModelLoading;
-}
-
-async function loadSkyModel(requestId: number) {
-	const load = async () => {
-		skyModel = await pipeline('image-segmentation', SMART_MASK_PACK.sky.id, {
-			...modelOptions(SMART_MASK_PACK.sky, skyDevice ?? 'wasm', requestId),
+const loadSkyModel = (requestId: number) =>
+	loadModel(skySlot, (device) =>
+		pipeline('image-segmentation', SMART_MASK_PACK.sky.id, {
+			...modelOptions(SMART_MASK_PACK.sky, device, requestId),
 			// onnxruntime's layer-norm fusion rejects this fp16 export, so stay at basic optimization.
 			session_options: { graphOptimizationLevel: 'basic' }
-		});
-	};
-	skyModelLoading ??= (async () => {
-		skyDevice ??= await detectPreferredDevice();
-		try {
-			await load();
-		} catch (error) {
-			if (skyDevice === 'wasm') throw error;
-			skyDevice = 'wasm';
-			await load();
-		}
-	})().catch((error) => {
-		skyModelLoading = null;
-		throw error;
-	});
-	await skyModelLoading;
+		})
+	);
+
+async function fallBackObjectModel(requestId: number, active: PreparedImage) {
+	objectSlot.model?.disposeEmbedding(active.embedding);
+	active.embedding = null;
+	active.selection = null;
+	await objectSlot.model?.dispose();
+	objectSlot.model = null;
+	objectSlot.loading = null;
+	objectSlot.device = 'wasm';
+	await loadObjectModel(requestId);
 }
 
 function modelOptions(
@@ -449,7 +408,7 @@ function preparedImage(photoId: string) {
 }
 
 function resetPreparedImage() {
-	objectModel?.disposeEmbedding(prepared?.embedding ?? null);
+	objectSlot.model?.disposeEmbedding(prepared?.embedding ?? null);
 	prepared = null;
 }
 
