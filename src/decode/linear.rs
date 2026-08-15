@@ -2,6 +2,7 @@ use rawler::rawimage::BlackLevel;
 use rawler::{RawImage, RawImageData};
 
 use crate::error::{Error, Result};
+use crate::parallel;
 
 #[derive(Clone)]
 pub struct Linear {
@@ -80,11 +81,11 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
     let (width, height) = v.size;
 
     let mut mosaic = vec![0.0f32; width * height];
-    for y in 0..height {
-        for x in 0..width {
-            mosaic[y * width + x] = v.normalized(x, y);
+    parallel::fill_rows(&mut mosaic, width, |y, row| {
+        for (x, site) in row.iter_mut().enumerate() {
+            *site = v.normalized(x, y);
         }
-    }
+    });
     suppress_impulses(&mut mosaic, width, height);
     let mut planar = vec![0.0f32; 3 * width * height];
     demosaic::demosaic(
@@ -99,20 +100,13 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
 
     let (r, gb) = planar.split_at(width * height);
     let (g, b) = gb.split_at(width * height);
-    let mut rgb = Vec::with_capacity(width * height);
-    for y in 0..height {
-        for x in 0..width {
+    let mut rgb = vec![[0.0f32; 3]; width * height];
+    parallel::fill_rows(&mut rgb, width, |y, row| {
+        for (x, pixel) in row.iter_mut().enumerate() {
             let i = y * width + x;
-            rgb.push(clamp_interpolated(
-                [r[i], g[i], b[i]],
-                &mosaic,
-                width,
-                height,
-                x,
-                y,
-            ));
+            *pixel = clamp_interpolated([r[i], g[i], b[i]], &mosaic, width, height, x, y);
         }
-    }
+    });
     defringe(&mut rgb, width, height);
 
     let mut clipped = Vec::with_capacity(width * height);
@@ -142,6 +136,7 @@ const DIAGONAL: [(isize, isize); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
 const HORIZONTAL: [(isize, isize); 2] = [(-1, 0), (1, 0)];
 const VERTICAL: [(isize, isize); 2] = [(0, -1), (0, 1)];
 
+#[inline(always)]
 fn clamp_interpolated(
     rgb: [f32; 3],
     mosaic: &[f32],
@@ -189,16 +184,16 @@ const FRINGE_LUMA_FLOOR: f32 = 0.05;
 // whose chroma matches none of the surrounding ring. Pull those toward the
 // ring's median chroma at unchanged luma, harder the stronger the edge.
 fn defringe(rgb: &mut [[f32; 3]], width: usize, height: usize) {
-    let luma: Vec<f32> = rgb
-        .iter()
-        .map(|&[r, g, b]| 0.25 * r + 0.5 * g + 0.25 * b)
-        .collect();
+    let luma = parallel::map_pixels(rgb, |&[r, g, b]| [0.25 * r + 0.5 * g + 0.25 * b]);
+    let rgb_snapshot = &*rgb;
     let chroma = |i: usize| {
         let scale = luma[i].max(FRINGE_LUMA_FLOOR);
-        [(rgb[i][0] - luma[i]) / scale, (rgb[i][2] - luma[i]) / scale]
+        [
+            (rgb_snapshot[i][0] - luma[i]) / scale,
+            (rgb_snapshot[i][2] - luma[i]) / scale,
+        ]
     };
-    let mut fixes = Vec::new();
-    for y in 0..height {
+    let fixes = parallel::collect_rows(height, |y, fixes| {
         for x in 0..width {
             let i = y * width + x;
             let neighbor = |&(dx, dy): &(isize, isize)| {
@@ -242,7 +237,7 @@ fn defringe(rgb: &mut [[f32; 3]], width: usize, height: usize) {
                 ],
             ));
         }
-    }
+    });
     for (i, pixel) in fixes {
         rgb[i] = pixel;
     }
@@ -277,10 +272,10 @@ const IMPULSE_FLOOR: f32 = 0.04;
 const IMPULSE_RATIO: f32 = 4.0;
 
 fn suppress_impulses(mosaic: &mut [f32], width: usize, height: usize) {
-    let mut fixes = Vec::new();
-    for y in 0..height {
+    let snapshot = &*mosaic;
+    let fixes = parallel::collect_rows(height, |y, fixes| {
         for x in 0..width {
-            let center = mosaic[y * width + x];
+            let center = snapshot[y * width + x];
             if center < IMPULSE_FLOOR {
                 continue;
             }
@@ -291,7 +286,7 @@ fn suppress_impulses(mosaic: &mut [f32], width: usize, height: usize) {
             };
             let mut ceiling = 0.0f32;
             for &(dx, dy) in same_color {
-                let sample = mosaic
+                let sample = snapshot
                     [reflect(y as isize + dy, height) * width + reflect(x as isize + dx, width)];
                 ceiling = ceiling.max(sample);
             }
@@ -299,24 +294,24 @@ fn suppress_impulses(mosaic: &mut [f32], width: usize, height: usize) {
                 fixes.push((y * width + x, ceiling));
             }
         }
-    }
+    });
     for (i, ceiling) in fixes {
         mosaic[i] = ceiling;
     }
 }
 
 fn suppress_binned_impulses(rgb: &mut [[f32; 3]], width: usize, height: usize) {
-    let mut fixes = Vec::new();
-    for y in 0..height {
+    let snapshot = &*rgb;
+    let fixes = parallel::collect_rows(height, |y, fixes| {
         for x in 0..width {
             let i = y * width + x;
-            for (channel, &center) in rgb[i].iter().enumerate() {
+            for (channel, &center) in snapshot[i].iter().enumerate() {
                 if center < IMPULSE_FLOOR {
                     continue;
                 }
                 let mut ceiling = 0.0f32;
                 for &(dx, dy) in CROSS.iter().chain(&DIAGONAL) {
-                    let sample = rgb[reflect(y as isize + dy, height) * width
+                    let sample = snapshot[reflect(y as isize + dy, height) * width
                         + reflect(x as isize + dx, width)][channel];
                     ceiling = ceiling.max(sample);
                 }
@@ -325,7 +320,7 @@ fn suppress_binned_impulses(rgb: &mut [[f32; 3]], width: usize, height: usize) {
                 }
             }
         }
-    }
+    });
     for (i, channel, ceiling) in fixes {
         rgb[i][channel] = ceiling;
     }
