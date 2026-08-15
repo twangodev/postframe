@@ -21,3 +21,13 @@ test('pins the detector that finds individual subjects', () => {
 		dtype: 'q8'
 	});
 });
+
+test('pins the panoptic model that isolates the sky', () => {
+	assert.deepEqual(SMART_MASK_PACK.sky, {
+		id: 'Xenova/detr-resnet-50-panoptic',
+		revision: 'ea24b2d4e0bfae31f0a1299ba3fb892a2df064de',
+		license: 'Apache-2.0',
+		dtype: 'fp16'
+	});
+	assert.match(SMART_MASK_PACK.version, /-skypan-ea24b2d-fp16$/);
+});

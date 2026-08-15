@@ -18,11 +18,12 @@ export const smartMaskPackSchema = z.object({
 	modelHost: z.string().url(),
 	object: smartMaskModelSchema,
 	subject: smartMaskModelSchema,
-	detector: smartMaskModelSchema
+	detector: smartMaskModelSchema,
+	sky: smartMaskModelSchema
 });
 
 export const SMART_MASK_PACK = smartMaskPackSchema.parse({
-	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main-detr50-q8',
+	version: 'sam2.1-hiera-tiny-814a066-fp32-rgb-edge-v2-ormbg-main-detr50-q8-skypan-ea24b2d-fp16',
 	modelHost: 'https://huggingface.co/',
 	object: {
 		id: 'onnx-community/sam2.1-hiera-tiny-ONNX',
@@ -41,6 +42,12 @@ export const SMART_MASK_PACK = smartMaskPackSchema.parse({
 		revision: 'main',
 		license: 'Apache-2.0',
 		dtype: 'q8'
+	},
+	sky: {
+		id: 'Xenova/detr-resnet-50-panoptic',
+		revision: 'ea24b2d4e0bfae31f0a1299ba3fb892a2df064de',
+		license: 'Apache-2.0',
+		dtype: 'fp16'
 	}
 });
 
@@ -88,6 +95,7 @@ export type SmartMaskRequest =
 			candidate: number;
 	  }
 	| { id: number; type: 'subject'; photoId: string }
+	| { id: number; type: 'sky'; photoId: string }
 	| { id: number; type: 'detect-subjects'; photoId: string }
 	| {
 			id: number;
