@@ -40,8 +40,11 @@ import {
 } from './browser-storage';
 import { storageBreakdown, type StorageBreakdown } from './storage-breakdown';
 import {
+	COLOR_CONTROL_NAMES,
 	defaultLightSettings,
 	LIGHT_CONTROL_NAMES,
+	type ColorControlName,
+	type ColorSettings,
 	type LightControlName,
 	type LightSettings
 } from './develop-settings';
@@ -525,6 +528,31 @@ export class WorkspaceState {
 		if (
 			!this.dispatchEditorCommand({
 				type: 'mask.light.set',
+				maskId: this.selectedMaskId,
+				control,
+				value
+			})
+		) {
+			this.resetMaskPreview();
+		}
+	};
+
+	previewMaskColor = (control: ColorControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedPhoto || !this.selectedMaskId) return;
+		const document = cloneEditDocument(this.selectedPhoto.edit);
+		const mask = document.masks.find(({ id }) => id === this.selectedMaskId);
+		if (!mask) return;
+		mask.adjustments.color = { ...mask.adjustments.color, [control]: value };
+		this.masks = document.masks.map(cloneEditMask);
+		this.scheduleMaskRender(document);
+	};
+
+	commitMaskColor = (control: ColorControlName, value: number) => {
+		if (!this.canAdjustLight || !this.selectedMaskId) return;
+		this.clearMaskRenderTimer();
+		if (
+			!this.dispatchEditorCommand({
+				type: 'mask.color.set',
 				maskId: this.selectedMaskId,
 				control,
 				value
@@ -1395,7 +1423,12 @@ export class WorkspaceState {
 	private async renderMasks(document: EditDocument) {
 		const masks = await Promise.all(
 			document.masks.map(async (mask) => {
-				if (!mask.visible || neutralLight(mask.adjustments.light)) return null;
+				if (
+					!mask.visible ||
+					(neutralLight(mask.adjustments.light) && neutralColor(mask.adjustments.color))
+				) {
+					return null;
+				}
 				const raster = await this.composedMaskRaster(mask);
 				if (!raster) return null;
 				return {
@@ -1404,7 +1437,10 @@ export class WorkspaceState {
 					height: raster.height,
 					alpha: raster.alpha.slice().buffer as ArrayBuffer,
 					edge: { ...mask.edge },
-					settings: { ...mask.adjustments.light }
+					settings: {
+						light: { ...mask.adjustments.light },
+						color: { ...mask.adjustments.color }
+					}
 				};
 			})
 		);
@@ -2288,6 +2324,10 @@ function developProgress(progress: DevelopProgress) {
 
 function neutralLight(settings: LightSettings) {
 	return LIGHT_CONTROL_NAMES.every((control) => settings[control] === 0);
+}
+
+function neutralColor(settings: ColorSettings) {
+	return COLOR_CONTROL_NAMES.every((control) => settings[control] === 0);
 }
 
 export { formatBytes } from './progress-task';

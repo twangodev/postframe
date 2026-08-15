@@ -14,6 +14,7 @@ const neutral = {
 };
 
 const neutralEdge = { contrast: 0, feather: 0, shift: 0 };
+const neutralColor = { temperature: 0, tint: 0, vibrance: 0, saturation: 0 };
 
 function scopeTransfer() {
 	return {
@@ -231,7 +232,7 @@ test('copies and transfers persistent masks without detaching document state', a
 		height: 2,
 		alpha: alpha.buffer,
 		edge: neutralEdge,
-		settings: { ...neutral, exposure: 0.5 }
+		settings: { light: { ...neutral, exposure: 0.5 }, color: { ...neutralColor, tint: -20 } }
 	};
 	const updated = client.setMasks([mask]);
 
@@ -377,7 +378,7 @@ test('exports through the worker with staged progress and detached masks', async
 					height: 2,
 					alpha,
 					edge: { ...neutralEdge },
-					settings: { ...neutral }
+					settings: { light: { ...neutral }, color: { ...neutralColor, saturation: 25 } }
 				}
 			],
 			geometry,

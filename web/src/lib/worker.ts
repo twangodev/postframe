@@ -1,4 +1,4 @@
-import type { LightSettings } from './develop-settings';
+import type { ColorSettings, LightSettings } from './develop-settings';
 import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
 import {
 	loadWasmRuntime,
@@ -87,13 +87,18 @@ export interface RenderTileRequest {
 	tone: boolean;
 }
 
+export interface DevelopedMaskSettings {
+	light: LightSettings;
+	color: ColorSettings;
+}
+
 export interface DevelopedMaskInput {
 	id: string;
 	width: number;
 	height: number;
 	alpha: ArrayBuffer;
 	edge: MaskEdgeSettings;
-	settings: LightSettings;
+	settings: DevelopedMaskSettings;
 }
 
 export interface MaskEdgeInput {
@@ -818,6 +823,10 @@ function lightArguments(settings: LightSettings) {
 	] as const;
 }
 
+function colorArguments(settings: ColorSettings) {
+	return [settings.temperature, settings.tint, settings.vibrance, settings.saturation] as const;
+}
+
 function displayTransform(active: DisplayDocument, settings: LightSettings) {
 	if (sameLightSettings(active.settings, settings)) return active.light;
 	active.light.free();
@@ -954,7 +963,8 @@ function createMaskCompositors(masks: DevelopedMaskInput[]) {
 					adjusted.alpha,
 					mask.width,
 					mask.height,
-					...lightArguments(mask.settings)
+					...lightArguments(mask.settings.light),
+					...colorArguments(mask.settings.color)
 				)
 			});
 		}

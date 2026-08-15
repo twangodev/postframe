@@ -146,12 +146,7 @@ export class PostframeWorkerClient {
 	}
 
 	async setMasks(masks: DevelopedMaskInput[]) {
-		const copies = masks.map((mask) => ({
-			...mask,
-			edge: { ...mask.edge },
-			settings: { ...mask.settings },
-			alpha: mask.alpha.slice(0)
-		}));
+		const copies = masks.map(copyDevelopedMask);
 		await this.send(
 			(id) => ({ id, type: 'set-masks', masks: copies }),
 			'masks-set',
@@ -208,12 +203,7 @@ export class PostframeWorkerClient {
 	}
 
 	async exportPhoto(request: ExportPhotoRequest, onProgress?: (progress: ExportProgress) => void) {
-		const masks = request.masks.map((mask) => ({
-			...mask,
-			edge: { ...mask.edge },
-			settings: { ...mask.settings },
-			alpha: mask.alpha.slice(0)
-		}));
+		const masks = request.masks.map(copyDevelopedMask);
 		const response = await this.send(
 			(id) => ({
 				id,
@@ -429,6 +419,15 @@ export class PostframeWorkerClient {
 		for (const waiter of this.queuedPreview.waiters) waiter.reject(error);
 		this.queuedPreview = null;
 	}
+}
+
+function copyDevelopedMask(mask: DevelopedMaskInput): DevelopedMaskInput {
+	return {
+		...mask,
+		edge: { ...mask.edge },
+		settings: { light: { ...mask.settings.light }, color: { ...mask.settings.color } },
+		alpha: mask.alpha.slice(0)
+	};
 }
 
 function createWorker() {

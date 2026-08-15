@@ -71,6 +71,43 @@ test('updates local light without changing global development settings', () => {
 	assert.equal(changed.document.adjustments.light.exposure, 0);
 });
 
+test('updates local color without changing light or other masks', () => {
+	const document = defaultEditDocument('photo-one');
+	document.masks.push(createEditMask('mask-one', 'subject'));
+	const changed = applyEditorCommand(document, {
+		type: 'mask.color.set',
+		maskId: 'mask-one',
+		control: 'temperature',
+		value: 40
+	});
+	assert.ok(changed);
+	assert.equal(changed.invalidation, 'render');
+	assert.equal(changed.label, 'temperature +40');
+	assert.equal(changed.document.masks[0]?.adjustments.color.temperature, 40);
+	assert.deepEqual(
+		changed.document.masks[0]?.adjustments.light,
+		document.masks[0]?.adjustments.light
+	);
+	assert.equal(document.masks[0]?.adjustments.color.temperature, 0);
+	assert.equal(
+		applyEditorCommand(changed.document, {
+			type: 'mask.color.set',
+			maskId: 'mask-one',
+			control: 'temperature',
+			value: 40
+		}),
+		null
+	);
+	assert.throws(() =>
+		applyEditorCommand(changed.document, {
+			type: 'mask.color.set',
+			maskId: 'mask-one',
+			control: 'saturation',
+			value: 101
+		})
+	);
+});
+
 test('updates mask edges without changing the stored component raster', () => {
 	const document = defaultEditDocument('photo-one');
 	const mask = createEditMask('mask-one', 'subject');

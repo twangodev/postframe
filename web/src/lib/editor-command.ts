@@ -9,7 +9,12 @@ import {
 	type MaskComponent,
 	type NormalizedCrop
 } from './edit-document.ts';
-import { lightSettingsSchema, type LightControlName } from './develop-settings.ts';
+import {
+	colorSettingsSchema,
+	lightSettingsSchema,
+	type ColorControlName,
+	type LightControlName
+} from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
@@ -17,6 +22,7 @@ export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 export type EditorCommand =
 	| { type: 'light.set'; control: LightControlName; value: number }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
+	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
 	| { type: 'mask.create'; mask: EditMask }
 	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
@@ -75,6 +81,17 @@ export function applyEditorCommand(
 			if (mask.adjustments.light[command.control] === light[command.control]) return null;
 			mask.adjustments.light = light;
 			return transition(command, lightLabel(command.control, command.value), 'render', next);
+		}
+		case 'mask.color.set': {
+			const mask = next.masks.find(({ id }) => id === command.maskId);
+			if (!mask) return null;
+			const color = colorSettingsSchema.parse({
+				...mask.adjustments.color,
+				[command.control]: command.value
+			});
+			if (mask.adjustments.color[command.control] === color[command.control]) return null;
+			mask.adjustments.color = color;
+			return transition(command, adjustmentLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.edge.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -149,13 +166,15 @@ function transition(
 }
 
 function lightLabel(control: LightControlName, value: number) {
-	const suffix = control === 'exposure' ? ' EV' : '';
-	return `${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
+	return adjustmentLabel(control, value, control === 'exposure' ? ' EV' : '');
 }
 
 function edgeLabel(control: MaskEdgeControlName, value: number) {
-	const suffix = control === 'contrast' ? '' : ' px';
-	return `mask ${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
+	return `mask ${adjustmentLabel(control, value, control === 'contrast' ? '' : ' px')}`;
+}
+
+function adjustmentLabel(control: string, value: number, suffix = '') {
+	return `${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
 }
 
 function formatNumber(value: number) {

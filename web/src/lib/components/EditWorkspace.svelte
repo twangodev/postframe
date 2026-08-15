@@ -42,7 +42,7 @@
 	import Tooltip from './ui/Tooltip.svelte';
 	import { separator, type MenuEntry } from '$lib/menu';
 	import { type MaskKind, type WorkspaceState } from '$lib/workspace.svelte';
-	import type { LightControlName } from '$lib/develop-settings';
+	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
 	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
 	import {
 		ZOOM_MENU_PRESETS,
@@ -112,6 +112,10 @@
 		workspace.previewMaskLight(control, value);
 	const commitMaskLight = (control: LightControlName) => (value: number) =>
 		workspace.commitMaskLight(control, value);
+	const previewMaskColor = (control: ColorControlName) => (value: number) =>
+		workspace.previewMaskColor(control, value);
+	const commitMaskColor = (control: ColorControlName) => (value: number) =>
+		workspace.commitMaskColor(control, value);
 	const previewMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
 		workspace.previewMaskEdge(control, value);
 	const commitMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
@@ -1894,6 +1898,44 @@
 								disabled={selectedMask.components.length === 0}
 								onValueChange={previewMaskLight('blacks')}
 								onValueCommit={commitMaskLight('blacks')}
+							/>
+							<div class="bg-subtle my-2 h-px"></div>
+							<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">color</p>
+							<AdjustmentSlider
+								label="Temperature"
+								value={selectedMask.adjustments.color.temperature}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskColor('temperature')}
+								onValueCommit={commitMaskColor('temperature')}
+							/>
+							<AdjustmentSlider
+								label="Tint"
+								value={selectedMask.adjustments.color.tint}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskColor('tint')}
+								onValueCommit={commitMaskColor('tint')}
+							/>
+							<AdjustmentSlider
+								label="Vibrance"
+								value={selectedMask.adjustments.color.vibrance}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskColor('vibrance')}
+								onValueCommit={commitMaskColor('vibrance')}
+							/>
+							<AdjustmentSlider
+								label="Saturation"
+								value={selectedMask.adjustments.color.saturation}
+								min={-100}
+								max={100}
+								disabled={selectedMask.components.length === 0}
+								onValueChange={previewMaskColor('saturation')}
+								onValueCommit={commitMaskColor('saturation')}
 							/>
 						</Panel>
 					{/if}
