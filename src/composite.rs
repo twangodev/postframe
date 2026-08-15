@@ -1,4 +1,4 @@
-use crate::{Error, LightSettings, LightTransform, Result};
+use crate::{ColorSettings, ColorTransform, Error, LightSettings, LightTransform, Result};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MaskPlane {
@@ -75,14 +75,21 @@ impl DevelopedTileRegion {
 pub struct LocalAdjustment {
     mask: MaskPlane,
     light: LightTransform,
+    color: ColorTransform,
 }
 
 impl LocalAdjustment {
-    pub fn new(mask: MaskPlane, light: LightSettings) -> Result<Self> {
+    pub fn new(mask: MaskPlane, light: LightSettings, color: ColorSettings) -> Result<Self> {
         Ok(Self {
             mask,
             light: LightTransform::new(light)?,
+            color: ColorTransform::new(color)?,
         })
+    }
+
+    fn adjust_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
+        self.light
+            .apply_display_pixel(self.color.apply_display_pixel(pixel))
     }
 }
 
@@ -129,7 +136,7 @@ impl DevelopedTileCompositor {
                         composited[index + 1],
                         composited[index + 2],
                     ];
-                    let adjusted = adjustment.light.apply_display_pixel(source);
+                    let adjusted = adjustment.adjust_pixel(source);
                     for channel in 0..3 {
                         composited[index + channel] =
                             mix(source[channel] as f32, adjusted[channel] as f32, alpha)
@@ -181,6 +188,7 @@ mod tests {
                 exposure: 1.0,
                 ..LightSettings::NEUTRAL
             },
+            ColorSettings::NEUTRAL,
         )
         .unwrap();
         let output = DevelopedTileCompositor
@@ -201,6 +209,7 @@ mod tests {
                 exposure: 1.0,
                 ..LightSettings::NEUTRAL
             },
+            ColorSettings::NEUTRAL,
         )
         .unwrap();
         let darker = LocalAdjustment::new(
@@ -209,6 +218,7 @@ mod tests {
                 exposure: -1.0,
                 ..LightSettings::NEUTRAL
             },
+            ColorSettings::NEUTRAL,
         )
         .unwrap();
         let once = DevelopedTileCompositor
@@ -220,6 +230,69 @@ mod tests {
         assert!(once[0] > rgba[0]);
         assert!(twice[0] < once[0]);
         assert_eq!(twice[3], rgba[3]);
+    }
+
+    #[test]
+    fn masked_color_matches_the_global_transform_under_a_full_mask() {
+        let rgba = [180, 120, 60, 255, 32, 96, 200, 137, 128, 128, 128, 9];
+        let color = ColorSettings {
+            temperature: 60.0,
+            tint: -25.0,
+            vibrance: 40.0,
+            saturation: 30.0,
+        };
+        let full = MaskPlane::new(3, 1, vec![255; 3]).unwrap();
+        let adjustment = LocalAdjustment::new(full, LightSettings::NEUTRAL, color).unwrap();
+        let masked = DevelopedTileCompositor
+            .composite(&rgba, 3, 1, region(3, 1), &[adjustment])
+            .unwrap();
+        let global = ColorTransform::new(color)
+            .unwrap()
+            .apply_display_rgba8(&rgba)
+            .unwrap();
+        assert_eq!(masked, global);
+    }
+
+    #[test]
+    fn color_leaves_zero_alpha_regions_untouched() {
+        let rgba = [180, 120, 60, 255, 180, 120, 60, 255];
+        let mask = MaskPlane::new(2, 1, vec![0, 255]).unwrap();
+        let adjustment = LocalAdjustment::new(
+            mask,
+            LightSettings::NEUTRAL,
+            ColorSettings {
+                saturation: -100.0,
+                ..ColorSettings::NEUTRAL
+            },
+        )
+        .unwrap();
+        let output = DevelopedTileCompositor
+            .composite(&rgba, 2, 1, region(2, 1), &[adjustment])
+            .unwrap();
+        assert_eq!(&output[..4], &rgba[..4]);
+        assert_eq!(output[4], output[5]);
+        assert_eq!(output[5], output[6]);
+        assert_eq!(output[7], rgba[7]);
+    }
+
+    #[test]
+    fn neutral_color_reproduces_the_light_only_pipeline_exactly() {
+        let rgba = [12, 200, 96, 255, 240, 16, 180, 41];
+        let light = LightSettings {
+            exposure: 0.75,
+            contrast: 40.0,
+            ..LightSettings::NEUTRAL
+        };
+        let full = MaskPlane::new(2, 1, vec![255; 2]).unwrap();
+        let adjustment = LocalAdjustment::new(full, light, ColorSettings::NEUTRAL).unwrap();
+        let masked = DevelopedTileCompositor
+            .composite(&rgba, 2, 1, region(2, 1), &[adjustment])
+            .unwrap();
+        let light_only = LightTransform::new(light)
+            .unwrap()
+            .apply_display_rgba8(&rgba)
+            .unwrap();
+        assert_eq!(masked, light_only);
     }
 
     #[test]

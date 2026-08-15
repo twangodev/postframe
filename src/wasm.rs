@@ -11,8 +11,8 @@ use wasm_bindgen::prelude::*;
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::{MipPyramid, PreparedRegion};
 use crate::{
-    DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion, ImageScope,
-    LightSettings, LightTransform, LocalAdjustment, MaskPlane, Merged, Preview,
+    ColorSettings, DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion,
+    ImageScope, LightSettings, LightTransform, LocalAdjustment, MaskPlane, Merged, Preview,
 };
 
 const MAX_TILE_DIMENSION: usize = 1024;
@@ -179,12 +179,22 @@ impl DevelopedTileCompositor {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
     ) -> Result<DevelopedTileCompositor, JsError> {
         let mask = MaskPlane::new(mask_width as usize, mask_height as usize, mask).map_err(err)?;
         let light = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
+        let color = ColorSettings {
+            temperature,
+            tint,
+            vibrance,
+            saturation,
+        };
         Ok(Self {
             compositor: CoreDevelopedTileCompositor,
-            adjustment: LocalAdjustment::new(mask, light).map_err(err)?,
+            adjustment: LocalAdjustment::new(mask, light, color).map_err(err)?,
         })
     }
 

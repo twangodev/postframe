@@ -302,7 +302,7 @@ fn logistic(value: f64) -> f64 {
     1.0 / (1.0 + (-value).exp())
 }
 
-fn srgb_to_linear(channel: u8) -> f32 {
+pub(crate) fn srgb_to_linear(channel: u8) -> f32 {
     SRGB_TO_LINEAR.get_or_init(|| std::array::from_fn(decode_srgb))[channel as usize]
 }
 
@@ -315,7 +315,7 @@ fn decode_srgb(index: usize) -> f32 {
     }
 }
 
-fn linear_to_srgb(channel: f32) -> u8 {
+pub(crate) fn linear_to_srgb(channel: f32) -> u8 {
     let position = channel.clamp(0.0, 1.0) * (CURVE_SAMPLES - 1) as f32;
     LINEAR_TO_SRGB.get_or_init(|| std::array::from_fn(encode_linear))[position.round() as usize]
 }
