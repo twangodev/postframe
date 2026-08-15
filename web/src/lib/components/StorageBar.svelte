@@ -31,7 +31,15 @@
 </script>
 
 <div class="relative">
-	<div class="bg-subtle h-1.5 overflow-hidden rounded-full">
+	<div
+		class="bg-subtle h-1.5 overflow-hidden rounded-full"
+		role="meter"
+		aria-label="Local storage used"
+		aria-valuemin={0}
+		aria-valuemax={scaleBytes}
+		aria-valuenow={usedBytes}
+		aria-valuetext={summary}
+	>
 		{#if occupied.length > 0}
 			<BarChart
 				data={[row]}
