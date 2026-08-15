@@ -113,6 +113,7 @@ pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
             ));
         }
     }
+    defringe(&mut rgb, width, height);
 
     let mut clipped = Vec::with_capacity(width * height);
     for y in 0..height {
@@ -167,6 +168,89 @@ fn clamp_interpolated(
         (0, 1) => [clamp(r, &HORIZONTAL), g, clamp(b, &VERTICAL)],
         _ => [clamp(r, &VERTICAL), g, clamp(b, &HORIZONTAL)],
     }
+}
+
+const FRINGE_RING: [(isize, isize); 8] = [
+    (-2, 0),
+    (2, 0),
+    (0, -2),
+    (0, 2),
+    (-2, -2),
+    (2, -2),
+    (-2, 2),
+    (2, 2),
+];
+const FRINGE_EDGE_FLOOR: f32 = 0.1;
+const FRINGE_EDGE_FULL: f32 = 0.4;
+const FRINGE_CHROMA_FLOOR: f32 = 0.2;
+const FRINGE_LUMA_FLOOR: f32 = 0.05;
+
+// Micro-glints demosaic into single-pixel color speckles: strong luma edges
+// whose chroma matches none of the surrounding ring. Pull those toward the
+// ring's median chroma at unchanged luma, harder the stronger the edge.
+fn defringe(rgb: &mut [[f32; 3]], width: usize, height: usize) {
+    let luma: Vec<f32> = rgb
+        .iter()
+        .map(|&[r, g, b]| 0.25 * r + 0.5 * g + 0.25 * b)
+        .collect();
+    let chroma = |i: usize| {
+        let scale = luma[i].max(FRINGE_LUMA_FLOOR);
+        [(rgb[i][0] - luma[i]) / scale, (rgb[i][2] - luma[i]) / scale]
+    };
+    let mut fixes = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let i = y * width + x;
+            let neighbor = |&(dx, dy): &(isize, isize)| {
+                reflect(y as isize + dy, height) * width + reflect(x as isize + dx, width)
+            };
+            let contrast = CROSS
+                .iter()
+                .chain(&DIAGONAL)
+                .map(|offset| (luma[i] - luma[neighbor(offset)]).abs())
+                .fold(0.0f32, f32::max);
+            if contrast < FRINGE_EDGE_FLOOR {
+                continue;
+            }
+            let center = chroma(i);
+            let ring = FRINGE_RING
+                .each_ref()
+                .map(|offset| chroma(neighbor(offset)));
+            let isolation = ring
+                .iter()
+                .map(|sample| {
+                    (center[0] - sample[0])
+                        .abs()
+                        .max((center[1] - sample[1]).abs())
+                })
+                .fold(f32::INFINITY, f32::min);
+            if isolation < FRINGE_CHROMA_FLOOR {
+                continue;
+            }
+            let strength =
+                ((contrast - FRINGE_EDGE_FLOOR) / (FRINGE_EDGE_FULL - FRINGE_EDGE_FLOOR)).min(1.0);
+            let toward = |c: f32, target: f32| c + strength * (target - c);
+            let cr = toward(center[0], median(ring.map(|sample| sample[0])));
+            let cb = toward(center[1], median(ring.map(|sample| sample[1])));
+            let scale = luma[i].max(FRINGE_LUMA_FLOOR);
+            fixes.push((
+                i,
+                [
+                    luma[i] + cr * scale,
+                    luma[i] - (cr + cb) / 2.0 * scale,
+                    luma[i] + cb * scale,
+                ],
+            ));
+        }
+    }
+    for (i, pixel) in fixes {
+        rgb[i] = pixel;
+    }
+}
+
+fn median(mut samples: [f32; 8]) -> f32 {
+    samples.sort_unstable_by(f32::total_cmp);
+    (samples[3] + samples[4]) / 2.0
 }
 
 const GREEN_LATTICE: [(isize, isize); 8] = [
@@ -338,6 +422,34 @@ mod tests {
         assert_eq!(clamped[0], 0.5);
         assert_eq!(clamped[1], 0.2);
         assert_eq!(clamped[2], 0.6);
+    }
+
+    #[test]
+    fn desaturates_a_chromatic_speckle_at_a_luma_peak() {
+        let mut rgb = vec![[0.1, 0.1, 0.1]; 49];
+        rgb[3 * 7 + 3] = [1.0, 0.2, 1.0];
+        defringe(&mut rgb, 7, 7);
+        let [r, g, b] = rgb[3 * 7 + 3];
+        assert_eq!(r, g);
+        assert_eq!(g, b);
+        assert!((r - 0.6).abs() < 1e-6, "luma must be preserved, got {r}");
+        assert_eq!(rgb[3 * 7 + 2], [0.1, 0.1, 0.1]);
+    }
+
+    #[test]
+    fn keeps_a_saturated_edge_that_matches_its_neighborhood() {
+        let rgb: Vec<[f32; 3]> = (0..49)
+            .map(|i| {
+                if i % 7 < 3 {
+                    [0.8, 0.05, 0.05]
+                } else {
+                    [0.02, 0.02, 0.02]
+                }
+            })
+            .collect();
+        let mut defringed = rgb.clone();
+        defringe(&mut defringed, 7, 7);
+        assert_eq!(defringed, rgb);
     }
 
     #[test]
