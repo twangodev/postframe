@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Check, X } from '@lucide/svelte';
 	import { detectedSubjectName, type DetectedSubject } from '$lib/subject-detection';
+	import { coverCrop } from '$lib/subject-picker-crop';
 	import type { NormalizedRegion } from '$lib/edit-document';
 
 	interface Props {
@@ -17,18 +18,26 @@
 	let { subjects, created, previewSrc, busy, onChoose, onChooseAll, onDismiss, onHover }: Props =
 		$props();
 
+	const CHIP_ASPECT = 44 / 56;
+
+	let naturalWidth = $state(0);
+	let naturalHeight = $state(0);
+	const imageAspect = $derived(
+		naturalWidth > 0 && naturalHeight > 0 ? naturalWidth / naturalHeight : 1
+	);
+
 	function cropStyle(box: NormalizedRegion) {
-		const positionX = box.width >= 1 ? 0 : (box.x / (1 - box.width)) * 100;
-		const positionY = box.height >= 1 ? 0 : (box.y / (1 - box.height)) * 100;
+		const crop = coverCrop(box, CHIP_ASPECT, imageAspect);
 		return (
 			`background-image: url(${previewSrc});` +
-			`background-size: ${100 / box.width}% ${100 / box.height}%;` +
-			`background-position: ${positionX}% ${positionY}%;`
+			`background-size: ${crop.size};` +
+			`background-position: ${crop.position};`
 		);
 	}
 </script>
 
 <div class="border-subtle border-b p-3">
+	<img class="hidden" src={previewSrc} alt="" bind:naturalWidth bind:naturalHeight />
 	<div class="mb-2 flex items-center justify-between">
 		<p class="text-muted text-[11px] tracking-[0.03em]">
 			{subjects.length} subjects found · choose one to mask
