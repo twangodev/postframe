@@ -3,6 +3,7 @@ import { refineObjectMask, refinePaintedMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
 import { alphaChannel } from './mask-raster.ts';
 import { usableSam2Mask } from './sam2-candidates.ts';
+import { skySegmentAlpha, type SkySegment } from './sky-matte.ts';
 import { detectedSubjects, type RawDetection } from './subject-detection.ts';
 import {
 	Sam2ObjectRuntime,
@@ -18,6 +19,7 @@ import {
 
 type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>>;
 type DetectorPipeline = Awaited<ReturnType<typeof pipeline<'object-detection'>>>;
+type SkyPipeline = Awaited<ReturnType<typeof pipeline<'image-segmentation'>>>;
 
 const DETECTION_THRESHOLD = 0.5;
 
@@ -38,6 +40,9 @@ let subjectModel: SubjectPipeline | null = null;
 let subjectModelLoading: Promise<void> | null = null;
 let detectorModel: DetectorPipeline | null = null;
 let detectorModelLoading: Promise<void> | null = null;
+let skyDevice: SmartMaskDevice | null = null;
+let skyModel: SkyPipeline | null = null;
+let skyModelLoading: Promise<void> | null = null;
 let prepared: PreparedImage | null = null;
 
 env.useBrowserCache = false;
@@ -60,6 +65,9 @@ self.onmessage = async (event: MessageEvent<SmartMaskRequest>) => {
 				break;
 			case 'subject':
 				await selectSubject(request);
+				break;
+			case 'sky':
+				await selectSky(request);
 				break;
 			case 'detect-subjects':
 				await detectSubjectsInPhoto(request);
@@ -104,6 +112,8 @@ async function warmup(request: Extract<SmartMaskRequest, { type: 'warmup' }>) {
 	await loadSubjectModel(request.id);
 	postProgress(request.id, 'loading', null, 'loading detection model');
 	await loadDetectorModel(request.id);
+	postProgress(request.id, 'loading', null, 'loading sky model');
+	await loadSkyModel(request.id);
 	postProgress(request.id, 'ready', 100, 'smart mask models ready');
 	post({ id: request.id, type: 'warmed' });
 }
@@ -237,6 +247,32 @@ async function selectSubject(request: Extract<SmartMaskRequest, { type: 'subject
 	postProgress(request.id, 'ready', 100, 'smart mask ready');
 }
 
+async function selectSky(request: Extract<SmartMaskRequest, { type: 'sky' }>) {
+	const active = preparedImage(request.photoId);
+	postProgress(request.id, 'loading', null, 'loading sky model');
+	await loadSkyModel(request.id);
+	postProgress(request.id, 'refining', null, 'finding sky');
+	const segments = (await skyModel!(active.image)) as SkySegment[];
+	const coarseAlpha = skySegmentAlpha(segments, active.image.width, active.image.height);
+	if (!coarseAlpha) throw new Error('No sky was found in this photo');
+	postProgress(request.id, 'refining', null, 'refining sky edges');
+	postMask(
+		request.id,
+		active.image.width,
+		active.image.height,
+		skyEdges(active.image, coarseAlpha)
+	);
+	postProgress(request.id, 'ready', 100, 'smart mask ready');
+}
+
+function skyEdges(image: RawImage, coarseAlpha: Uint8Array) {
+	try {
+		return refineObjectMask(image, coarseAlpha);
+	} catch {
+		return coarseAlpha;
+	}
+}
+
 function refineEdge(request: Extract<SmartMaskRequest, { type: 'refine-edge' }>) {
 	const active = preparedImage(request.photoId);
 	if (request.width !== active.image.width || request.height !== active.image.height) {
@@ -324,6 +360,30 @@ async function loadDetectorModel(requestId: number) {
 		throw error;
 	});
 	await detectorModelLoading;
+}
+
+async function loadSkyModel(requestId: number) {
+	const load = async () => {
+		skyModel = await pipeline('image-segmentation', SMART_MASK_PACK.sky.id, {
+			...modelOptions(SMART_MASK_PACK.sky, skyDevice ?? 'wasm', requestId),
+			// onnxruntime's layer-norm fusion rejects this fp16 export, so stay at basic optimization.
+			session_options: { graphOptimizationLevel: 'basic' }
+		});
+	};
+	skyModelLoading ??= (async () => {
+		skyDevice ??= await detectPreferredDevice();
+		try {
+			await load();
+		} catch (error) {
+			if (skyDevice === 'wasm') throw error;
+			skyDevice = 'wasm';
+			await load();
+		}
+	})().catch((error) => {
+		skyModelLoading = null;
+		throw error;
+	});
+	await skyModelLoading;
 }
 
 function modelOptions(

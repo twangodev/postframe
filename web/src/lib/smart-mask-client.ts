@@ -72,6 +72,11 @@ export class SmartMaskClient {
 		return rasterFromResponse(response);
 	}
 
+	async selectSky(photoId: string) {
+		const response = await this.send((id) => ({ id, type: 'sky', photoId }), 'mask');
+		return rasterFromResponse(response);
+	}
+
 	async detectSubjects(photoId: string) {
 		const response = await this.send(
 			(id) => ({ id, type: 'detect-subjects', photoId }),
