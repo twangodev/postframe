@@ -99,6 +99,46 @@ test('carries version-four documents forward unchanged', () => {
 	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
 });
 
+test('carries version-five documents forward unchanged', () => {
+	const mask = createEditMask('mask-one', 'linear');
+	const previous = { ...defaultEditDocument('photo-one'), version: 5, masks: [mask] };
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
+	assert.deepEqual(migrated.masks, [mask]);
+	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
+});
+
+test('accepts gradient components carrying their geometry', () => {
+	const linear = createEditMask('mask-linear', 'linear');
+	linear.components.push({
+		id: 'component-linear',
+		type: 'linear',
+		operation: 'add',
+		start: { x: 0.2, y: 0.8 },
+		end: { x: 0.9, y: 0.1 },
+		raster: null
+	});
+	const radial = createEditMask('mask-radial', 'radial');
+	radial.components.push({
+		id: 'component-radial',
+		type: 'radial',
+		operation: 'add',
+		center: { x: 0.5, y: 0.5 },
+		radius: 0.25,
+		feather: 0.5,
+		raster: null
+	});
+	const document = { ...defaultEditDocument('photo-one'), masks: [linear, radial] };
+	assert.deepEqual(parseEditDocument(document, 'photo-one').masks, [linear, radial]);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...radial,
+			components: [{ ...radial.components[0], radius: 1.5 }]
+		}).success,
+		false
+	);
+});
+
 test('accepts detected-subject components with their originating box', () => {
 	const mask = createEditMask('mask-one', 'subject');
 	mask.name = 'person 1';

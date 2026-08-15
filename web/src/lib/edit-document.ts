@@ -8,7 +8,7 @@ import {
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 5;
+export const EDIT_DOCUMENT_VERSION = 6;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -93,6 +93,17 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 				flow: z.number().finite().min(0).max(1)
 			})
 		)
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('linear'),
+		start: normalizedPointSchema,
+		end: normalizedPointSchema
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('radial'),
+		center: normalizedPointSchema,
+		radius: z.number().finite().positive().max(1),
+		feather: z.number().finite().min(0).max(1)
 	})
 ]);
 
@@ -174,6 +185,13 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 	const legacy = developSettingsSchema.safeParse(value);
 	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
 
+	const versionFive = versionFiveEditDocumentSchema.safeParse(value);
+	if (versionFive.success) {
+		if (versionFive.data.photoId !== photoId)
+			throw new Error(`Edit document belongs to another photo`);
+		return editDocumentSchema.parse({ ...versionFive.data, version: EDIT_DOCUMENT_VERSION });
+	}
+
 	const versionFour = versionFourEditDocumentSchema.safeParse(value);
 	if (versionFour.success) {
 		if (versionFour.data.photoId !== photoId)
@@ -240,6 +258,19 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 export function editDocumentStorageName(photoId: string) {
 	return `${photoId}.json`;
 }
+
+const versionFiveEditDocumentSchema = z.object({
+	version: z.literal(5),
+	photoId: z.string().min(1),
+	adjustments: z.object({ light: lightSettingsSchema }),
+	geometry: z.object({
+		rotation: z.number().finite().min(-180).max(180),
+		flipHorizontal: z.boolean(),
+		flipVertical: z.boolean(),
+		crop: normalizedCropSchema.nullable()
+	}),
+	masks: z.array(editMaskSchema)
+});
 
 const versionFourEditDocumentSchema = z.object({
 	version: z.literal(4),
