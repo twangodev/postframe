@@ -152,6 +152,7 @@
 		start: NormalizedPoint;
 		current: NormalizedPoint;
 	} | null>(null);
+	let pendingGradientPaint = $state<LivePaint | null>(null);
 	let maskBrushPoint = $state<NormalizedPoint | null>(null);
 	let hoveredSubjectBox = $state<NormalizedRegion | null>(null);
 	let refineBrushSize = $state(42);
@@ -636,19 +637,23 @@
 		}
 		if (gradientDrag?.pointerId === event.pointerId) {
 			const completed = gradientDrag;
+			const paint = livePaint;
 			gradientDrag = null;
 			if (
 				event.type === 'pointerup' &&
 				normalizedDistance(completed.start, completed.current) > 0.002
 			) {
-				if (activeTool === 'mask-linear') {
-					void workspace.placeLinearMask(completed.start, completed.current);
-				} else {
-					void workspace.placeRadialMask(
-						completed.start,
-						normalizedDistance(completed.start, completed.current)
-					);
-				}
+				pendingGradientPaint = paint;
+				const placed =
+					activeTool === 'mask-linear'
+						? workspace.placeLinearMask(completed.start, completed.current)
+						: workspace.placeRadialMask(
+								completed.start,
+								normalizedDistance(completed.start, completed.current)
+							);
+				void placed.finally(() =>
+					requestAnimationFrame(() => requestAnimationFrame(() => (pendingGradientPaint = null)))
+				);
 			}
 			return;
 		}
@@ -1248,14 +1253,14 @@
 											>
 										</div>
 									{/if}
-									{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id && !(gradientDrag && (activeTool === 'mask-linear' || activeTool === 'mask-radial'))}
+									{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id && !pendingGradientPaint && !(gradientDrag && (activeTool === 'mask-linear' || activeTool === 'mask-radial'))}
 										{#key maskPreviewMode}
 											<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
 										{/key}
 									{/if}
-									{#if livePaint}
+									{#if livePaint ?? pendingGradientPaint}
 										<MaskPaintPreview
-											paint={livePaint}
+											paint={(livePaint ?? pendingGradientPaint)!}
 											imageWidth={imageSize.width}
 											imageHeight={imageSize.height}
 											mode={maskPreviewMode === 'matte' ? 'matte' : 'overlay'}
