@@ -70,9 +70,9 @@ fn view(raw: &RawImage) -> Result<CfaView<'_>> {
 
 pub fn from_raw(raw: &RawImage) -> Result<Linear> {
     let v = view(raw)?;
-    Ok(bin_rggb(
-        v.data, v.stride, v.origin, v.size, v.black, v.white,
-    ))
+    let mut binned = bin_rggb(v.data, v.stride, v.origin, v.size, v.black, v.white);
+    suppress_binned_impulses(&mut binned.rgb, binned.width, binned.height);
+    Ok(binned)
 }
 
 pub fn demosaic_full(raw: &RawImage) -> Result<Linear> {
@@ -305,6 +305,32 @@ fn suppress_impulses(mosaic: &mut [f32], width: usize, height: usize) {
     }
 }
 
+fn suppress_binned_impulses(rgb: &mut [[f32; 3]], width: usize, height: usize) {
+    let mut fixes = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let i = y * width + x;
+            for (channel, &center) in rgb[i].iter().enumerate() {
+                if center < IMPULSE_FLOOR {
+                    continue;
+                }
+                let mut ceiling = 0.0f32;
+                for &(dx, dy) in CROSS.iter().chain(&DIAGONAL) {
+                    let sample = rgb[reflect(y as isize + dy, height) * width
+                        + reflect(x as isize + dx, width)][channel];
+                    ceiling = ceiling.max(sample);
+                }
+                if center > IMPULSE_RATIO * ceiling.max(IMPULSE_FLOOR / IMPULSE_RATIO) {
+                    fixes.push((i, channel, ceiling));
+                }
+            }
+        }
+    }
+    for (i, channel, ceiling) in fixes {
+        rgb[i][channel] = ceiling;
+    }
+}
+
 fn reflect(i: isize, len: usize) -> usize {
     let last = len as isize - 1;
     (if i < 0 {
@@ -482,5 +508,29 @@ mod tests {
         mosaic[0] = 0.9;
         suppress_impulses(&mut mosaic, 6, 6);
         assert_eq!(mosaic[0], 0.1);
+    }
+
+    #[test]
+    fn suppresses_a_hot_bin_to_its_neighbor_ceiling() {
+        let mut rgb = vec![[0.1, 0.1, 0.1]; 36];
+        rgb[2 * 6 + 3][0] = 0.9;
+        suppress_binned_impulses(&mut rgb, 6, 6);
+        assert_eq!(rgb[2 * 6 + 3], [0.1, 0.1, 0.1]);
+    }
+
+    #[test]
+    fn keeps_bright_bins_with_bright_neighbors() {
+        let mut rgb = vec![[0.4, 0.4, 0.4]; 36];
+        rgb[2 * 6 + 3][0] = 0.9;
+        suppress_binned_impulses(&mut rgb, 6, 6);
+        assert_eq!(rgb[2 * 6 + 3][0], 0.9);
+    }
+
+    #[test]
+    fn keeps_faint_bins_below_the_floor() {
+        let mut rgb = vec![[0.001; 3]; 36];
+        rgb[2 * 6 + 3][2] = 0.03;
+        suppress_binned_impulses(&mut rgb, 6, 6);
+        assert_eq!(rgb[2 * 6 + 3][2], 0.03);
     }
 }
