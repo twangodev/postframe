@@ -1,3 +1,4 @@
+import { formatBytes } from './format-bytes.ts';
 import type { DevelopPhase } from './worker';
 import type { DevelopPreviewPhase, DocumentStatus, SmartMaskStatus } from './workspace.svelte';
 
@@ -112,9 +113,4 @@ export function backgroundTasks(
 
 function entry(key: string, name: string, task: ProgressTask): BackgroundTask {
 	return { key, name, kind: progressKind(task), task };
-}
-
-export function formatBytes(bytes: number) {
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

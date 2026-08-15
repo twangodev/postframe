@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import {
 	backgroundTasks,
-	formatBytes,
 	progressKind,
 	smartMaskTask,
 	viewportTask
@@ -133,11 +132,6 @@ test('smart mask errors surface regardless of phase', () => {
 			error: 'model failed'
 		}
 	);
-});
-
-test('formatBytes switches units at one megabyte', () => {
-	assert.equal(formatBytes(512), '0.5 KB');
-	assert.equal(formatBytes(3 * 1024 * 1024), '3.0 MB');
 });
 
 test('progressKind discriminates on percent presence', () => {

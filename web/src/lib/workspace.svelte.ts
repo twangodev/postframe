@@ -647,4 +647,4 @@ function defineStateAccessor<T extends object, K extends keyof T>(
 	});
 }
 
-export { formatBytes } from './progress-task';
+export { formatBytes } from './format-bytes';
