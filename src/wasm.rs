@@ -107,6 +107,16 @@ pub fn supported_raw_extensions() -> Vec<String> {
 }
 
 #[wasm_bindgen]
+pub fn encode_export_jpeg(
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    quality: u8,
+) -> Result<Vec<u8>, JsError> {
+    crate::export::jpeg(&rgba, width as usize, height as usize, quality).map_err(err)
+}
+
+#[wasm_bindgen]
 pub fn validate_raw(raw: Vec<u8>) -> Result<(), JsError> {
     let source = RawSource::new_from_shared_vec(Arc::new(raw));
     rawler::decode_dummy(&source)

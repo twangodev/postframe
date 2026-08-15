@@ -10,7 +10,7 @@ pub enum Error {
     Jpeg(#[from] zune_jpeg::errors::DecodeErrors),
     #[error("{0}")]
     Unsupported(&'static str),
-    #[error("ultra hdr encode failed: {0}")]
+    #[error("encode failed: {0}")]
     Encode(String),
     #[error("render cache is invalid: {0}")]
     Cache(&'static str),
