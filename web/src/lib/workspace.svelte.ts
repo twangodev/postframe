@@ -54,8 +54,15 @@ import {
 	type EditMask,
 	type MaskComponent,
 	type MaskKind,
+	type MaskOperation,
 	type NormalizedPoint
 } from './edit-document';
+import {
+	rasterizeBrushStrokes,
+	rasterizeLinearGradient,
+	rasterizeRadialGradient,
+	type MaskBrushStroke
+} from './mask-rasterizer';
 import { detectedSubjectName, type DetectedSubject } from './subject-detection';
 import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
 import { EditorHistory } from './editor-history';
@@ -145,6 +152,12 @@ interface FrameImport {
 	originals: OriginalWrite[];
 	rawFile: File | null;
 	displayFile: File | null;
+}
+
+interface MaskPaintContext {
+	photo: Photo;
+	preview: { width: number; height: number };
+	mask: EditMask;
 }
 
 const defaultAdjustments = {
@@ -746,7 +759,6 @@ export class WorkspaceState {
 			void this.createSemanticMask(kind);
 			return;
 		}
-		// TODO(WASM_TODOS.masks): rasterize brush and gradient mask components.
 		const mask = createEditMask(id('mask'), kind);
 		if (this.dispatchEditorCommand({ type: 'mask.create', mask })) {
 			this.selectMask(mask.id);
@@ -890,6 +902,100 @@ export class WorkspaceState {
 			this.failSmartMask(error);
 		}
 	};
+
+	paintBrushMask = async (stroke: MaskBrushStroke, operation: MaskOperation = 'add') => {
+		const target = this.paintableMask();
+		if (!target || stroke.points.length === 0) return;
+		const existing = target.mask.components.find(
+			(component): component is Extract<MaskComponent, { type: 'brush' }> =>
+				component.type === 'brush' && component.operation === operation
+		);
+		const strokes = [...(existing?.strokes ?? []), stroke];
+		await this.commitRasterizedComponent(
+			target,
+			{ id: existing?.id ?? id('component'), type: 'brush', operation, strokes, raster: null },
+			rasterizeBrushStrokes(strokes, target.preview.width, target.preview.height)
+		);
+	};
+
+	placeLinearMask = async (start: NormalizedPoint, end: NormalizedPoint) => {
+		const target = this.paintableMask('linear');
+		if (!target || (start.x === end.x && start.y === end.y)) return;
+		const existing = target.mask.components.find((component) => component.type === 'linear');
+		await this.commitRasterizedComponent(
+			target,
+			{
+				id: existing?.id ?? id('component'),
+				type: 'linear',
+				operation: existing?.operation ?? 'add',
+				start,
+				end,
+				raster: null
+			},
+			rasterizeLinearGradient({ start, end }, target.preview.width, target.preview.height)
+		);
+	};
+
+	placeRadialMask = async (center: NormalizedPoint, radius: number) => {
+		const target = this.paintableMask('radial');
+		if (!target || radius <= 0) return;
+		const existing = target.mask.components.find(
+			(component): component is Extract<MaskComponent, { type: 'radial' }> =>
+				component.type === 'radial'
+		);
+		const geometry = { center, radius: Math.min(1, radius), feather: existing?.feather ?? 0.5 };
+		await this.commitRasterizedComponent(
+			target,
+			{
+				id: existing?.id ?? id('component'),
+				type: 'radial',
+				operation: existing?.operation ?? 'add',
+				...geometry,
+				raster: null
+			},
+			rasterizeRadialGradient(geometry, target.preview.width, target.preview.height)
+		);
+	};
+
+	private paintableMask(kind?: MaskKind): MaskPaintContext | null {
+		if (!this.libraryService) {
+			this.failSmartMask(new Error('Mask painting needs local browser storage'));
+			return null;
+		}
+		const photo = this.selectedPhoto;
+		const preview = this.editPreview;
+		if (!photo || !this.canAdjustLight || !preview) {
+			this.failSmartMask(new Error('Photo is not ready for mask painting'));
+			return null;
+		}
+		const mask = this.masks.find(({ id }) => id === this.selectedMaskId);
+		if (!mask || (kind !== undefined && mask.kind !== kind)) return null;
+		return { photo, preview, mask };
+	}
+
+	private async commitRasterizedComponent(
+		{ photo, preview, mask }: MaskPaintContext,
+		component: MaskComponent,
+		alpha: Uint8Array
+	) {
+		const revision = ++this.smartMaskRevision;
+		try {
+			const raster = await this.persistMaskRaster(photo.id, component.id, {
+				width: preview.width,
+				height: preview.height,
+				alpha
+			});
+			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
+			this.dispatchEditorCommand({
+				type: 'mask.component.set',
+				maskId: mask.id,
+				component: { ...component, raster }
+			});
+			this.selectMask(mask.id);
+		} catch (error) {
+			this.failSmartMask(error);
+		}
+	}
 
 	toggleMask(maskId: string) {
 		const mask = this.masks.find((candidate) => candidate.id === maskId);
