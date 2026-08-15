@@ -48,6 +48,14 @@ export function exportFileName(photoName: string): string {
 	return `${stem || 'photograph'}-edit.jpg`;
 }
 
+export function exportMetadataSource<Handle>(
+	frames: readonly { raw: Handle; jpeg?: Handle }[]
+): Handle | null {
+	const reference = frames[Math.floor(frames.length / 2)];
+	if (!reference) return null;
+	return reference.jpeg ?? frames.find((frame) => frame.jpeg)?.jpeg ?? reference.raw;
+}
+
 export function exportTiles(width: number, height: number, tileSize: number): ExportRegion[] {
 	const tiles: ExportRegion[] = [];
 	for (let y = 0; y < height; y += tileSize) {

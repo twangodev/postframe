@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	cropRegion,
 	exportFileName,
+	exportMetadataSource,
 	exportProgressPercent,
 	exportTiles,
 	identityGeometry,
@@ -33,6 +34,25 @@ test('clamps out-of-range progress counts', () => {
 	assert.equal(exportProgressPercent({ phase: 'develop', completed: 12, total: 8 }), 80);
 	assert.equal(exportProgressPercent({ phase: 'develop', completed: -2, total: 8 }), 5);
 	assert.equal(exportProgressPercent({ phase: 'develop', completed: 0, total: 0 }), 5);
+});
+
+test('picks the metadata original from the reference frame', () => {
+	assert.equal(exportMetadataSource([]), null);
+	assert.equal(exportMetadataSource([{ raw: 'a.raf' }]), 'a.raf');
+	assert.equal(exportMetadataSource([{ raw: 'a.raf', jpeg: 'a.jpg' }]), 'a.jpg');
+	assert.equal(
+		exportMetadataSource([
+			{ raw: 'under.raf', jpeg: 'under.jpg' },
+			{ raw: 'mid.raf', jpeg: 'mid.jpg' },
+			{ raw: 'over.raf', jpeg: 'over.jpg' }
+		]),
+		'mid.jpg'
+	);
+	assert.equal(
+		exportMetadataSource([{ raw: 'under.raf', jpeg: 'under.jpg' }, { raw: 'mid.raf' }]),
+		'under.jpg'
+	);
+	assert.equal(exportMetadataSource([{ raw: 'under.raf' }, { raw: 'mid.raf' }]), 'mid.raf');
 });
 
 test('tiles the full image exactly once', () => {

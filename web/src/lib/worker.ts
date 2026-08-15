@@ -116,7 +116,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				break;
 			}
 			case 'export': {
-				const jpeg = exportDocument(activeDocument(), message);
+				const jpeg = await exportDocument(activeDocument(), message);
 				post({ id: message.id, type: 'export', jpeg }, [jpeg]);
 				break;
 			}

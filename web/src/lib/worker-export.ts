@@ -17,7 +17,7 @@ import type { ActiveDocument } from './worker-documents.ts';
 
 const EXPORT_TILE_SIZE = 1024;
 
-export function exportDocument(
+export async function exportDocument(
 	active: ActiveDocument,
 	request: Extract<Request, { type: 'export' }>
 ) {
@@ -33,8 +33,20 @@ export function exportDocument(
 	const framed = applyExportGeometry(developed, width, height, request.geometry);
 	progress('encode', 0, 1);
 	const quality = Math.min(100, Math.max(1, Math.round(request.quality)));
-	const jpeg = wasm.encode_export_jpeg(framed.rgba, framed.width, framed.height, quality);
+	const original = await originalBytes(active);
+	const jpeg = wasm.encode_export_jpeg(framed.rgba, framed.width, framed.height, quality, original);
 	return jpeg.buffer as ArrayBuffer;
+}
+
+async function originalBytes(active: ActiveDocument) {
+	const source = active.kind === 'display' ? active.source : active.metadataSource;
+	if (!source) return undefined;
+	try {
+		const file = await source.getFile();
+		return new Uint8Array(await file.arrayBuffer());
+	} catch {
+		return undefined;
+	}
 }
 
 function developExportImage(

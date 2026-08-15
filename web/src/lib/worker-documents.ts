@@ -1,5 +1,6 @@
 import type { LightSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
+import { exportMetadataSource } from './export.ts';
 import { RawWebGpuRenderer, type RawRenderProfile } from './webgpu-renderer.ts';
 import { post, type DevelopPhase, type Request } from './worker-protocol.ts';
 import { wasm } from './worker-wasm.ts';
@@ -18,10 +19,12 @@ export interface RawDocument {
 	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
 	lightLut: { key: string; values: Float32Array } | null;
+	metadataSource: FileSystemFileHandle | null;
 }
 
 export interface DisplayDocument {
 	kind: 'display';
+	source: FileSystemFileHandle;
 	bitmap: ImageBitmap;
 	preview: ImageData;
 	settings: LightSettings;
@@ -181,7 +184,8 @@ async function publishRawDocument(
 		kind: 'raw',
 		session,
 		renderer: await createRawRenderer(session),
-		lightLut: null
+		lightLut: null,
+		metadataSource: exportMetadataSource(message.frames)
 	};
 	const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
 	post(
@@ -240,6 +244,7 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 		const preview = displayPreview(bitmap, message.maxDimension);
 		const next = {
 			kind: 'display',
+			source: message.source,
 			bitmap,
 			preview,
 			settings: { ...message.settings },
