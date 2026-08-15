@@ -1,11 +1,8 @@
 use crate::color;
-use crate::{LightSettings, LightTransform, Merged, Rendered, Result};
+use crate::{LightSettings, LightTransform, Merged, Rendered, Result, parallel};
 
 #[cfg(feature = "wasm")]
 use crate::decode::linear::Linear;
-
-#[cfg(feature = "wasm-threads")]
-use rayon::prelude::*;
 
 const LOOKUP_LOW_BITS: u32 = 0x3680_0000;
 const LOOKUP_HIGH_BITS: u32 = 0x4280_0000;
@@ -103,20 +100,7 @@ impl PreparedRegion {
 
     #[cfg(feature = "wasm")]
     pub(crate) fn rgba32(&self) -> Vec<f32> {
-        #[cfg(feature = "wasm-threads")]
-        return self
-            .rgb
-            .par_iter()
-            .flat_map_iter(|pixel| [pixel[0], pixel[1], pixel[2], 1.0])
-            .collect();
-        #[cfg(not(feature = "wasm-threads"))]
-        {
-            let mut rgba = Vec::with_capacity(self.rgb.len() * 4);
-            for pixel in &self.rgb {
-                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 1.0]);
-            }
-            rgba
-        }
+        parallel::map_pixels(&self.rgb, |pixel| [pixel[0], pixel[1], pixel[2], 1.0])
     }
 }
 
@@ -184,12 +168,12 @@ impl MipLevel {
     fn from_source(source: &Linear, bin: usize) -> Self {
         let width = source.width.div_ceil(bin);
         let height = source.height.div_ceil(bin);
-        let mut rgb = Vec::with_capacity(width * height);
-        let mut clipped = Vec::with_capacity(width * height);
-        for output_y in 0..height {
+        let mut rgb = vec![[0.0f32; 3]; width * height];
+        let mut clipped = vec![false; width * height];
+        parallel::fill_zipped_rows(&mut rgb, &mut clipped, width, |output_y, rgb, clipped| {
             let start_y = output_y * bin;
             let end_y = (start_y + bin).min(source.height);
-            for output_x in 0..width {
+            for (output_x, (pixel, clipped)) in rgb.iter_mut().zip(clipped).enumerate() {
                 let start_x = output_x * bin;
                 let end_x = (start_x + bin).min(source.width);
                 let mut sum = [0.0; 3];
@@ -204,10 +188,10 @@ impl MipLevel {
                     }
                 }
                 let samples = ((end_x - start_x) * (end_y - start_y)) as f32;
-                rgb.push(sum.map(|value| value / samples));
-                clipped.push(any_clipped);
+                *pixel = sum.map(|value| value / samples);
+                *clipped = any_clipped;
             }
-        }
+        });
         Self {
             bin,
             image: Linear {
@@ -223,10 +207,10 @@ impl MipLevel {
         let bin = previous.bin * 2;
         let width = source_width.div_ceil(bin);
         let height = source_height.div_ceil(bin);
-        let mut rgb = Vec::with_capacity(width * height);
-        let mut clipped = Vec::with_capacity(width * height);
-        for output_y in 0..height {
-            for output_x in 0..width {
+        let mut rgb = vec![[0.0f32; 3]; width * height];
+        let mut clipped = vec![false; width * height];
+        parallel::fill_zipped_rows(&mut rgb, &mut clipped, width, |output_y, rgb, clipped| {
+            for (output_x, (pixel, clipped)) in rgb.iter_mut().zip(clipped).enumerate() {
                 let mut sum = [0.0; 3];
                 let mut samples = 0usize;
                 let mut any_clipped = false;
@@ -243,10 +227,10 @@ impl MipLevel {
                         any_clipped |= previous.image.clipped[index];
                     }
                 }
-                rgb.push(sum.map(|value| value / samples as f32));
-                clipped.push(any_clipped);
+                *pixel = sum.map(|value| value / samples as f32);
+                *clipped = any_clipped;
             }
-        }
+        });
         Self {
             bin,
             image: Linear {
@@ -324,21 +308,9 @@ impl Preview {
     pub fn render_adjusted(&self, merged: &Merged, light: &LightTransform, tone: bool) -> Vec<u8> {
         let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
-        #[cfg(feature = "wasm-threads")]
-        return merged
-            .radiance
-            .rgb
-            .par_iter()
-            .flat_map_iter(|pixel| self.render_pixel(*pixel, gain, white, tone, light))
-            .collect();
-        #[cfg(not(feature = "wasm-threads"))]
-        let mut rgb8 = Vec::with_capacity(merged.radiance.rgb.len() * 3);
-        #[cfg(not(feature = "wasm-threads"))]
-        for pixel in &merged.radiance.rgb {
-            rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
-        }
-        #[cfg(not(feature = "wasm-threads"))]
-        rgb8
+        parallel::map_pixels(&merged.radiance.rgb, |&pixel| {
+            self.render_pixel(pixel, gain, white, tone, light)
+        })
     }
 
     pub fn render_region(
@@ -367,18 +339,9 @@ impl Preview {
     ) -> Rendered {
         let gain = (2.0f32).powf(light.settings().exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
-        #[cfg(feature = "wasm-threads")]
-        let rgb8 = region
-            .rgb
-            .par_iter()
-            .flat_map_iter(|pixel| self.render_pixel(*pixel, gain, white, tone, light))
-            .collect();
-        #[cfg(not(feature = "wasm-threads"))]
-        let mut rgb8 = Vec::with_capacity(region.rgb.len() * 3);
-        #[cfg(not(feature = "wasm-threads"))]
-        for pixel in &region.rgb {
-            rgb8.extend(self.render_pixel(*pixel, gain, white, tone, light));
-        }
+        let rgb8 = parallel::map_pixels(&region.rgb, |&pixel| {
+            self.render_pixel(pixel, gain, white, tone, light)
+        });
 
         Rendered {
             width: region.width,
