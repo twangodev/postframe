@@ -3,6 +3,7 @@ use ultrahdr_rs::{Encoder, GainMapMetadata};
 use crate::bracket::Merged;
 use crate::color::WorkingSpace;
 use crate::error::{Error, Result};
+use crate::light::srgb_to_linear;
 
 pub struct UltraHdr {
     pub bytes: Vec<u8>,
@@ -85,15 +86,6 @@ fn container(base_jpeg: Vec<u8>, map_jpeg: Vec<u8>, boost_stops: f32) -> Result<
     encoder
         .encode_from_jpegs()
         .map_err(|e| Error::Encode(e.to_string()))
-}
-
-fn srgb_to_linear(coded: u8) -> f32 {
-    let c = coded as f32 / 255.0;
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
 }
 
 fn luma_709([r, g, b]: [f32; 3]) -> f32 {
