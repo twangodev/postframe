@@ -61,9 +61,11 @@ import {
 	type NormalizedPoint
 } from './edit-document';
 import {
+	paintRasterDimensions,
 	rasterizeBrushStrokes,
 	rasterizeLinearGradient,
 	rasterizeRadialGradient,
+	rasterizeStrokeOnto,
 	type MaskBrushStroke
 } from './mask-rasterizer';
 import { exportFileName, type ExportProgress } from './export';
@@ -73,7 +75,7 @@ import { EditorHistory } from './editor-history';
 import type { ImageScopeData } from './image-scope';
 import { SmartMaskClient } from './smart-mask-client';
 import type { MaskEdgeStroke, SmartMaskProgress, SmartMaskRaster } from './smart-mask';
-import type { MaskEdgeControlName } from './mask-edge-settings';
+import { isNeutralMaskEdge, type MaskEdgeControlName } from './mask-edge-settings';
 import {
 	composeMaskRasters,
 	maskDigest,
@@ -160,7 +162,7 @@ interface FrameImport {
 
 interface MaskPaintContext {
 	photo: Photo;
-	preview: { width: number; height: number };
+	paintDims: { width: number; height: number };
 	mask: EditMask;
 }
 
@@ -964,9 +966,31 @@ export class WorkspaceState {
 		await this.commitRasterizedComponent(
 			target,
 			{ id: existing?.id ?? id('component'), type: 'brush', operation, strokes, raster: null },
-			rasterizeBrushStrokes(strokes, target.preview.width, target.preview.height)
+			await this.brushStrokesRaster(target.paintDims, existing, stroke, strokes)
 		);
 	};
+
+	private async brushStrokesRaster(
+		paintDims: { width: number; height: number },
+		existing: Extract<MaskComponent, { type: 'brush' }> | undefined,
+		stroke: MaskBrushStroke,
+		strokes: MaskBrushStroke[]
+	) {
+		if (
+			existing?.raster &&
+			existing.raster.width === paintDims.width &&
+			existing.raster.height === paintDims.height &&
+			existing.strokes.length > 0
+		) {
+			try {
+				const base = await this.maskRaster(existing.raster);
+				return rasterizeStrokeOnto(base.alpha.slice(), stroke, paintDims.width, paintDims.height);
+			} catch {
+				// Fall through to a full re-rasterization.
+			}
+		}
+		return rasterizeBrushStrokes(strokes, paintDims.width, paintDims.height);
+	}
 
 	placeLinearMask = async (start: NormalizedPoint, end: NormalizedPoint) => {
 		const target = this.paintableMask('linear');
@@ -982,7 +1006,7 @@ export class WorkspaceState {
 				end,
 				raster: null
 			},
-			rasterizeLinearGradient({ start, end }, target.preview.width, target.preview.height)
+			rasterizeLinearGradient({ start, end }, target.paintDims.width, target.paintDims.height)
 		);
 	};
 
@@ -1003,7 +1027,7 @@ export class WorkspaceState {
 				...geometry,
 				raster: null
 			},
-			rasterizeRadialGradient(geometry, target.preview.width, target.preview.height)
+			rasterizeRadialGradient(geometry, target.paintDims.width, target.paintDims.height)
 		);
 	};
 
@@ -1020,19 +1044,19 @@ export class WorkspaceState {
 		}
 		const mask = this.masks.find(({ id }) => id === this.selectedMaskId);
 		if (!mask || (kind !== undefined && mask.kind !== kind)) return null;
-		return { photo, preview, mask };
+		return { photo, paintDims: paintRasterDimensions(preview.width, preview.height), mask };
 	}
 
 	private async commitRasterizedComponent(
-		{ photo, preview, mask }: MaskPaintContext,
+		{ photo, paintDims, mask }: MaskPaintContext,
 		component: MaskComponent,
 		alpha: Uint8Array
 	) {
 		const revision = ++this.smartMaskRevision;
 		try {
 			const raster = await this.persistMaskRaster(photo.id, component.id, {
-				width: preview.width,
-				height: preview.height,
+				width: paintDims.width,
+				height: paintDims.height,
 				alpha
 			});
 			if (revision !== this.smartMaskRevision || this.selectedPhoto?.id !== photo.id) return;
@@ -1729,14 +1753,15 @@ export class WorkspaceState {
 		if (cached?.key === key) return cached.raster;
 		const raster = await this.composedMaskRaster(mask);
 		if (!raster) return null;
-		const alpha = this.workerClient
-			? await this.workerClient.adjustMask({
-					width: raster.width,
-					height: raster.height,
-					alpha: raster.alpha.buffer as ArrayBuffer,
-					edge: mask.edge
-				})
-			: raster.alpha.slice();
+		const alpha =
+			this.workerClient && !isNeutralMaskEdge(mask.edge)
+				? await this.workerClient.adjustMask({
+						width: raster.width,
+						height: raster.height,
+						alpha: raster.alpha.buffer as ArrayBuffer,
+						edge: mask.edge
+					})
+				: raster.alpha.slice();
 		const adjusted = { width: raster.width, height: raster.height, alpha };
 		this.adjustedMaskRasterCache.set(mask.id, { key, raster: adjusted });
 		return adjusted;
