@@ -32,7 +32,7 @@ export class AdjustmentControls {
 	commitLight(control: LightControlName, value: number) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		if (!this.host.dispatchEditorCommand({ type: 'light.set', control, value })) {
-			this.develop.release();
+			this.releaseUnchangedPreview();
 		}
 	}
 
@@ -46,8 +46,14 @@ export class AdjustmentControls {
 	commitColor(control: ColorControlName, value: number) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		if (!this.host.dispatchEditorCommand({ type: 'color.set', control, value })) {
-			this.develop.release();
+			this.releaseUnchangedPreview();
 		}
+	}
+
+	private releaseUnchangedPreview() {
+		this.develop.release();
+		const adjustments = this.host.selectedPhoto?.edit.adjustments;
+		if (adjustments) this.develop.refreshScope(adjustments.light, adjustments.color);
 	}
 
 	previewMaskLight(control: LightControlName, value: number) {

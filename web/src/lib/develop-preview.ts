@@ -71,6 +71,13 @@ export class DevelopPreviewController {
 		this.refinementRevision = revision;
 	}
 
+	// Re-measures the scope at the committed settings after a preview that
+	// never became a document change.
+	refreshScope(settings: LightSettings, color: ColorSettings) {
+		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
+		this.scheduleScope(settings, color, this.host.selectedPhoto.id, true);
+	}
+
 	settle(revision: number) {
 		if (this.refinementRevision !== revision) return;
 		this.refinementRevision = null;

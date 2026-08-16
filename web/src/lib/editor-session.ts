@@ -118,12 +118,13 @@ export class EditorSession {
 	private apply(document: EditDocument, invalidation: EditorInvalidation) {
 		if (!this.host.selectedPhoto || document.photoId !== this.host.selectedPhoto.id) return;
 		const next = cloneEditDocument(document);
+		const current = this.host.selectedPhoto.edit.adjustments;
 		const globalAdjustmentsChanged =
 			LIGHT_CONTROL_NAMES.some(
-				(control) => this.host.renderSettings.settings[control] !== next.adjustments.light[control]
+				(control) => current.light[control] !== next.adjustments.light[control]
 			) ||
 			COLOR_CONTROL_NAMES.some(
-				(control) => this.host.renderSettings.color[control] !== next.adjustments.color[control]
+				(control) => current.color[control] !== next.adjustments.color[control]
 			);
 		this.host.selectedPhoto.edit = next;
 		this.host.masks = next.masks.map(cloneEditMask);
