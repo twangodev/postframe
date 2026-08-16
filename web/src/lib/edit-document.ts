@@ -290,6 +290,12 @@ function adjustmentsWithDefaultColor(adjustments: { light: LightSettings }) {
 	return { ...adjustments, color: defaultColorSettings() };
 }
 
+// Snapshot of the mask shape as v7 wrote it, so future mask changes cannot
+// redefine what a stored v7 document looks like.
+const versionSevenEditMaskSchema = versionSixEditMaskSchema.extend({
+	adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema })
+});
+
 const versionSevenEditDocumentSchema = z.object({
 	version: z.literal(7),
 	photoId: z.string().min(1),
@@ -300,7 +306,7 @@ const versionSevenEditDocumentSchema = z.object({
 		flipVertical: z.boolean(),
 		crop: normalizedCropSchema.nullable()
 	}),
-	masks: z.array(editMaskSchema)
+	masks: z.array(versionSevenEditMaskSchema)
 });
 
 const versionFourToSixEditDocumentSchema = z.object({
