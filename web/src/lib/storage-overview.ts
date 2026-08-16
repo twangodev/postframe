@@ -28,7 +28,7 @@ export class StorageOverview {
 				this.service?.storageUsage() ?? null
 			]);
 			this.host.browserStorageStatus = status;
-			this.host.browserStorageBreakdown = usage ? storageBreakdown(usage, status) : null;
+			this.host.browserStorageBreakdown = usage ? storageBreakdown(usage) : null;
 		} catch (error) {
 			this.host.browserStorageError = storageErrorMessage(error);
 			throw error;

@@ -7,39 +7,29 @@
 	let { breakdown }: { breakdown: StorageBreakdown } = $props();
 
 	const occupied = $derived(breakdown.segments.filter((segment) => segment.bytes > 0));
-	const scaleBytes = $derived(breakdown.quotaBytes ?? breakdown.originBytes ?? breakdown.appBytes);
-	const visibleFloor = $derived(scaleBytes * 0.0075);
-	const row = $derived(
-		Object.fromEntries(occupied.map(({ id, bytes }) => [id, Math.max(bytes, visibleFloor)]))
-	);
+	const visibleFloor = $derived(breakdown.totalBytes * 0.0075);
+	const widths = $derived(occupied.map((segment) => Math.max(segment.bytes, visibleFloor)));
+	const scaleBytes = $derived(widths.reduce((total, width) => total + width, 0));
+	const row = $derived(Object.fromEntries(occupied.map(({ id }, index) => [id, widths[index]])));
 	const series = $derived(occupied.map(({ id, color }) => ({ key: id, color })));
 	const regions = $derived.by(() => {
 		let offset = 0;
-		return occupied.map((segment) => {
-			const width = Math.max(segment.bytes, visibleFloor) / scaleBytes;
+		return occupied.map((segment, index) => {
+			const width = widths[index] / scaleBytes;
 			const region = { segment, left: offset, width };
 			offset += width;
 			return region;
 		});
 	});
-	const usedBytes = $derived(breakdown.originBytes ?? breakdown.appBytes);
 	const summary = $derived(
-		breakdown.freeBytes === null
-			? `${formatBytes(usedBytes)} used`
-			: `${formatBytes(usedBytes)} used · ${formatBytes(breakdown.freeBytes)} free of ${formatBytes(breakdown.quotaBytes)}`
+		breakdown.totalBytes === 0
+			? 'nothing stored yet'
+			: `${formatBytes(breakdown.totalBytes)} on this device`
 	);
 </script>
 
 <div class="relative">
-	<div
-		class="bg-subtle h-1.5 overflow-hidden rounded-full"
-		role="meter"
-		aria-label="Local storage used"
-		aria-valuemin={0}
-		aria-valuemax={scaleBytes}
-		aria-valuenow={usedBytes}
-		aria-valuetext={summary}
-	>
+	<div class="bg-subtle h-1.5 overflow-hidden rounded-full" aria-hidden="true">
 		{#if occupied.length > 0}
 			<BarChart
 				data={[row]}
@@ -48,6 +38,7 @@
 				orientation="horizontal"
 				seriesLayout="stack"
 				xDomain={[0, scaleBytes]}
+				xNice={false}
 				bandPadding={0}
 				axis={false}
 				grid={false}
@@ -74,8 +65,16 @@
 	</div>
 </div>
 <p class="text-muted mt-2 text-[11px]">{summary}</p>
-<ul class="sr-only">
-	{#each occupied as segment (segment.id)}
-		<li>{segment.label}: {formatBytes(segment.bytes)}</li>
-	{/each}
-</ul>
+{#if occupied.length > 0}
+	<ul aria-label="Storage breakdown" class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+		{#each occupied as segment (segment.id)}
+			<li class="flex items-center justify-between gap-3">
+				<span class="flex items-center gap-1.5">
+					<span class="size-1.5 rounded-full" style:background={segment.color}></span>
+					{segment.label}
+				</span>
+				<span class="text-muted font-mono">{formatBytes(segment.bytes)}</span>
+			</li>
+		{/each}
+	</ul>
+{/if}

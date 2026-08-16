@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('presents the storage meter with segment tooltips and no overflow', async ({ page }) => {
+test('presents the storage breakdown with segment tooltips and no overflow', async ({ page }) => {
 	await page.goto('/');
 	const dataUrl = await page.evaluate(() => {
 		const canvas = document.createElement('canvas');
@@ -25,12 +25,11 @@ test('presents the storage meter with segment tooltips and no overflow', async (
 	const dialog = page.getByRole('dialog');
 	await expect(dialog).toBeVisible();
 
-	const meter = dialog.getByRole('meter', { name: 'Local storage used' });
-	await expect(meter).toBeVisible({ timeout: 15_000 });
-	await expect(meter).toHaveAttribute('aria-valuemin', '0');
-	await expect(meter).toHaveAttribute('aria-valuemax', /^\d+$/);
-	await expect(meter).toHaveAttribute('aria-valuenow', /^\d+$/);
-	await expect(meter).toHaveAttribute('aria-valuetext', /used/);
+	const summary = dialog.getByText(/^\d+(\.\d+)? (B|KB|MB|GB|TB) on this device$/);
+	await expect(summary).toBeVisible({ timeout: 15_000 });
+	const legend = dialog.getByRole('list', { name: 'Storage breakdown' });
+	await expect(legend).toContainText('photos');
+	await expect(dialog.getByText(/other site data|free of/)).toHaveCount(0);
 
 	const segment = dialog.locator('[data-tooltip-trigger]').first();
 	await segment.hover();

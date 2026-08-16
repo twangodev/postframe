@@ -5,7 +5,6 @@ export type StorageDurability = 'persistent' | 'best-effort' | 'unavailable';
 
 export interface BrowserStorageCapabilities {
 	storage: boolean;
-	estimate: boolean;
 	persistence: boolean;
 }
 
@@ -13,8 +12,6 @@ export interface BrowserStorageStatus {
 	capabilities: BrowserStorageCapabilities;
 	durability: StorageDurability;
 	persisted: boolean | null;
-	originUsageBytes: number | null;
-	quotaBytes: number | null;
 	updatedAt: number;
 }
 
@@ -42,7 +39,6 @@ export class BrowserStorageService {
 
 		return {
 			storage,
-			estimate: typeof manager?.estimate === 'function',
 			persistence:
 				typeof manager?.persisted === 'function' && typeof manager?.persist === 'function'
 		};
@@ -55,17 +51,12 @@ export class BrowserStorageService {
 		}
 
 		try {
-			const [estimate, persisted] = await Promise.all([
-				capabilities.estimate ? navigator.storage.estimate() : null,
-				capabilities.persistence ? navigator.storage.persisted() : null
-			]);
+			const persisted = capabilities.persistence ? await navigator.storage.persisted() : null;
 
 			return {
 				capabilities,
 				durability: persisted === null ? 'unavailable' : persisted ? 'persistent' : 'best-effort',
 				persisted,
-				originUsageBytes: finiteBytes(estimate?.usage),
-				quotaBytes: finiteBytes(estimate?.quota),
 				updatedAt: Date.now()
 			};
 		} catch (error) {
@@ -108,12 +99,6 @@ function unavailableStatus(capabilities: BrowserStorageCapabilities): BrowserSto
 		capabilities,
 		durability: 'unavailable',
 		persisted: null,
-		originUsageBytes: null,
-		quotaBytes: null,
 		updatedAt: Date.now()
 	};
-}
-
-function finiteBytes(value: number | undefined) {
-	return Number.isFinite(value) && value !== undefined ? Math.max(0, value) : null;
 }

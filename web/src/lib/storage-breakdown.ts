@@ -19,13 +19,7 @@ const SEGMENT_DEFINITIONS = [
 	{ id: 'cache', label: 'render cache', color: 'var(--color-control-active)', folders: ['derived'] }
 ] as const satisfies readonly SegmentDefinition[];
 
-const OTHER_SEGMENT = {
-	id: 'other',
-	label: 'other site data',
-	color: 'var(--color-control-edge)'
-} as const;
-
-export type StorageSegmentId = (typeof SEGMENT_DEFINITIONS)[number]['id'] | typeof OTHER_SEGMENT.id;
+export type StorageSegmentId = (typeof SEGMENT_DEFINITIONS)[number]['id'];
 
 export interface StorageSegment {
 	id: StorageSegmentId;
@@ -34,40 +28,22 @@ export interface StorageSegment {
 	bytes: number;
 }
 
-export interface StorageEstimate {
-	originUsageBytes: number | null;
-	quotaBytes: number | null;
-}
-
 export interface StorageBreakdown {
 	segments: StorageSegment[];
-	appBytes: number;
-	originBytes: number | null;
-	quotaBytes: number | null;
-	freeBytes: number | null;
+	totalBytes: number;
 }
 
-export function storageBreakdown(usage: AssetUsage, estimate: StorageEstimate): StorageBreakdown {
+export function storageBreakdown(usage: AssetUsage): StorageBreakdown {
 	const segments: StorageSegment[] = SEGMENT_DEFINITIONS.map(({ id, label, color, folders }) => ({
 		id,
 		label,
 		color,
 		bytes: folders.reduce((total, folder) => total + usage[folder], 0)
 	}));
-	const appBytes = segments.reduce((total, { bytes }) => total + bytes, 0);
-	const { originUsageBytes: originBytes, quotaBytes } = estimate;
-
-	if (originBytes !== null) {
-		segments.push({ ...OTHER_SEGMENT, bytes: Math.max(0, originBytes - appBytes) });
-	}
 
 	return {
 		segments,
-		appBytes,
-		originBytes,
-		quotaBytes,
-		freeBytes:
-			originBytes !== null && quotaBytes !== null ? Math.max(0, quotaBytes - originBytes) : null
+		totalBytes: segments.reduce((total, { bytes }) => total + bytes, 0)
 	};
 }
 
