@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use crate::LightSettings;
+use crate::{ColorSettings, LightSettings};
 
 pub(super) fn err(error: crate::Error) -> JsError {
     JsError::new(&error.to_string())
@@ -34,5 +34,19 @@ pub(super) fn light_settings(
         shadows,
         whites,
         blacks,
+    }
+}
+
+pub(super) fn color_settings(
+    temperature: f32,
+    tint: f32,
+    vibrance: f32,
+    saturation: f32,
+) -> ColorSettings {
+    ColorSettings {
+        temperature,
+        tint,
+        vibrance,
+        saturation,
     }
 }

@@ -3,10 +3,12 @@ use std::sync::Arc;
 use lru::LruCache;
 use wasm_bindgen::prelude::*;
 
-use super::shared::{encode_jpeg, err, light_settings};
+use super::shared::{color_settings, encode_jpeg, err, light_settings};
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::{MipPyramid, PreparedRegion};
-use crate::{ImageScope, LightSettings, LightTransform, Merged, Preview};
+use crate::{
+    ColorSettings, ColorTransform, ImageScope, LightSettings, LightTransform, Merged, Preview,
+};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const MAX_PYRAMID_BIN: usize = 64;
@@ -136,6 +138,7 @@ impl ScopeFrame {
 
 struct CachedPreview {
     settings: LightSettings,
+    color: ColorSettings,
     tone: bool,
     rgb8: Vec<u8>,
 }
@@ -181,6 +184,7 @@ pub struct Session {
     pyramid: Option<MipPyramid>,
     tiles: TileCache,
     light: Option<LightTransform>,
+    color: Option<ColorTransform>,
     preview: Option<CachedPreview>,
 }
 
@@ -288,6 +292,7 @@ impl Session {
             pyramid: None,
             tiles: TileCache::new(TILE_CACHE_BUDGET),
             light: None,
+            color: None,
             preview: None,
         }
     }
@@ -385,10 +390,15 @@ impl Session {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
         tone: bool,
     ) -> Result<Vec<u8>, JsError> {
         let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        self.prepare_preview(settings, tone)?;
+        let color = color_settings(temperature, tint, vibrance, saturation);
+        self.prepare_preview(settings, color, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -406,10 +416,15 @@ impl Session {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
         tone: bool,
     ) -> Result<PreviewFrame, JsError> {
         let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        self.prepare_preview(settings, tone)?;
+        let color = color_settings(temperature, tint, vibrance, saturation);
+        self.prepare_preview(settings, color, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -436,11 +451,16 @@ impl Session {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
         tone: bool,
         sample_target: u32,
     ) -> Result<ScopeFrame, JsError> {
         let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        self.prepare_preview(settings, tone)?;
+        let color = color_settings(temperature, tint, vibrance, saturation);
+        self.prepare_preview(settings, color, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -476,11 +496,16 @@ impl Session {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
         tone: bool,
     ) -> Result<RenderedTile, JsError> {
         self.prepare_light(light_settings(
             exposure, contrast, highlights, shadows, whites, blacks,
         ))?;
+        self.prepare_color(color_settings(temperature, tint, vibrance, saturation))?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
@@ -514,7 +539,11 @@ impl Session {
             .light
             .as_ref()
             .ok_or(JsError::new("missing light transform"))?;
-        let rendered = lut.render_prepared_adjusted(merged, prepared, light, tone);
+        let color = self
+            .color
+            .as_ref()
+            .ok_or(JsError::new("missing color transform"))?;
+        let rendered = lut.render_prepared_adjusted(merged, prepared, light, color, tone);
         let mut rgba = Vec::with_capacity(rendered.width * rendered.height * 4);
         for pixel in rendered.rgb8.chunks_exact(3) {
             rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], u8::MAX]);
@@ -589,24 +618,41 @@ impl Session {
         Ok(())
     }
 
-    fn prepare_preview(&mut self, settings: LightSettings, tone: bool) -> Result<(), JsError> {
-        if self
-            .preview
-            .as_ref()
-            .is_some_and(|preview| preview.settings == settings && preview.tone == tone)
-        {
+    fn prepare_color(&mut self, settings: ColorSettings) -> Result<(), JsError> {
+        settings.validated().map_err(err)?;
+        if self.color.as_ref().map(ColorTransform::settings) != Some(settings) {
+            self.color = Some(ColorTransform::new(settings).map_err(err)?);
+        }
+        Ok(())
+    }
+
+    fn prepare_preview(
+        &mut self,
+        settings: LightSettings,
+        color: ColorSettings,
+        tone: bool,
+    ) -> Result<(), JsError> {
+        if self.preview.as_ref().is_some_and(|preview| {
+            preview.settings == settings && preview.color == color && preview.tone == tone
+        }) {
             return Ok(());
         }
         self.prepare_light(settings)?;
+        self.prepare_color(color)?;
         let light = self
             .light
             .as_ref()
             .ok_or(JsError::new("missing light transform"))?;
+        let grade = self
+            .color
+            .as_ref()
+            .ok_or(JsError::new("missing color transform"))?;
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         self.preview = Some(CachedPreview {
             settings,
+            color,
             tone,
-            rgb8: lut.render_adjusted(thumb, light, tone),
+            rgb8: lut.render_adjusted(thumb, light, grade, tone),
         });
         Ok(())
     }

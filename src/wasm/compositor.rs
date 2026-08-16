@@ -1,14 +1,15 @@
 use wasm_bindgen::prelude::*;
 
-use super::shared::{err, light_settings};
+use super::shared::{color_settings, err, light_settings};
 use crate::{
-    ColorSettings, DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion,
+    ColorTransform, DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion,
     LightTransform, LocalAdjustment, MaskPlane,
 };
 
 #[wasm_bindgen]
 pub struct DisplayTransform {
     light: LightTransform,
+    color: ColorTransform,
 }
 
 #[wasm_bindgen]
@@ -22,17 +23,24 @@ impl DisplayTransform {
         shadows: f32,
         whites: f32,
         blacks: f32,
+        temperature: f32,
+        tint: f32,
+        vibrance: f32,
+        saturation: f32,
     ) -> Result<DisplayTransform, JsError> {
         Ok(Self {
             light: LightTransform::new(light_settings(
                 exposure, contrast, highlights, shadows, whites, blacks,
             ))
             .map_err(err)?,
+            color: ColorTransform::new(color_settings(temperature, tint, vibrance, saturation))
+                .map_err(err)?,
         })
     }
 
     pub fn apply_rgba(&self, rgba: Vec<u8>) -> Result<Vec<u8>, JsError> {
-        self.light.apply_display_rgba8(&rgba).map_err(err)
+        let graded = self.color.apply_display_rgba8(&rgba).map_err(err)?;
+        self.light.apply_display_rgba8(&graded).map_err(err)
     }
 
     #[wasm_bindgen(getter)]
@@ -68,12 +76,7 @@ impl DevelopedTileCompositor {
     ) -> Result<DevelopedTileCompositor, JsError> {
         let mask = MaskPlane::new(mask_width as usize, mask_height as usize, mask).map_err(err)?;
         let light = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        let color = ColorSettings {
-            temperature,
-            tint,
-            vibrance,
-            saturation,
-        };
+        let color = color_settings(temperature, tint, vibrance, saturation);
         Ok(Self {
             compositor: CoreDevelopedTileCompositor,
             adjustment: LocalAdjustment::new(mask, light, color).map_err(err)?,
