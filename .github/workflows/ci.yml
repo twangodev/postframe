@@ -46,6 +46,8 @@ jobs:
         include:
           - name: library
             features: ""
+          - name: parallel
+            features: parallel
           - name: cli
             features: cli
     steps:
