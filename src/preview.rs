@@ -102,6 +102,11 @@ impl PreparedRegion {
     }
 
     #[cfg(feature = "wasm")]
+    pub(crate) fn dimensions(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    #[cfg(feature = "wasm")]
     pub(crate) fn rgba32(&self) -> Vec<f32> {
         parallel::map_pixels(&self.rgb, |pixel| [pixel[0], pixel[1], pixel[2], 1.0])
     }

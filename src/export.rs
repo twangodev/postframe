@@ -3,7 +3,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use img_parts::jpeg::Jpeg;
+use img_parts::jpeg::{Jpeg, JpegSegment, markers};
 use img_parts::{Bytes, ImageEXIF, ImageICC};
 use rawler::decoders::{RawDecodeParams, RawMetadata};
 use rawler::formats::tiff::{DirectoryWriter, TiffWriter};
@@ -17,8 +17,15 @@ const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 const TIFF_MAGIC: u16 = 42;
 const TIFF_HEADER_LEN: usize = 8;
 const ORIENTATION_TAG: u16 = 0x0112;
+const EXIF_IFD_POINTER_TAG: u16 = 0x8769;
+const PIXEL_X_DIMENSION_TAG: u16 = 0xA002;
+const PIXEL_Y_DIMENSION_TAG: u16 = 0xA003;
 const TIFF_SHORT: u16 = 3;
+const TIFF_LONG: u16 = 4;
 const UPRIGHT: u16 = 1;
+const SPLICE_SEGMENT_INDEX: usize = 3;
+const EXIF_SEGMENT_PREFIX: &[u8] = b"Exif\0\0";
+const ICC_SEGMENT_PREFIX: &[u8] = b"ICC_PROFILE\0";
 
 pub fn jpeg(rgba: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec<u8>> {
     if !(1..=100).contains(&quality) {
@@ -32,7 +39,11 @@ pub fn jpeg(rgba: &[u8], width: usize, height: usize, quality: u8) -> Result<Vec
             "jpeg dimensions exceed the format limit",
         ));
     }
-    if rgba.len() != width * height * 4 {
+    if width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(4))
+        != Some(rgba.len())
+    {
         return Err(Error::Unsupported("RGBA buffer size mismatch"));
     }
     let mut bytes = Vec::new();
@@ -58,12 +69,15 @@ pub fn jpeg_with_metadata(
     original: &[u8],
 ) -> Result<Vec<u8>> {
     let encoded = jpeg(rgba, width, height, quality)?;
-    Ok(MetadataSegments::from_original(original).spliced_into(encoded))
+    Ok(MetadataSegments::from_original(original)
+        .sized_for(width, height)
+        .spliced_into(encoded))
 }
 
 /// The metadata an export carries over from its original: the EXIF payload
-/// with its orientation forced upright, because exports render pixels
-/// already upright, and the reassembled ICC profile.
+/// with its orientation forced upright and its thumbnail IFD unlinked,
+/// because exports render pixels already upright, and the reassembled ICC
+/// profile.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MetadataSegments {
     pub exif: Option<Vec<u8>>,
@@ -96,6 +110,15 @@ impl MetadataSegments {
         }
     }
 
+    /// Stamp the export's pixel dimensions over the original capture's
+    /// Exif sizes.
+    pub fn sized_for(mut self, width: usize, height: usize) -> Self {
+        if let Some(exif) = self.exif.as_mut() {
+            refresh_exif_dimensions(exif, width as u32, height as u32);
+        }
+        self
+    }
+
     pub fn spliced_into(self, encoded: Vec<u8>) -> Vec<u8> {
         if self.exif.is_none() && self.icc.is_none() {
             return encoded;
@@ -104,6 +127,9 @@ impl MetadataSegments {
         let Ok(mut export) = Jpeg::from_bytes(encoded.clone()) else {
             return encoded.to_vec();
         };
+        if !accepts_spliced_segments(&export) {
+            return encoded.to_vec();
+        }
         if let Some(exif) = self.exif {
             export.set_exif(Some(exif.into()));
         }
@@ -112,6 +138,21 @@ impl MetadataSegments {
         }
         export.encoder().bytes().to_vec()
     }
+}
+
+// img-parts splices metadata at a fixed segment index and panics on JPEGs
+// too degenerate to hold it.
+fn accepts_spliced_segments(jpeg: &Jpeg) -> bool {
+    jpeg.segments()
+        .iter()
+        .filter(|segment| !carries_metadata(segment))
+        .count()
+        >= SPLICE_SEGMENT_INDEX
+}
+
+fn carries_metadata(segment: &JpegSegment) -> bool {
+    (segment.marker() == markers::APP1 && segment.contents().starts_with(EXIF_SEGMENT_PREFIX))
+        || (segment.marker() == markers::APP2 && segment.contents().starts_with(ICC_SEGMENT_PREFIX))
 }
 
 fn upright_exif(mut exif: Vec<u8>) -> Option<Vec<u8>> {
@@ -135,7 +176,43 @@ fn upright_exif(mut exif: Vec<u8>) -> Option<Vec<u8>> {
         order.put_u16(&mut exif, entry + 8, UPRIGHT)?;
         break;
     }
+    // The chained thumbnail IFD still pictures the unedited original.
+    let next_ifd = ifd.checked_add(2 + entries * 12)?;
+    order.put_u32(&mut exif, next_ifd, 0)?;
     Some(exif)
+}
+
+fn refresh_exif_dimensions(exif: &mut [u8], width: u32, height: u32) -> Option<()> {
+    let order = ByteOrder::of(exif)?;
+    let ifd = order.u32(exif, 4)? as usize;
+    let entries = order.u16(exif, ifd)? as usize;
+    let exif_ifd = (0..entries).find_map(|index| {
+        let entry = ifd.checked_add(2 + index * 12)?;
+        (order.u16(exif, entry)? == EXIF_IFD_POINTER_TAG
+            && order.u16(exif, entry + 2)? == TIFF_LONG)
+            .then(|| order.u32(exif, entry + 8))?
+    })? as usize;
+    let entries = order.u16(exif, exif_ifd)? as usize;
+    for index in 0..entries {
+        let entry = exif_ifd.checked_add(2 + index * 12)?;
+        let value = match order.u16(exif, entry)? {
+            PIXEL_X_DIMENSION_TAG => width,
+            PIXEL_Y_DIMENSION_TAG => height,
+            _ => continue,
+        };
+        if order.u32(exif, entry + 4)? != 1 {
+            continue;
+        }
+        match order.u16(exif, entry + 2)? {
+            TIFF_SHORT => {
+                order.put_u16(exif, entry + 8, value as u16)?;
+                order.put_u16(exif, entry + 10, 0)?;
+            }
+            TIFF_LONG => order.put_u32(exif, entry + 8, value)?,
+            _ => continue,
+        }
+    }
+    Some(())
 }
 
 fn raw_exif(original: &[u8]) -> Option<Vec<u8>> {
@@ -202,6 +279,15 @@ impl ByteOrder {
 
     fn put_u16(self, bytes: &mut [u8], at: usize, value: u16) -> Option<()> {
         let target = bytes.get_mut(at..at.checked_add(2)?)?;
+        target.copy_from_slice(&match self {
+            Self::Little => value.to_le_bytes(),
+            Self::Big => value.to_be_bytes(),
+        });
+        Some(())
+    }
+
+    fn put_u32(self, bytes: &mut [u8], at: usize, value: u32) -> Option<()> {
+        let target = bytes.get_mut(at..at.checked_add(4)?)?;
         target.copy_from_slice(&match self {
             Self::Little => value.to_le_bytes(),
             Self::Big => value.to_be_bytes(),
@@ -275,18 +361,34 @@ mod tests {
             });
         }
 
-        fn short_entries(mut self, tags: &[(u16, u16)]) -> Vec<u8> {
-            self.u16(tags.len() as u16);
-            for &(tag, value) in tags {
+        fn ifd(&mut self, entries: &[(u16, u16, u32)], next: u32) {
+            self.u16(entries.len() as u16);
+            for &(tag, kind, value) in entries {
                 self.u16(tag);
-                self.u16(TIFF_SHORT);
+                self.u16(kind);
                 self.u32(1);
-                self.u16(value);
-                self.u16(0);
+                if kind == TIFF_SHORT {
+                    self.u16(value as u16);
+                    self.u16(0);
+                } else {
+                    self.u32(value);
+                }
             }
-            self.u32(0);
+            self.u32(next);
+        }
+
+        fn short_entries(mut self, tags: &[(u16, u16)]) -> Vec<u8> {
+            let entries: Vec<(u16, u16, u32)> = tags
+                .iter()
+                .map(|&(tag, value)| (tag, TIFF_SHORT, u32::from(value)))
+                .collect();
+            self.ifd(&entries, 0);
             self.bytes
         }
+    }
+
+    fn ifd_size(entries: usize) -> usize {
+        2 + entries * 12 + 4
     }
 
     fn exif_payload(little: bool, orientation: Option<u16>) -> Vec<u8> {
@@ -335,6 +437,86 @@ mod tests {
     fn keeps_exif_without_an_orientation_tag_unchanged() {
         let payload = exif_payload(true, None);
         assert_eq!(upright_exif(payload.clone()), Some(payload));
+    }
+
+    fn read_next_ifd(payload: &[u8]) -> Option<u32> {
+        let order = ByteOrder::of(payload)?;
+        let ifd = order.u32(payload, 4)? as usize;
+        let entries = order.u16(payload, ifd)? as usize;
+        order.u32(payload, ifd + 2 + entries * 12)
+    }
+
+    #[test]
+    fn unlinks_the_original_thumbnail_ifd_in_both_byte_orders() {
+        for little in [true, false] {
+            let mut fixture = TiffFixture::new(little);
+            let thumbnail_ifd = (TIFF_HEADER_LEN + ifd_size(2)) as u32;
+            fixture.ifd(
+                &[(0x0128, TIFF_SHORT, 2), (ORIENTATION_TAG, TIFF_SHORT, 6)],
+                thumbnail_ifd,
+            );
+            fixture.ifd(&[(0x0103, TIFF_SHORT, 6)], 0);
+            let patched = upright_exif(fixture.bytes).unwrap();
+            assert_eq!(read_orientation(&patched), Some(UPRIGHT));
+            assert_eq!(read_next_ifd(&patched), Some(0));
+        }
+    }
+
+    fn read_exif_dimension(payload: &[u8], tag: u16) -> Option<u32> {
+        let order = ByteOrder::of(payload)?;
+        let ifd = order.u32(payload, 4)? as usize;
+        let entries = order.u16(payload, ifd)? as usize;
+        let exif_ifd = (0..entries)
+            .map(|index| ifd + 2 + index * 12)
+            .find(|&entry| order.u16(payload, entry) == Some(EXIF_IFD_POINTER_TAG))
+            .and_then(|entry| order.u32(payload, entry + 8))? as usize;
+        let entries = order.u16(payload, exif_ifd)? as usize;
+        let entry = (0..entries)
+            .map(|index| exif_ifd + 2 + index * 12)
+            .find(|&entry| order.u16(payload, entry) == Some(tag))?;
+        match order.u16(payload, entry + 2)? {
+            TIFF_SHORT => order.u16(payload, entry + 8).map(u32::from),
+            TIFF_LONG => order.u32(payload, entry + 8),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn stamps_export_dimensions_over_original_exif_sizes() {
+        for little in [true, false] {
+            let mut fixture = TiffFixture::new(little);
+            let exif_ifd = (TIFF_HEADER_LEN + ifd_size(2)) as u32;
+            fixture.ifd(
+                &[
+                    (ORIENTATION_TAG, TIFF_SHORT, 6),
+                    (EXIF_IFD_POINTER_TAG, TIFF_LONG, exif_ifd),
+                ],
+                0,
+            );
+            fixture.ifd(
+                &[
+                    (PIXEL_X_DIMENSION_TAG, TIFF_SHORT, 4032),
+                    (PIXEL_Y_DIMENSION_TAG, TIFF_LONG, 3024),
+                ],
+                0,
+            );
+            let original = original_with(Some(fixture.bytes), None);
+            let export = jpeg_with_metadata(&export_pixels(), 2, 2, 90, &original).unwrap();
+            let exif = Jpeg::from_bytes(export.into()).unwrap().exif().unwrap();
+            assert_eq!(read_orientation(&exif), Some(UPRIGHT));
+            assert_eq!(read_exif_dimension(&exif, PIXEL_X_DIMENSION_TAG), Some(2));
+            assert_eq!(read_exif_dimension(&exif, PIXEL_Y_DIMENSION_TAG), Some(2));
+        }
+    }
+
+    #[test]
+    fn splicing_into_degenerate_jpegs_returns_them_unchanged() {
+        let minimal = vec![0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 0x00, 0xFF, 0xD9];
+        let segments = MetadataSegments {
+            exif: Some(exif_payload(true, Some(1))),
+            icc: Some(vec![0x11; 8]),
+        };
+        assert_eq!(segments.spliced_into(minimal.clone()), minimal);
     }
 
     #[test]

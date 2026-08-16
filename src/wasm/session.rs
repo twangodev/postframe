@@ -591,10 +591,11 @@ impl Session {
             .tiles
             .get(&region)
             .ok_or(JsError::new("unable to prepare tile"))?;
+        let (tile_width, tile_height) = prepared.dimensions();
         Ok(LinearTile {
             rgba: prepared.rgba32(),
-            width: width.div_ceil(bin) as u32,
-            height: height.div_ceil(bin) as u32,
+            width: tile_width as u32,
+            height: tile_height as u32,
         })
     }
 
