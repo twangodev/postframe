@@ -78,10 +78,16 @@ export interface SmartMaskRaster {
 export type SmartMaskPhase =
 	'idle' | 'downloading' | 'loading' | 'encoding' | 'ready' | 'refining' | 'error';
 
+export interface SmartMaskTransfer {
+	bytesPerSecond: number;
+	secondsLeft: number | null;
+}
+
 export interface SmartMaskProgress {
 	phase: SmartMaskPhase;
 	progress: number | null;
 	detail: string;
+	transfer?: SmartMaskTransfer | null;
 }
 
 export type SmartMaskRequest =

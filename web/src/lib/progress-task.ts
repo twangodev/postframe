@@ -1,4 +1,6 @@
 import { formatBytes } from './format-bytes.ts';
+import { formatDuration } from './format-duration.ts';
+import type { SmartMaskTransfer } from './smart-mask.ts';
 import type { DevelopPhase } from './worker';
 import type { DevelopPreviewPhase, DocumentStatus, SmartMaskStatus } from './workspace.svelte';
 
@@ -79,7 +81,17 @@ export function smartMaskTask(status: SmartMaskStatus): ProgressTask | null {
 		return { label: status.detail, detail: null, progress: null, error: status.error };
 	}
 	if (!SMART_MASK_WORKING.has(status.phase)) return null;
-	return { label: status.detail, detail: null, progress: status.progress, error: null };
+	return {
+		label: status.detail,
+		detail: status.transfer ? transferDetail(status.transfer) : null,
+		progress: status.progress,
+		error: null
+	};
+}
+
+function transferDetail({ bytesPerSecond, secondsLeft }: SmartMaskTransfer) {
+	const rate = `${formatBytes(bytesPerSecond)}/s`;
+	return secondsLeft === null ? rate : `${rate} · ${formatDuration(secondsLeft)} left`;
 }
 
 export type ProgressKind = 'realtime' | 'infinite';

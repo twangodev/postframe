@@ -122,6 +122,35 @@ test('smart mask working phases pass detail and percent through', () => {
 	});
 });
 
+test('downloading shows the transfer rate and time left', () => {
+	const task = smartMaskTask(
+		mask({
+			phase: 'downloading',
+			progress: 41,
+			detail: 'object model',
+			transfer: { bytesPerSecond: 12.4 * 1024 * 1024, secondsLeft: 8.4 }
+		})
+	);
+	assert.deepEqual(task, {
+		label: 'object model',
+		detail: '12 MB/s · 8 s left',
+		progress: 41,
+		error: null
+	});
+});
+
+test('downloading shows only the rate when time left is unknown', () => {
+	const task = smartMaskTask(
+		mask({
+			phase: 'downloading',
+			progress: 0,
+			detail: 'sky model',
+			transfer: { bytesPerSecond: 0, secondsLeft: null }
+		})
+	);
+	assert.equal(task?.detail, '0 B/s');
+});
+
 test('smart mask errors surface regardless of phase', () => {
 	assert.deepEqual(
 		smartMaskTask(mask({ phase: 'error', detail: 'model failed', error: 'model failed' })),

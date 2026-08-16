@@ -14,8 +14,10 @@ import {
 	SMART_MASK_PACK,
 	type SmartMaskDevice,
 	type SmartMaskRequest,
-	type SmartMaskResponse
+	type SmartMaskResponse,
+	type SmartMaskTransfer
 } from './smart-mask.ts';
+import { TransferRate } from './transfer-rate.ts';
 
 type SubjectPipeline = Awaited<ReturnType<typeof pipeline<'background-removal'>>>;
 type DetectorPipeline = Awaited<ReturnType<typeof pipeline<'object-detection'>>>;
@@ -306,29 +308,31 @@ async function loadModel<Model>(
 
 const loadObjectModel = (requestId: number) =>
 	loadModel(objectSlot, (device) =>
-		Sam2ObjectRuntime.load(SMART_MASK_PACK.object, device, (progress) =>
-			reportDownload(requestId, progress)
+		Sam2ObjectRuntime.load(
+			SMART_MASK_PACK.object,
+			device,
+			downloadReporter(requestId, 'object model')
 		)
 	);
 
 const loadSubjectModel = (requestId: number) =>
 	loadModel(subjectSlot, (device) =>
 		pipeline('background-removal', SMART_MASK_PACK.subject.id, {
-			...modelOptions(SMART_MASK_PACK.subject, device, requestId)
+			...modelOptions(SMART_MASK_PACK.subject, device, requestId, 'subject model')
 		})
 	);
 
 const loadDetectorModel = (requestId: number) =>
 	loadModel(detectorSlot, (device) =>
 		pipeline('object-detection', SMART_MASK_PACK.detector.id, {
-			...modelOptions(SMART_MASK_PACK.detector, device, requestId)
+			...modelOptions(SMART_MASK_PACK.detector, device, requestId, 'detection model')
 		})
 	);
 
 const loadSkyModel = (requestId: number) =>
 	loadModel(skySlot, (device) =>
 		pipeline('image-segmentation', SMART_MASK_PACK.sky.id, {
-			...modelOptions(SMART_MASK_PACK.sky, device, requestId),
+			...modelOptions(SMART_MASK_PACK.sky, device, requestId, 'sky model'),
 			// onnxruntime's layer-norm fusion rejects this fp16 export, so stay at basic optimization.
 			session_options: { graphOptimizationLevel: 'basic' }
 		})
@@ -348,22 +352,24 @@ async function fallBackObjectModel(requestId: number, active: PreparedImage) {
 function modelOptions(
 	model: (typeof SMART_MASK_PACK)['subject'],
 	device: SmartMaskDevice,
-	requestId: number
+	requestId: number,
+	label: string
 ) {
 	return {
 		revision: model.revision,
 		dtype: model.dtype,
 		device,
-		progress_callback: (progress: ProgressInfo) => reportDownload(requestId, progress)
+		progress_callback: downloadReporter(requestId, label)
 	} as const;
 }
 
-function reportDownload(requestId: number, progress: ProgressInfo) {
-	if (progress.status === 'progress_total') {
-		postProgress(requestId, 'downloading', progress.progress, 'object model');
-	} else if (progress.status === 'progress') {
-		postProgress(requestId, 'downloading', progress.progress, progress.file);
-	}
+function downloadReporter(requestId: number, label: string) {
+	const rate = new TransferRate();
+	return (progress: ProgressInfo) => {
+		if (progress.status !== 'progress_total') return;
+		const transfer = rate.sample(progress.loaded, progress.total);
+		postProgress(requestId, 'downloading', progress.progress, label, transfer);
+	};
 }
 
 function postMask(
@@ -395,9 +401,10 @@ function postProgress(
 	id: number,
 	phase: Extract<SmartMaskResponse, { type: 'progress' }>['phase'],
 	progress: number | null,
-	detail: string
+	detail: string,
+	transfer: SmartMaskTransfer | null = null
 ) {
-	post({ id, type: 'progress', phase, progress, detail });
+	post({ id, type: 'progress', phase, progress, detail, transfer });
 }
 
 function preparedImage(photoId: string) {
