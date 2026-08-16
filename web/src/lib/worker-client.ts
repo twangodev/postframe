@@ -8,7 +8,7 @@ import type {
 	Response
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
-import type { LightSettings } from './develop-settings.ts';
+import type { ColorSettings, LightSettings } from './develop-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
 import {
 	RenderPerformanceRecorder,
@@ -36,6 +36,7 @@ interface PendingRequest {
 
 export interface ExportPhotoRequest {
 	settings: LightSettings;
+	color: ColorSettings;
 	masks: DevelopedMaskInput[];
 	geometry: ExportGeometry;
 	quality: number;
@@ -48,6 +49,7 @@ interface PreviewWaiter {
 
 interface QueuedPreview {
 	settings: LightSettings;
+	color: ColorSettings;
 	tone: boolean;
 	waiters: PreviewWaiter[];
 }
@@ -113,10 +115,19 @@ export class PostframeWorkerClient {
 		frames: RawFrameHandleInput[],
 		cache: FileSystemFileHandle,
 		maxDimension: number,
-		settings: LightSettings
+		settings: LightSettings,
+		color: ColorSettings
 	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open-raw', frames, cache, maxDimension, settings: { ...settings } }),
+			(id) => ({
+				id,
+				type: 'open-raw',
+				frames,
+				cache,
+				maxDimension,
+				settings: { ...settings },
+				color: { ...color }
+			}),
 			'opened'
 		);
 		return openedDocument(response);
@@ -125,17 +136,25 @@ export class PostframeWorkerClient {
 	async openDisplayDocument(
 		source: FileSystemFileHandle,
 		maxDimension: number,
-		settings: LightSettings
+		settings: LightSettings,
+		color: ColorSettings
 	) {
 		const response = await this.send(
-			(id) => ({ id, type: 'open-display', source, maxDimension, settings: { ...settings } }),
+			(id) => ({
+				id,
+				type: 'open-display',
+				source,
+				maxDimension,
+				settings: { ...settings },
+				color: { ...color }
+			}),
 			'opened'
 		);
 		return openedDocument(response);
 	}
 
 	async renderTile(tile: RenderTileRequest, signal?: AbortSignal) {
-		const request = { ...tile, settings: { ...tile.settings } };
+		const request = { ...tile, settings: { ...tile.settings }, color: { ...tile.color } };
 		const response = await this.send(
 			(id) => ({ id, type: 'tile', ...request }),
 			'tile',
@@ -171,7 +190,7 @@ export class PostframeWorkerClient {
 		return new Uint8Array(response.alpha);
 	}
 
-	preview(settings: LightSettings, tone: boolean) {
+	preview(settings: LightSettings, color: ColorSettings, tone: boolean) {
 		return new Promise<RenderedPreview>((resolve, reject) => {
 			if (this.destroyed) {
 				reject(new Error('Postframe worker closed'));
@@ -180,18 +199,26 @@ export class PostframeWorkerClient {
 			const waiter = { resolve, reject };
 			if (this.queuedPreview) {
 				this.queuedPreview.settings = { ...settings };
+				this.queuedPreview.color = { ...color };
 				this.queuedPreview.tone = tone;
 				this.queuedPreview.waiters.push(waiter);
 			} else {
-				this.queuedPreview = { settings: { ...settings }, tone, waiters: [waiter] };
+				this.queuedPreview = { settings: { ...settings }, color: { ...color }, tone, waiters: [waiter] };
 			}
 			this.pumpPreview();
 		});
 	}
 
-	async scope(settings: LightSettings, tone: boolean, sampleTarget: number) {
+	async scope(settings: LightSettings, color: ColorSettings, tone: boolean, sampleTarget: number) {
 		const response = await this.send(
-			(id) => ({ id, type: 'scope', settings: { ...settings }, tone, sampleTarget }),
+			(id) => ({
+				id,
+				type: 'scope',
+				settings: { ...settings },
+				color: { ...color },
+				tone,
+				sampleTarget
+			}),
 			'scope'
 		);
 		return imageScopeFromTransfer(response.scope);
@@ -209,6 +236,7 @@ export class PostframeWorkerClient {
 				id,
 				type: 'export',
 				settings: { ...request.settings },
+				color: { ...request.color },
 				masks,
 				geometry: {
 					...request.geometry,
@@ -314,7 +342,13 @@ export class PostframeWorkerClient {
 		this.queuedPreview = null;
 		this.previewInFlight = true;
 		void this.send(
-			(id) => ({ id, type: 'preview', settings: preview.settings, tone: preview.tone }),
+			(id) => ({
+				id,
+				type: 'preview',
+				settings: preview.settings,
+				color: preview.color,
+				tone: preview.tone
+			}),
 			'preview'
 		)
 			.then((response) => {

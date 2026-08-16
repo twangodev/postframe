@@ -3,7 +3,13 @@ import type { WasmSession } from './wasm-runtime';
 import type { LinearTileSource } from './webgpu-renderer.ts';
 import { wasm } from './worker-wasm.ts';
 import type { RenderTileRequest } from './worker-protocol.ts';
-import { canvasContext, displayTransform, imageData, lightArguments } from './worker-render.ts';
+import {
+	canvasContext,
+	colorArguments,
+	displayTransform,
+	imageData,
+	lightArguments
+} from './worker-render.ts';
 import { compositeDevelopedTile, hasMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument, RawDocument } from './worker-documents.ts';
 
@@ -38,6 +44,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 					key,
 					source,
 					request.settings,
+					request.color,
 					request.tone,
 					rawLightLut(active, request.settings)
 				);
@@ -55,6 +62,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			request.height,
 			request.bin,
 			...lightArguments(request.settings),
+			...colorArguments(request.color),
 			request.tone
 		);
 		try {
@@ -83,7 +91,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 		height
 	);
 	const pixels = context.getImageData(0, 0, width, height);
-	const adjusted = displayTransform(active, request.settings).apply_rgba(
+	const adjusted = displayTransform(active, request.settings, request.color).apply_rgba(
 		new Uint8Array(pixels.data)
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
@@ -109,7 +117,11 @@ function rawLightLut(active: RawDocument, settings: LightSettings) {
 		settings.highlights,
 		settings.shadows,
 		settings.whites,
-		settings.blacks
+		settings.blacks,
+		0,
+		0,
+		0,
+		0
 	);
 	try {
 		const values = transform.luminance_lut;

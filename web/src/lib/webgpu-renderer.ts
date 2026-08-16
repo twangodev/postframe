@@ -1,4 +1,4 @@
-import type { LightSettings } from './develop-settings.ts';
+import type { ColorSettings, LightSettings } from './develop-settings.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
@@ -53,7 +53,7 @@ export class RawWebGpuRenderer {
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
 		});
 		this.uniformBuffer = device.createBuffer({
-			size: 48,
+			size: 64,
 			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
 		});
 		void device.lost.then(() => {
@@ -92,6 +92,7 @@ export class RawWebGpuRenderer {
 		key: string,
 		source: LinearTileSource | null,
 		settings: LightSettings,
+		color: ColorSettings,
 		tone: boolean,
 		luminanceLut: Float32Array
 	) {
@@ -99,7 +100,7 @@ export class RawWebGpuRenderer {
 		const cached = source ? this.uploadSource(key, source) : this.touchSource(key);
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
 		this.updateLight(settings, luminanceLut);
-		this.updateUniforms(cached, settings, tone);
+		this.updateUniforms(cached, settings, color, tone);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
 		const context = canvas.getContext('webgpu') as unknown as GPUCanvasContext | null;
@@ -208,8 +209,13 @@ export class RawWebGpuRenderer {
 		this.lightKey = key;
 	}
 
-	private updateUniforms(source: CachedSource, settings: LightSettings, tone: boolean) {
-		const bytes = new ArrayBuffer(48);
+	private updateUniforms(
+		source: CachedSource,
+		settings: LightSettings,
+		color: ColorSettings,
+		tone: boolean
+	) {
+		const bytes = new ArrayBuffer(64);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
 		integers[0] = source.width;
@@ -219,8 +225,12 @@ export class RawWebGpuRenderer {
 		integers[4] = this.profile.transferLutLength;
 		integers[5] = tone ? 1 : 0;
 		integers[6] = lightIdentity(settings) ? 1 : 0;
+		integers[7] = colorIdentity(color) ? 1 : 0;
 		floats[8] = 2 ** settings.exposure;
 		floats[9] = Math.max(1, this.profile.radianceMax * floats[8]);
+		floats[10] = 1 + color.saturation / 100;
+		floats[11] = color.vibrance / 100;
+		floats.set(balanceGains(color), 12);
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
 }
@@ -242,6 +252,24 @@ function lightIdentity(settings: LightSettings) {
 	);
 }
 
+function colorIdentity(color: ColorSettings) {
+	return (
+		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
+	);
+}
+
+const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
+const MAX_TEMPERATURE_SHIFT_STOPS = 0.5;
+const MAX_TINT_SHIFT_STOPS = 0.5;
+
+function balanceGains(color: ColorSettings) {
+	const warmth = (color.temperature / 100) * MAX_TEMPERATURE_SHIFT_STOPS;
+	const magenta = (color.tint / 100) * MAX_TINT_SHIFT_STOPS;
+	const gains = [2 ** warmth, 2 ** -magenta, 2 ** -warmth];
+	const luminance = gains.reduce((total, gain, channel) => total + gain * LUMINANCE_WEIGHTS[channel], 0);
+	return gains.map((gain) => gain / luminance);
+}
+
 function lightKey(settings: LightSettings) {
 	return [
 		settings.contrast,
@@ -260,10 +288,12 @@ struct Params {
   transfer_lut_length: u32,
   tone: u32,
   light_identity: u32,
-  padding: u32,
+  color_identity: u32,
   exposure_gain: f32,
   white: f32,
-  padding_tail: vec2<u32>,
+  saturation_scale: f32,
+  vibrance_amount: f32,
+  balance: vec3<f32>,
 }
 
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -304,11 +334,30 @@ fn encode_srgb(linear: vec3<f32>) -> vec3<f32> {
   return select(high, low, clamped <= vec3<f32>(0.0031308));
 }
 
-fn apply_light(encoded: vec3<f32>) -> vec3<f32> {
-  if (params.light_identity == 1u) {
+fn apply_color(linear: vec3<f32>) -> vec3<f32> {
+  let balanced = linear * params.balance;
+  let maximum = max(balanced.r, max(balanced.g, balanced.b));
+  let minimum = min(balanced.r, min(balanced.g, balanced.b));
+  let fraction = select(0.0, clamp((maximum - minimum) / maximum, 0.0, 1.0), maximum > 0.0);
+  let scale = max(params.saturation_scale * (1.0 + params.vibrance_amount * (1.0 - fraction)), 0.0);
+  if (scale == 1.0) {
+    return balanced;
+  }
+  let luminance = dot(balanced, vec3<f32>(0.2126, 0.7152, 0.0722));
+  return max(vec3<f32>(luminance) + (balanced - vec3<f32>(luminance)) * scale, vec3<f32>(0.0));
+}
+
+fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
+  if (params.light_identity == 1u && params.color_identity == 1u) {
     return encoded;
   }
-  let linear = decode_srgb(encoded);
+  var linear = decode_srgb(encoded);
+  if (params.color_identity != 1u) {
+    linear = apply_color(linear);
+  }
+  if (params.light_identity == 1u) {
+    return encode_srgb(linear);
+  }
   let luminance = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722));
   let position = clamp(luminance, 0.0, 1.0) * f32(arrayLength(&light_lut) - 1u);
   let index = min(u32(position), arrayLength(&light_lut) - 2u);
@@ -351,6 +400,6 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     camera_lookup(1u, mixed.g),
     camera_lookup(2u, mixed.b)
   ) / 255.0, vec3<f32>(0.0), vec3<f32>(1.0));
-  return vec4<f32>(apply_light(encoded), 1.0);
+  return vec4<f32>(apply_adjustments(encoded), 1.0);
 }
 `;

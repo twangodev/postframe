@@ -88,7 +88,12 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				post({ id: message.id, type: 'masks-set' });
 				break;
 			case 'preview': {
-				const preview = await renderPreviewImage(activeDocument(), message.settings, message.tone);
+				const preview = await renderPreviewImage(
+					activeDocument(),
+					message.settings,
+					message.color,
+					message.tone
+				);
 				post(
 					{
 						id: message.id,
@@ -104,6 +109,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				const scope = renderScope(
 					activeDocument(),
 					message.settings,
+					message.color,
 					message.tone,
 					message.sampleTarget
 				);

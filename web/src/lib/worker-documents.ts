@@ -1,4 +1,4 @@
-import type { LightSettings } from './develop-settings';
+import type { ColorSettings, LightSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
 import { RawWebGpuRenderer, type RawRenderProfile } from './webgpu-renderer.ts';
@@ -7,6 +7,7 @@ import { wasm } from './worker-wasm.ts';
 import { measure, measureAsync } from './worker-performance.ts';
 import { fileSize, readFile, writeFileHandle } from './worker-files.ts';
 import {
+	colorArguments,
 	displayPreview,
 	lightArguments,
 	renderDisplayPreview,
@@ -28,6 +29,7 @@ export interface DisplayDocument {
 	bitmap: ImageBitmap;
 	preview: ImageData;
 	settings: LightSettings;
+	color: ColorSettings;
 	light: WasmDisplayTransform;
 	adjusted: Uint8Array | null;
 }
@@ -187,7 +189,9 @@ async function publishRawDocument(
 		lightLut: null,
 		metadataSource: exportMetadataSource(message.frames)
 	};
-	const preview = measure('preview', () => renderRawPreview(session, message.settings, true));
+	const preview = measure('preview', () =>
+		renderRawPreview(session, message.settings, message.color, true)
+	);
 	post(
 		{
 			id: message.id,
@@ -238,7 +242,10 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 		() => createImageBitmap(source, { imageOrientation: 'from-image' }),
 		source.name
 	);
-	const light = new wasm.DisplayTransform(...lightArguments(message.settings));
+	const light = new wasm.DisplayTransform(
+		...lightArguments(message.settings),
+		...colorArguments(message.color)
+	);
 	try {
 		postDisplayProgress(message, 'decoding', source.size, source.size);
 		const preview = displayPreview(bitmap, message.maxDimension);
@@ -248,13 +255,14 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 			bitmap,
 			preview,
 			settings: { ...message.settings },
+			color: { ...message.color },
 			light,
 			adjusted: null
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);
 		const rendered = await measureAsync('preview', () =>
-			renderDisplayPreview(next, message.settings)
+			renderDisplayPreview(next, message.settings, message.color)
 		);
 		post(
 			{

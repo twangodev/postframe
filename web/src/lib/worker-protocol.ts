@@ -62,6 +62,7 @@ export interface RenderTileRequest {
 	height: number;
 	bin: number;
 	settings: LightSettings;
+	color: ColorSettings;
 	tone: boolean;
 }
 
@@ -97,6 +98,7 @@ export type Request =
 			cache: FileSystemFileHandle;
 			maxDimension: number;
 			settings: LightSettings;
+			color: ColorSettings;
 	  }
 	| {
 			id: number;
@@ -104,15 +106,17 @@ export type Request =
 			source: FileSystemFileHandle;
 			maxDimension: number;
 			settings: LightSettings;
+			color: ColorSettings;
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
-	| { id: number; type: 'preview'; settings: LightSettings; tone: boolean }
+	| { id: number; type: 'preview'; settings: LightSettings; color: ColorSettings; tone: boolean }
 	| {
 			id: number;
 			type: 'scope';
 			settings: LightSettings;
+			color: ColorSettings;
 			tone: boolean;
 			sampleTarget: number;
 	  }
@@ -121,6 +125,7 @@ export type Request =
 			id: number;
 			type: 'export';
 			settings: LightSettings;
+			color: ColorSettings;
 			masks: DevelopedMaskInput[];
 			geometry: ExportGeometry;
 			quality: number;

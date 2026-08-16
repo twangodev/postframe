@@ -1,4 +1,4 @@
-import type { LightSettings } from './develop-settings';
+import type { ColorSettings, LightSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import {
 	cropRegion,
@@ -11,7 +11,13 @@ import {
 } from './export.ts';
 import { wasm } from './worker-wasm.ts';
 import { post, type Request } from './worker-protocol.ts';
-import { canvasContext, displayTransform, imageData, lightArguments } from './worker-render.ts';
+import {
+	canvasContext,
+	colorArguments,
+	displayTransform,
+	imageData,
+	lightArguments
+} from './worker-render.ts';
 import { createMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument } from './worker-documents.ts';
 
@@ -56,7 +62,8 @@ function developExportImage(
 	request: Extract<Request, { type: 'export' }>,
 	onProgress: (completed: number, total: number) => void
 ) {
-	const light = active.kind === 'display' ? displayTransform(active, request.settings) : null;
+	const light =
+		active.kind === 'display' ? displayTransform(active, request.settings, request.color) : null;
 	const compositors = createMaskCompositors(request.masks);
 	try {
 		const rgba = new Uint8Array(width * height * 4);
@@ -65,7 +72,7 @@ function developExportImage(
 		for (const [index, region] of tiles.entries()) {
 			let tile =
 				active.kind === 'raw'
-					? developRawExportTile(active.session, request.settings, region)
+					? developRawExportTile(active.session, request.settings, request.color, region)
 					: developDisplayExportTile(active.bitmap, light!, region);
 			for (const mask of compositors) {
 				tile = mask.compositor.composite_rgba(
@@ -89,7 +96,12 @@ function developExportImage(
 	}
 }
 
-function developRawExportTile(session: WasmSession, settings: LightSettings, region: ExportRegion) {
+function developRawExportTile(
+	session: WasmSession,
+	settings: LightSettings,
+	color: ColorSettings,
+	region: ExportRegion
+) {
 	const tile = session.render_tile(
 		region.x,
 		region.y,
@@ -97,6 +109,7 @@ function developRawExportTile(session: WasmSession, settings: LightSettings, reg
 		region.height,
 		1,
 		...lightArguments(settings),
+		...colorArguments(color),
 		true
 	);
 	try {
