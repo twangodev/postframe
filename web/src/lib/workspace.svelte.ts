@@ -12,6 +12,7 @@ import type { RenderTileRequest } from './worker';
 import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
+	defaultColorSettings,
 	defaultLightSettings,
 	type ColorControlName,
 	type LightControlName
@@ -125,7 +126,11 @@ export class WorkspaceState {
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state({ ...defaultAdjustments });
-	renderSettings = $state({ settings: defaultLightSettings(), revision: 0 });
+	renderSettings = $state({
+		settings: defaultLightSettings(),
+		color: defaultColorSettings(),
+		revision: 0
+	});
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);
@@ -380,6 +385,12 @@ export class WorkspaceState {
 	commitLight = (control: LightControlName, value: number) =>
 		this.controls.commitLight(control, value);
 
+	previewColor = (control: ColorControlName, value: number) =>
+		this.controls.previewColor(control, value);
+
+	commitColor = (control: ColorControlName, value: number) =>
+		this.controls.commitColor(control, value);
+
 	previewMaskLight = (control: LightControlName, value: number) =>
 		this.controls.previewMaskLight(control, value);
 
@@ -416,6 +427,7 @@ export class WorkspaceState {
 		const jpeg = await this.workerClient.exportPhoto(
 			{
 				settings: edit.adjustments.light,
+				color: edit.adjustments.color,
 				masks: await this.pipeline.renderMasks(edit),
 				geometry: edit.geometry,
 				quality: options.quality

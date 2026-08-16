@@ -10,7 +10,7 @@ export interface AdjustmentControlsHost {
 	readonly selectedPhoto: Photo | null;
 	readonly canAdjustLight: boolean;
 	readonly selectedMaskId: string | null;
-	readonly adjustments: Record<LightControlName, number>;
+	readonly adjustments: Record<LightControlName | ColorControlName, number>;
 	masks: EditMask[];
 	dispatchEditorCommand(command: EditorCommand): boolean;
 }
@@ -25,15 +25,27 @@ export class AdjustmentControls {
 	previewLight(control: LightControlName, value: number) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		this.host.adjustments[control] = value;
-		this.develop.schedule({
-			...this.host.selectedPhoto.edit.adjustments.light,
-			[control]: value
-		});
+		const { light, color } = this.host.selectedPhoto.edit.adjustments;
+		this.develop.schedule({ ...light, [control]: value }, color);
 	}
 
 	commitLight(control: LightControlName, value: number) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		if (!this.host.dispatchEditorCommand({ type: 'light.set', control, value })) {
+			this.develop.release();
+		}
+	}
+
+	previewColor(control: ColorControlName, value: number) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		this.host.adjustments[control] = value;
+		const { light, color } = this.host.selectedPhoto.edit.adjustments;
+		this.develop.schedule(light, { ...color, [control]: value });
+	}
+
+	commitColor(control: ColorControlName, value: number) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		if (!this.host.dispatchEditorCommand({ type: 'color.set', control, value })) {
 			this.develop.release();
 		}
 	}

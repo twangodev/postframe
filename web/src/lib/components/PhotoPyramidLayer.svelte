@@ -9,7 +9,7 @@
 	import { PIXEL_GRID_START_SCALE, surfaceTransform } from '$lib/photo-viewport';
 	import type { Size, ViewportTransform } from '$lib/photo-viewport';
 	import type { RenderTileRequest } from '$lib/worker';
-	import type { LightSettings } from '$lib/develop-settings';
+	import type { ColorSettings, LightSettings } from '$lib/develop-settings';
 
 	interface Props {
 		photoId: string;
@@ -25,6 +25,7 @@
 		renderRevision: number;
 		onRenderSettled?: (revision: number) => void;
 		settings: LightSettings;
+		color: ColorSettings;
 		tone?: boolean;
 	}
 
@@ -55,6 +56,7 @@
 		renderRevision,
 		onRenderSettled = () => {},
 		settings,
+		color,
 		tone = true
 	}: Props = $props();
 	let container: HTMLDivElement;
@@ -148,13 +150,13 @@
 			replacement = null;
 			opened = false;
 			resetDiagnostics();
-			viewer.open({ tileSource: tileSource(renderRevision, settings, tone) });
+			viewer.open({ tileSource: tileSource(renderRevision, settings, color, tone) });
 			return;
 		}
 
 		if (!opened || renderedRevision === renderRevision) return;
 		renderedRevision = renderRevision;
-		queueReplacement(renderRevision, settings, tone);
+		queueReplacement(renderRevision, settings, color, tone);
 	});
 
 	$effect(() => {
@@ -202,26 +204,37 @@
 		};
 	}
 
-	function tileSource(revision: number, light: LightSettings, toneMapping: boolean) {
+	function tileSource(
+		revision: number,
+		light: LightSettings,
+		grade: ColorSettings,
+		toneMapping: boolean
+	) {
 		return createPostframeTileSource(openSeadragon!, {
 			photoId,
 			revision,
 			image,
 			renderTile,
 			settings: light,
+			color: grade,
 			tone: toneMapping,
 			onTileEvent: handleTileEvent
 		});
 	}
 
-	function queueReplacement(revision: number, light: LightSettings, toneMapping: boolean) {
+	function queueReplacement(
+		revision: number,
+		light: LightSettings,
+		grade: ColorSettings,
+		toneMapping: boolean
+	) {
 		if (!viewer) return;
 		const nextGeneration = ++generation;
 		discardReplacement();
 		resetDiagnostics();
 
 		viewer.addTiledImage({
-			tileSource: tileSource(revision, light, toneMapping),
+			tileSource: tileSource(revision, light, grade, toneMapping),
 			opacity: 0,
 			preload: true,
 			success: (event) => {

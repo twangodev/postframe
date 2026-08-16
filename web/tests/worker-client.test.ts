@@ -62,9 +62,17 @@ test('reports document progress before resolving the developed preview', async (
 
 	const settings = { ...neutral, exposure: 1.25 };
 	const cache = { name: 'render-v1-photo-one.pfc' } as FileSystemFileHandle;
-	const opened = client.openRawDocument([], cache, 2048, settings);
+	const opened = client.openRawDocument([], cache, 2048, settings, neutralColor);
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'open-raw', frames: [], cache, maxDimension: 2048, settings }
+		{
+			id: 1,
+			type: 'open-raw',
+			frames: [],
+			cache,
+			maxDimension: 2048,
+			settings,
+			color: neutralColor
+		}
 	]);
 
 	workers[0]?.respond({
@@ -182,6 +190,7 @@ test('requests a lossless source tile at the selected bin', async () => {
 		height: 1024,
 		bin: 2,
 		settings: neutral,
+		color: neutralColor,
 		tone: true
 	};
 	const tile = client.renderTile(request);
@@ -203,6 +212,7 @@ test('cancels stale tile requests and closes their late bitmaps', async () => {
 		height: 512,
 		bin: 1,
 		settings: neutral,
+		color: neutralColor,
 		tone: true
 	};
 	const tile = client.renderTile(request, controller.signal);
@@ -274,10 +284,17 @@ test('adjusts mask edges without detaching the persistent source', async () => {
 test('opens display documents through the same rendered document contract', async () => {
 	const { client, workers } = setup();
 	const source = { name: 'portrait.png' } as FileSystemFileHandle;
-	const opened = client.openDisplayDocument(source, 1600, neutral);
+	const opened = client.openDisplayDocument(source, 1600, neutral, neutralColor);
 
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'open-display', source, maxDimension: 1600, settings: neutral }
+		{
+			id: 1,
+			type: 'open-display',
+			source,
+			maxDimension: 1600,
+			settings: neutral,
+			color: neutralColor
+		}
 	]);
 	workers[0]?.respond({
 		id: 1,
@@ -301,12 +318,12 @@ test('keeps one preview in flight and coalesces queued settings to the latest', 
 	const firstSettings = { ...neutral, contrast: 10 };
 	const secondSettings = { ...neutral, contrast: 20 };
 	const latestSettings = { ...neutral, contrast: 30 };
-	const first = client.preview(firstSettings, true);
-	const second = client.preview(secondSettings, true);
-	const latest = client.preview(latestSettings, true);
+	const first = client.preview(firstSettings, neutralColor, true);
+	const second = client.preview(secondSettings, { ...neutralColor, tint: 10 }, true);
+	const latest = client.preview(latestSettings, { ...neutralColor, saturation: 15 }, true);
 
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'preview', settings: firstSettings, tone: true }
+		{ id: 1, type: 'preview', settings: firstSettings, color: neutralColor, tone: true }
 	]);
 	workers[0]?.respond({
 		id: 1,
@@ -320,6 +337,7 @@ test('keeps one preview in flight and coalesces queued settings to the latest', 
 		id: 2,
 		type: 'preview',
 		settings: latestSettings,
+		color: { ...neutralColor, saturation: 15 },
 		tone: true
 	});
 
@@ -336,10 +354,17 @@ test('keeps one preview in flight and coalesces queued settings to the latest', 
 
 test('requests scopes independently from interactive preview images', async () => {
 	const { client, workers } = setup();
-	const scope = client.scope(neutral, true, 150_000);
+	const scope = client.scope(neutral, neutralColor, true, 150_000);
 
 	assert.deepEqual(workers[0]?.messages, [
-		{ id: 1, type: 'scope', settings: neutral, tone: true, sampleTarget: 150_000 }
+		{
+			id: 1,
+			type: 'scope',
+			settings: neutral,
+			color: neutralColor,
+			tone: true,
+			sampleTarget: 150_000
+		}
 	]);
 	workers[0]?.respond({ id: 1, type: 'scope', scope: scopeTransfer() });
 
@@ -371,6 +396,7 @@ test('exports through the worker with staged progress and detached masks', async
 	const exported = client.exportPhoto(
 		{
 			settings: { ...neutral, exposure: 0.5 },
+			color: { ...neutralColor, temperature: 30 },
 			masks: [
 				{
 					id: 'mask-1',

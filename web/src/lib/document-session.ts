@@ -103,7 +103,8 @@ export class DocumentSession {
 				frames,
 				cache,
 				previewDimension(),
-				photo.edit.adjustments.light
+				photo.edit.adjustments.light,
+				photo.edit.adjustments.color
 			);
 			if (revision !== this.revision) return;
 			await this.pipeline.installMaskCompositors(photo.edit, () => revision === this.revision);
@@ -128,7 +129,8 @@ export class DocumentSession {
 		const result = await this.workerClient!.openDisplayDocument(
 			source,
 			previewDimension(),
-			photo.edit.adjustments.light
+			photo.edit.adjustments.light,
+			photo.edit.adjustments.color
 		);
 		if (revision !== this.revision) return;
 		await this.pipeline.installMaskCompositors(photo.edit, () => revision === this.revision);

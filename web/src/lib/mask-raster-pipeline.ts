@@ -31,7 +31,7 @@ export interface MaskRasterPipelineHost {
 	readonly selectedMaskId: string | null;
 	masks: EditMask[];
 	selectedMaskRaster: SelectedMaskRaster | null;
-	renderSettings: { settings: LightSettings; revision: number };
+	renderSettings: { settings: LightSettings; color: ColorSettings; revision: number };
 	markRefining(revision: number): void;
 	failSmartMask(error: unknown): void;
 }
@@ -92,6 +92,7 @@ export class MaskRasterPipeline {
 	private publishRenderSettings(document: EditDocument) {
 		this.host.renderSettings = {
 			settings: { ...document.adjustments.light },
+			color: { ...document.adjustments.color },
 			revision: this.host.renderSettings.revision + 1
 		};
 		this.host.markRefining(this.host.renderSettings.revision);

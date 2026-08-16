@@ -1,6 +1,10 @@
 import {
+	COLOR_CONTROL_NAMES,
+	defaultColorSettings,
 	defaultLightSettings,
 	LIGHT_CONTROL_NAMES,
+	type ColorControlName,
+	type ColorSettings,
 	type LightControlName,
 	type LightSettings
 } from './develop-settings';
@@ -20,15 +24,15 @@ import type { SmartMaskStatus } from './smart-masking';
 import type { WorkspacePersistence } from './workspace-persistence';
 
 export const defaultAdjustments = {
-	temperature: 5600,
-	tint: 4,
+	temperature: 0,
+	tint: 0,
 	exposure: 0,
 	contrast: 0,
 	highlights: 0,
 	shadows: 0,
 	whites: 0,
 	blacks: 0,
-	vibrance: 8,
+	vibrance: 0,
 	saturation: 0,
 	texture: 0,
 	clarity: 0,
@@ -44,8 +48,8 @@ export interface EditorSessionHost {
 	selectedMaskRaster: SelectedMaskRaster | null;
 	imageScope: ImageScopeData | null;
 	smartMaskStatus: SmartMaskStatus;
-	adjustments: Record<LightControlName, number>;
-	renderSettings: { settings: LightSettings; revision: number };
+	adjustments: Record<LightControlName | ColorControlName, number>;
+	renderSettings: { settings: LightSettings; color: ColorSettings; revision: number };
 	history: string[];
 	canUndo: boolean;
 	canRedo: boolean;
@@ -97,13 +101,15 @@ export class EditorSession {
 		this.host.imageScope = null;
 		this.editorHistory.reset();
 		const light = document?.adjustments.light ?? defaultLightSettings();
+		const color = document?.adjustments.color ?? defaultColorSettings();
 		this.host.masks = document?.masks.map(cloneEditMask) ?? [];
 		this.host.selectedMaskId = null;
 		this.host.selectedMaskRaster = null;
 		this.host.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
-		this.host.adjustments = { ...defaultAdjustments, ...light };
+		this.host.adjustments = { ...defaultAdjustments, ...light, ...color };
 		this.host.renderSettings = {
 			settings: { ...light },
+			color: { ...color },
 			revision: this.host.renderSettings.revision + 1
 		};
 		this.syncHistory();
@@ -112,9 +118,13 @@ export class EditorSession {
 	private apply(document: EditDocument, invalidation: EditorInvalidation) {
 		if (!this.host.selectedPhoto || document.photoId !== this.host.selectedPhoto.id) return;
 		const next = cloneEditDocument(document);
-		const globalLightChanged = LIGHT_CONTROL_NAMES.some(
-			(control) => this.host.renderSettings.settings[control] !== next.adjustments.light[control]
-		);
+		const globalAdjustmentsChanged =
+			LIGHT_CONTROL_NAMES.some(
+				(control) => this.host.renderSettings.settings[control] !== next.adjustments.light[control]
+			) ||
+			COLOR_CONTROL_NAMES.some(
+				(control) => this.host.renderSettings.color[control] !== next.adjustments.color[control]
+			);
 		this.host.selectedPhoto.edit = next;
 		this.host.masks = next.masks.map(cloneEditMask);
 		if (
@@ -126,9 +136,14 @@ export class EditorSession {
 		for (const control of LIGHT_CONTROL_NAMES) {
 			this.host.adjustments[control] = next.adjustments.light[control];
 		}
+		for (const control of COLOR_CONTROL_NAMES) {
+			this.host.adjustments[control] = next.adjustments.color[control];
+		}
 
 		if (invalidation === 'render') {
-			if (globalLightChanged) this.develop.request(next.adjustments.light, 'refining');
+			if (globalAdjustmentsChanged) {
+				this.develop.request(next.adjustments.light, next.adjustments.color, 'refining');
+			}
 			this.pipeline.renderEditDocument(next);
 		}
 		void this.pipeline.refreshSelectedMaskRaster();

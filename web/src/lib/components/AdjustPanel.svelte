@@ -4,7 +4,7 @@
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
-	import type { LightControlName } from '$lib/develop-settings';
+	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -17,6 +17,10 @@
 		workspace.previewLight(control, value);
 	const commitLight = (control: LightControlName) => (value: number) =>
 		workspace.commitLight(control, value);
+	const previewColor = (control: ColorControlName) => (value: number) =>
+		workspace.previewColor(control, value);
+	const commitColor = (control: ColorControlName) => (value: number) =>
+		workspace.commitColor(control, value);
 </script>
 
 <Tabs.Content value="adjust" class="motion-tab">
@@ -97,25 +101,38 @@
 		<AdjustmentSlider
 			label="Temperature"
 			bind:value={workspace.adjustments.temperature}
-			min={2000}
-			max={12000}
-			step={50}
-			defaultValue={5600}
-			suffix="K"
-			signed={false}
+			min={-100}
+			max={100}
+			disabled={!workspace.canAdjustLight}
+			onValueChange={previewColor('temperature')}
+			onValueCommit={commitColor('temperature')}
 		/>
-		<AdjustmentSlider label="Tint" bind:value={workspace.adjustments.tint} min={-150} max={150} />
+		<AdjustmentSlider
+			label="Tint"
+			bind:value={workspace.adjustments.tint}
+			min={-100}
+			max={100}
+			disabled={!workspace.canAdjustLight}
+			onValueChange={previewColor('tint')}
+			onValueCommit={commitColor('tint')}
+		/>
 		<AdjustmentSlider
 			label="Vibrance"
 			bind:value={workspace.adjustments.vibrance}
 			min={-100}
 			max={100}
+			disabled={!workspace.canAdjustLight}
+			onValueChange={previewColor('vibrance')}
+			onValueCommit={commitColor('vibrance')}
 		/>
 		<AdjustmentSlider
 			label="Saturation"
 			bind:value={workspace.adjustments.saturation}
 			min={-100}
 			max={100}
+			disabled={!workspace.canAdjustLight}
+			onValueChange={previewColor('saturation')}
+			onValueCommit={commitColor('saturation')}
 		/>
 		<button
 			type="button"

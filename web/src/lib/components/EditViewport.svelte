@@ -134,6 +134,7 @@
 						renderTile={workspace.renderTile}
 						renderRevision={workspace.renderSettings.revision}
 						settings={workspace.renderSettings.settings}
+						color={workspace.renderSettings.color}
 						onRenderSettled={workspace.settleDevelopRender}
 					/>
 					{#if workspace.developPreview?.photoId === active.id}

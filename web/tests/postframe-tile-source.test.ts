@@ -21,6 +21,7 @@ const settings = {
 	whites: 0,
 	blacks: 0
 };
+const color = { temperature: 0, tint: 0, vibrance: 0, saturation: 0 };
 
 test('limits the client-rendered pyramid to supported power-of-two bins', () => {
 	const levels = pyramidLevels(image);
@@ -90,6 +91,7 @@ function tileSource(renderTile: Parameters<typeof createPostframeTileSource>[1][
 			image,
 			renderTile,
 			settings,
+			color,
 			tone: true
 		}
 	) as OpenSeadragon.TileSource & {

@@ -266,7 +266,10 @@ function balanceGains(color: ColorSettings) {
 	const warmth = (color.temperature / 100) * MAX_TEMPERATURE_SHIFT_STOPS;
 	const magenta = (color.tint / 100) * MAX_TINT_SHIFT_STOPS;
 	const gains = [2 ** warmth, 2 ** -magenta, 2 ** -warmth];
-	const luminance = gains.reduce((total, gain, channel) => total + gain * LUMINANCE_WEIGHTS[channel], 0);
+	const luminance = gains.reduce(
+		(total, gain, channel) => total + gain * LUMINANCE_WEIGHTS[channel],
+		0
+	);
 	return gains.map((gain) => gain / luminance);
 }
 

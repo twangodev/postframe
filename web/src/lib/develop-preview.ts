@@ -1,4 +1,4 @@
-import type { LightSettings } from './develop-settings';
+import type { ColorSettings, LightSettings } from './develop-settings';
 import type { ImageScopeData } from './image-scope';
 import type { ObjectUrlRegistry } from './object-url-registry';
 import type { Photo } from './photo-record';
@@ -32,23 +32,23 @@ export class DevelopPreviewController {
 		private readonly host: DevelopPreviewHost
 	) {}
 
-	schedule(settings: LightSettings) {
+	schedule(settings: LightSettings, color: ColorSettings) {
 		this.clearPreviewTimer();
 		this.show('applying');
 		this.previewTimer = setTimeout(() => {
 			this.previewTimer = null;
-			this.request(settings, 'applying');
+			this.request(settings, color, 'applying');
 		}, 40);
 	}
 
-	request(settings: LightSettings, phase: DevelopPreviewPhase) {
+	request(settings: LightSettings, color: ColorSettings, phase: DevelopPreviewPhase) {
 		this.clearPreviewTimer();
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
 		const photoId = this.host.selectedPhoto.id;
 		const revision = ++this.previewRevision;
 		this.show(phase);
 		void this.workerClient
-			.preview(settings, true)
+			.preview(settings, color, true)
 			.then((preview) => {
 				if (revision !== this.previewRevision || this.host.selectedPhoto?.id !== photoId) return;
 				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
@@ -58,7 +58,7 @@ export class DevelopPreviewController {
 					src,
 					phase: this.host.developPreview?.phase ?? phase
 				};
-				this.scheduleScope(settings, photoId, phase === 'refining');
+				this.scheduleScope(settings, color, photoId, phase === 'refining');
 			})
 			.catch(() => {
 				if (revision === this.previewRevision && this.refinementRevision === null) {
@@ -109,7 +109,12 @@ export class DevelopPreviewController {
 		this.previewTimer = null;
 	}
 
-	private scheduleScope(settings: LightSettings, photoId: string, committed: boolean) {
+	private scheduleScope(
+		settings: LightSettings,
+		color: ColorSettings,
+		photoId: string,
+		committed: boolean
+	) {
 		this.clearScopeTimer();
 		const revision = ++this.scopeRevision;
 		const elapsed = Date.now() - this.lastScopeAt;
@@ -120,6 +125,7 @@ export class DevelopPreviewController {
 			void this.workerClient
 				?.scope(
 					settings,
+					color,
 					true,
 					committed ? COMMITTED_SCOPE_SAMPLE_TARGET : INTERACTIVE_SCOPE_SAMPLE_TARGET
 				)

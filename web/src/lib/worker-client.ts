@@ -203,7 +203,12 @@ export class PostframeWorkerClient {
 				this.queuedPreview.tone = tone;
 				this.queuedPreview.waiters.push(waiter);
 			} else {
-				this.queuedPreview = { settings: { ...settings }, color: { ...color }, tone, waiters: [waiter] };
+				this.queuedPreview = {
+					settings: { ...settings },
+					color: { ...color },
+					tone,
+					waiters: [waiter]
+				};
 			}
 			this.pumpPreview();
 		});
