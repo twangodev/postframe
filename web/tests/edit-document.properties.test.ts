@@ -168,9 +168,9 @@ const maskArbitrary = fc.record({
 
 const documentArbitrary = fc
 	.record({
-		version: fc.constant(7),
+		version: fc.constant(8),
 		photoId: word,
-		adjustments: fc.record({ light: lightArbitrary }),
+		adjustments: fc.record({ light: lightArbitrary, color: colorArbitrary }),
 		geometry: fc.record({
 			rotation: bounded(-180, 180),
 			flipHorizontal: fc.boolean(),
@@ -194,7 +194,14 @@ function currentMasks(
 	}));
 }
 
-test('parsing a valid v7 document returns it unchanged (seed 3301)', () => {
+function withDefaultGlobalColor(document: GeneratedDocument) {
+	return {
+		...document,
+		adjustments: { light: document.adjustments.light, color: defaultColorSettings() }
+	};
+}
+
+test('parsing a valid v8 document returns it unchanged (seed 3301)', () => {
 	fc.assert(
 		fc.property(documentArbitrary, (document) => {
 			const parsed = parseEditDocument(structuredClone(document), document.photoId);
@@ -204,30 +211,50 @@ test('parsing a valid v7 document returns it unchanged (seed 3301)', () => {
 	);
 });
 
-test('v4-v6 documents migrate to v7 with default mask color and stable ids (seed 3302)', () => {
+test('v7 documents migrate to v8 with default global color (seed 3306)', () => {
+	fc.assert(
+		fc.property(documentArbitrary, (document) => {
+			const legacy = {
+				...document,
+				version: 7,
+				adjustments: { light: document.adjustments.light }
+			};
+			const parsed = parseEditDocument(structuredClone(legacy), document.photoId);
+			assert.deepEqual(parsed, withDefaultGlobalColor(document));
+		}),
+		{ seed: 3306, path: undefined }
+	);
+});
+
+test('v4-v6 documents migrate to v8 with default mask color and stable ids (seed 3302)', () => {
 	fc.assert(
 		fc.property(documentArbitrary, fc.constantFrom(4, 5, 6), (document, version) => {
 			const legacy = {
 				...document,
 				version,
+				adjustments: { light: document.adjustments.light },
 				masks: document.masks.map((mask) => ({
 					...mask,
 					adjustments: { light: mask.adjustments.light }
 				}))
 			};
 			const parsed = parseEditDocument(structuredClone(legacy), document.photoId);
-			assert.deepEqual(parsed, { ...document, masks: currentMasks(document) });
+			assert.deepEqual(parsed, {
+				...withDefaultGlobalColor(document),
+				masks: currentMasks(document)
+			});
 		}),
 		{ seed: 3302, path: undefined }
 	);
 });
 
-test('v3 documents migrate to v7 with default edge, color, and stable ids (seed 3303)', () => {
+test('v3 documents migrate to v8 with default edge, color, and stable ids (seed 3303)', () => {
 	fc.assert(
 		fc.property(documentArbitrary, (document) => {
 			const legacy = {
 				...document,
 				version: 3,
+				adjustments: { light: document.adjustments.light },
 				masks: document.masks.map(({ edge: _edge, ...mask }) => ({
 					...mask,
 					adjustments: { light: mask.adjustments.light }
@@ -235,7 +262,7 @@ test('v3 documents migrate to v7 with default edge, color, and stable ids (seed 
 			};
 			const parsed = parseEditDocument(structuredClone(legacy), document.photoId);
 			assert.deepEqual(parsed, {
-				...document,
+				...withDefaultGlobalColor(document),
 				masks: currentMasks(document, defaultMaskEdgeSettings)
 			});
 		}),
@@ -243,29 +270,34 @@ test('v3 documents migrate to v7 with default edge, color, and stable ids (seed 
 	);
 });
 
-test('v2 documents migrate to v7 and drop their masks (seed 3304)', () => {
+test('v2 documents migrate to v8 and drop their masks (seed 3304)', () => {
 	fc.assert(
 		fc.property(
 			documentArbitrary,
 			fc.array(fc.oneof(word, fc.constant(null), fc.record({ stray: word })), { maxLength: 2 }),
 			(document, strayMasks) => {
-				const legacy = { ...document, version: 2, masks: strayMasks };
+				const legacy = {
+					...document,
+					version: 2,
+					adjustments: { light: document.adjustments.light },
+					masks: strayMasks
+				};
 				const parsed = parseEditDocument(structuredClone(legacy), document.photoId);
-				assert.deepEqual(parsed, { ...document, masks: [] });
+				assert.deepEqual(parsed, { ...withDefaultGlobalColor(document), masks: [] });
 			}
 		),
 		{ seed: 3304, path: undefined }
 	);
 });
 
-test('v1 develop settings migrate to a default v7 document keeping light (seed 3305)', () => {
+test('v1 develop settings migrate to a default v8 document keeping light (seed 3305)', () => {
 	fc.assert(
 		fc.property(lightArbitrary, word, (light, photoId) => {
 			const parsed = parseEditDocument({ version: 1, ...light }, photoId);
 			assert.deepEqual(parsed, {
-				version: 7,
+				version: 8,
 				photoId,
-				adjustments: { light },
+				adjustments: { light, color: defaultColorSettings() },
 				geometry: { rotation: 0, flipHorizontal: false, flipVertical: false, crop: null },
 				masks: []
 			});

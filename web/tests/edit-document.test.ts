@@ -122,6 +122,36 @@ test('migrates version-six masks to neutral color adjustments', () => {
 	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
 });
 
+test('migrates version-seven documents to neutral global color', () => {
+	const mask = createEditMask('mask-one', 'subject');
+	mask.adjustments.color = { ...mask.adjustments.color, saturation: 40 };
+	const previous = {
+		...defaultEditDocument('photo-one'),
+		version: 7,
+		adjustments: {
+			light: { ...defaultEditDocument('photo-one').adjustments.light, exposure: 0.5 }
+		},
+		masks: [mask]
+	};
+	const migrated = parseEditDocument(previous, 'photo-one');
+	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
+	assert.equal(migrated.adjustments.light.exposure, 0.5);
+	assert.deepEqual(migrated.adjustments.color, defaultColorSettings());
+	assert.equal(migrated.masks[0]?.adjustments.color.saturation, 40);
+	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
+});
+
+test('rejects current documents lacking global color adjustments', () => {
+	const document = defaultEditDocument('photo-one');
+	assert.equal(
+		editDocumentSchema.safeParse({
+			...document,
+			adjustments: { light: document.adjustments.light }
+		}).success,
+		false
+	);
+});
+
 test('rejects current documents whose masks lack color adjustments', () => {
 	const mask = createEditMask('mask-one', 'radial');
 	const document = {

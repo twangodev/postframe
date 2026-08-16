@@ -10,7 +10,7 @@ import {
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 7;
+export const EDIT_DOCUMENT_VERSION = 8;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -137,7 +137,7 @@ export const editDocumentSchema = z
 	.object({
 		version: z.literal(EDIT_DOCUMENT_VERSION),
 		photoId: z.string().min(1),
-		adjustments: z.object({ light: lightSettingsSchema }),
+		adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema }),
 		geometry: z.object({
 			rotation: z.number().finite().min(-180).max(180),
 			flipHorizontal: z.boolean(),
@@ -177,7 +177,7 @@ export function defaultEditDocument(
 	return {
 		version: EDIT_DOCUMENT_VERSION,
 		photoId,
-		adjustments: { light: lightSettingsSchema.parse(light) },
+		adjustments: { light: lightSettingsSchema.parse(light), color: defaultColorSettings() },
 		geometry: {
 			rotation: 0,
 			flipHorizontal: false,
@@ -198,6 +198,17 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 	const legacy = developSettingsSchema.safeParse(value);
 	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
 
+	const versionSeven = versionSevenEditDocumentSchema.safeParse(value);
+	if (versionSeven.success) {
+		if (versionSeven.data.photoId !== photoId)
+			throw new Error(`Edit document belongs to another photo`);
+		return editDocumentSchema.parse({
+			...versionSeven.data,
+			version: EDIT_DOCUMENT_VERSION,
+			adjustments: adjustmentsWithDefaultColor(versionSeven.data.adjustments)
+		});
+	}
+
 	const versionFourToSix = versionFourToSixEditDocumentSchema.safeParse(value);
 	if (versionFourToSix.success) {
 		if (versionFourToSix.data.photoId !== photoId)
@@ -205,6 +216,7 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 		return editDocumentSchema.parse({
 			...versionFourToSix.data,
 			version: EDIT_DOCUMENT_VERSION,
+			adjustments: adjustmentsWithDefaultColor(versionFourToSix.data.adjustments),
 			masks: versionFourToSix.data.masks.map(maskWithDefaultColor)
 		});
 	}
@@ -216,6 +228,7 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 		return editDocumentSchema.parse({
 			...versionThree.data,
 			version: EDIT_DOCUMENT_VERSION,
+			adjustments: adjustmentsWithDefaultColor(versionThree.data.adjustments),
 			masks: versionThree.data.masks.map((mask) =>
 				maskWithDefaultColor({ ...mask, edge: defaultMaskEdgeSettings() })
 			)
@@ -229,6 +242,7 @@ export function parseEditDocument(value: unknown, photoId: string): EditDocument
 		return {
 			...previous.data,
 			version: EDIT_DOCUMENT_VERSION,
+			adjustments: adjustmentsWithDefaultColor(previous.data.adjustments),
 			masks: []
 		};
 	}
@@ -271,6 +285,23 @@ export function editDocumentStorageName(photoId: string) {
 function maskWithDefaultColor<Mask extends z.infer<typeof versionThreeEditMaskSchema>>(mask: Mask) {
 	return { ...mask, adjustments: { ...mask.adjustments, color: defaultColorSettings() } };
 }
+
+function adjustmentsWithDefaultColor(adjustments: { light: LightSettings }) {
+	return { ...adjustments, color: defaultColorSettings() };
+}
+
+const versionSevenEditDocumentSchema = z.object({
+	version: z.literal(7),
+	photoId: z.string().min(1),
+	adjustments: z.object({ light: lightSettingsSchema }),
+	geometry: z.object({
+		rotation: z.number().finite().min(-180).max(180),
+		flipHorizontal: z.boolean(),
+		flipVertical: z.boolean(),
+		crop: normalizedCropSchema.nullable()
+	}),
+	masks: z.array(editMaskSchema)
+});
 
 const versionFourToSixEditDocumentSchema = z.object({
 	version: z.union([z.literal(4), z.literal(5), z.literal(6)]),

@@ -30,6 +30,31 @@ test('applies light commands immutably with render invalidation', () => {
 	);
 });
 
+test('applies global color commands immutably with render invalidation', () => {
+	const before = defaultEditDocument('photo-one');
+	const result = applyEditorCommand(before, {
+		type: 'color.set',
+		control: 'saturation',
+		value: -20
+	});
+	assert.ok(result);
+	assert.equal(result.document.adjustments.color.saturation, -20);
+	assert.equal(result.invalidation, 'render');
+	assert.equal(result.label, 'saturation -20');
+	assert.equal(before.adjustments.color.saturation, 0);
+	assert.equal(
+		applyEditorCommand(result.document, {
+			type: 'color.set',
+			control: 'saturation',
+			value: -20
+		}),
+		null
+	);
+	assert.throws(() =>
+		applyEditorCommand(before, { type: 'color.set', control: 'tint', value: 101 })
+	);
+});
+
 test('creates, hides, and removes masks through deterministic commands', () => {
 	const before = defaultEditDocument('photo-one');
 	const created = applyEditorCommand(before, {

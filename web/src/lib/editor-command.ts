@@ -21,6 +21,7 @@ export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
 export type EditorCommand =
 	| { type: 'light.set'; control: LightControlName; value: number }
+	| { type: 'color.set'; control: ColorControlName; value: number }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
@@ -70,6 +71,15 @@ export function applyEditorCommand(
 			if (next.adjustments.light[command.control] === light[command.control]) return null;
 			next.adjustments.light = light;
 			return transition(command, lightLabel(command.control, command.value), 'render', next);
+		}
+		case 'color.set': {
+			const color = colorSettingsSchema.parse({
+				...next.adjustments.color,
+				[command.control]: command.value
+			});
+			if (next.adjustments.color[command.control] === color[command.control]) return null;
+			next.adjustments.color = color;
+			return transition(command, adjustmentLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.light.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
