@@ -78,6 +78,7 @@ export class ViewportInteraction {
 		grip: GizmoHit;
 		origin: Point;
 		originScreen: Point;
+		screen: Point;
 		component: GradientComponent;
 		moved: boolean;
 	} | null>(null);
@@ -300,7 +301,14 @@ export class ViewportInteraction {
 
 	private tryBeginGizmoDrag(event: PointerEvent) {
 		if (event.button !== 0) return false;
-		if (this.gizmoDrag) return true; // one gesture at a time; swallow extra pointers
+		const active = this.gizmoDrag;
+		if (active && active.pointerId !== event.pointerId) {
+			if (event.pointerType !== 'touch') return true; // one gesture at a time; swallow extra pointers
+			this.gizmoDrag = null;
+			this.pointers.set(active.pointerId, active.screen);
+			return false;
+		}
+		if (active) this.gizmoDrag = null;
 		if (this.spaceHeld) return false;
 		const point = this.pointFor(event);
 		const imagePoint = this.imagePixel(point);
@@ -320,14 +328,15 @@ export class ViewportInteraction {
 			? { component: existing!, grip: grabbed }
 			: this.seedGizmoComponent(imagePoint);
 		if (!session) return false;
+		if (!this.capturePointer(event.pointerId)) return false;
 		event.preventDefault();
-		this.capturePointer(event.pointerId);
 		this.gizmoDrag = {
 			pointerId: event.pointerId,
 			start: session.component,
 			grip: session.grip,
 			origin: imagePoint,
 			originScreen: point,
+			screen: point,
 			component: session.component,
 			moved: false
 		};
@@ -403,7 +412,12 @@ export class ViewportInteraction {
 				drag.start.type === 'linear'
 					? reduceLinearDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers)
 					: reduceRadialDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers);
-			this.gizmoDrag = { ...drag, moved: true, component: { ...drag.start, ...reduced } };
+			this.gizmoDrag = {
+				...drag,
+				moved: true,
+				screen: point,
+				component: { ...drag.start, ...reduced }
+			};
 			return;
 		}
 		const point = this.pointFor(event);
@@ -647,11 +661,14 @@ export class ViewportInteraction {
 	}
 
 	private capturePointer(pointerId: number) {
+		if (!this.element) return false;
 		try {
-			this.element?.setPointerCapture(pointerId);
+			this.element.setPointerCapture(pointerId);
+			return true;
 		} catch {
-			// The pointer can end before capture on rapid taps; the drag then
-			// simply never receives moves.
+			// The pointer can end before capture on rapid taps; a session that
+			// needs capture bails rather than wait for moves that never arrive.
+			return false;
 		}
 	}
 
