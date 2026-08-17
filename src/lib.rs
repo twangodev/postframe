@@ -12,6 +12,7 @@ pub mod color;
 pub mod composite;
 pub mod decode;
 pub mod develop;
+pub mod effects;
 pub mod error;
 pub mod export;
 pub mod fit;
