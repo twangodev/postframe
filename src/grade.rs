@@ -1,10 +1,9 @@
+use crate::hue::{chroma_fraction, luminance};
 use crate::light::{linear_to_srgb, srgb_to_linear};
 use crate::{Error, Result};
 
 pub const MAX_TEMPERATURE_SHIFT_STOPS: f32 = 0.5;
 pub const MAX_TINT_SHIFT_STOPS: f32 = 0.5;
-
-const LUMINANCE_WEIGHTS: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -112,19 +111,6 @@ fn balance_gains(settings: ColorSettings) -> [f32; 3] {
     ];
     let luminance = luminance(gains);
     gains.map(|gain| gain / luminance)
-}
-
-fn luminance([red, green, blue]: [f32; 3]) -> f32 {
-    LUMINANCE_WEIGHTS[0] * red + LUMINANCE_WEIGHTS[1] * green + LUMINANCE_WEIGHTS[2] * blue
-}
-
-fn chroma_fraction(linear: [f32; 3]) -> f32 {
-    let maximum = linear.into_iter().fold(0.0f32, f32::max);
-    if maximum <= 0.0 {
-        return 0.0;
-    }
-    let minimum = linear.into_iter().fold(f32::INFINITY, f32::min);
-    ((maximum - minimum) / maximum).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

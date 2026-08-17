@@ -17,6 +17,7 @@ pub mod export;
 pub mod fit;
 pub mod grade;
 pub mod hdr;
+pub mod hue;
 pub mod light;
 mod parallel;
 pub mod preview;
