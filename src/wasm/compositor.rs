@@ -28,6 +28,16 @@ impl DisplayTransform {
     pub fn luminance_lut(&self) -> Vec<f32> {
         self.develop.luminance_lut().to_vec()
     }
+
+    /// The red, green and blue curves back to back, empty while all three are
+    /// the identity.
+    #[wasm_bindgen(getter)]
+    pub fn channel_luts(&self) -> Vec<f32> {
+        self.develop
+            .channel_luts()
+            .map(|luts| luts.concat())
+            .unwrap_or_default()
+    }
 }
 
 #[wasm_bindgen]
