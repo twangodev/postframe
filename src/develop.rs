@@ -454,6 +454,10 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
+    /// The plane-free chain the masks and the display path share. Its callers
+    /// composite unhaloed tiles, so the spatial stages stay out of it: showing
+    /// them in a preview a tiled export could not reproduce is worse than
+    /// leaving them absent from both.
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.light
             .apply_display_pixel(self.color.apply_display_pixel(pixel))
