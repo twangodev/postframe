@@ -14,6 +14,7 @@ import type { StorageBreakdown } from './storage-breakdown';
 import {
 	defaultDevelopSettings,
 	scalarAdjustments,
+	type DevelopSettings,
 	type ColorControlName,
 	type LightControlName,
 	type ScalarControlName,
@@ -26,6 +27,7 @@ import {
 	type EditMask,
 	type MaskKind,
 	type MaskOperation,
+	type NormalizedCrop,
 	type NormalizedPoint
 } from './edit-document';
 import type { MaskBrushStroke } from './mask-rasterizer';
@@ -128,7 +130,11 @@ export class WorkspaceState {
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
-	renderSettings = $state({ adjustments: defaultDevelopSettings(), revision: 0 });
+	renderSettings = $state<{
+		adjustments: DevelopSettings;
+		crop: NormalizedCrop | null;
+		revision: number;
+	}>({ adjustments: defaultDevelopSettings(), crop: null, revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);

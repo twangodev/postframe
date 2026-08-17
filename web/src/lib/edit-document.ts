@@ -194,6 +194,10 @@ export function cloneEditDocument(document: EditDocument): EditDocument {
 	return editDocumentSchema.parse(document);
 }
 
+export function cloneCrop(crop: NormalizedCrop | null): NormalizedCrop | null {
+	return crop ? { ...crop } : null;
+}
+
 export function cloneEditMask(mask: EditMask): EditMask {
 	return editMaskSchema.parse(mask);
 }

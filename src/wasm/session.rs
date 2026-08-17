@@ -3,8 +3,9 @@ use std::sync::Arc;
 use lru::LruCache;
 use wasm_bindgen::prelude::*;
 
-use super::shared::{develop_settings, encode_jpeg, err};
+use super::shared::{develop_settings, encode_jpeg, err, vignette_frame};
 use crate::bracket::{self, Frame, FrameData};
+use crate::effects::VignetteFrame;
 use crate::preview::{MipPyramid, PreparedRegion};
 use crate::{DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
 
@@ -136,6 +137,7 @@ impl ScopeFrame {
 
 struct CachedPreview {
     settings: DevelopSettings,
+    frame: VignetteFrame,
     tone: bool,
     rgb8: Vec<u8>,
 }
@@ -376,8 +378,13 @@ impl Session {
     }
 
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
-    pub fn preview_jpeg(&mut self, settings: JsValue, tone: bool) -> Result<Vec<u8>, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+    pub fn preview_jpeg(
+        &mut self,
+        settings: JsValue,
+        crop: JsValue,
+        tone: bool,
+    ) -> Result<Vec<u8>, JsError> {
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -389,9 +396,10 @@ impl Session {
     pub fn preview_frame(
         &mut self,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
     ) -> Result<PreviewFrame, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -412,10 +420,11 @@ impl Session {
     pub fn preview_scope(
         &mut self,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
         sample_target: u32,
     ) -> Result<ScopeFrame, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -446,9 +455,10 @@ impl Session {
         height: u32,
         bin: u32,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
     ) -> Result<RenderedTile, JsError> {
-        self.prepare_develop(develop_settings(settings)?)?;
+        self.prepare_develop(develop_settings(settings)?, vignette_frame(crop)?)?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
@@ -550,22 +560,32 @@ impl Session {
         Ok(crate::hdr::encode(merged).map_err(err)?.bytes)
     }
 
-    fn prepare_develop(&mut self, settings: DevelopSettings) -> Result<(), JsError> {
-        if self.develop.as_ref().map(DevelopTransform::settings) != Some(&settings) {
-            self.develop = Some(DevelopTransform::new(settings).map_err(err)?);
+    fn prepare_develop(
+        &mut self,
+        settings: DevelopSettings,
+        frame: VignetteFrame,
+    ) -> Result<(), JsError> {
+        let compiled = self.develop.as_ref();
+        if compiled.map(DevelopTransform::settings) != Some(&settings)
+            || compiled.map(DevelopTransform::frame) != Some(frame)
+        {
+            self.develop = Some(DevelopTransform::framed(settings, frame).map_err(err)?);
         }
         Ok(())
     }
 
-    fn prepare_preview(&mut self, settings: DevelopSettings, tone: bool) -> Result<(), JsError> {
-        if self
-            .preview
-            .as_ref()
-            .is_some_and(|preview| preview.settings == settings && preview.tone == tone)
-        {
+    fn prepare_preview(
+        &mut self,
+        settings: DevelopSettings,
+        frame: VignetteFrame,
+        tone: bool,
+    ) -> Result<(), JsError> {
+        if self.preview.as_ref().is_some_and(|preview| {
+            preview.settings == settings && preview.frame == frame && preview.tone == tone
+        }) {
             return Ok(());
         }
-        self.prepare_develop(settings.clone())?;
+        self.prepare_develop(settings.clone(), frame)?;
         let develop = self
             .develop
             .as_ref()
@@ -573,6 +593,7 @@ impl Session {
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         self.preview = Some(CachedPreview {
             settings,
+            frame,
             tone,
             rgb8: lut.render_adjusted(thumb, develop, tone),
         });

@@ -1,4 +1,5 @@
 import type { DevelopSettings } from './develop-settings';
+import type { NormalizedCrop } from './edit-document.ts';
 import type { ImageScopeData } from './image-scope';
 import type { ObjectUrlRegistry } from './object-url-registry';
 import type { Photo } from './photo-record';
@@ -32,23 +33,23 @@ export class DevelopPreviewController {
 		private readonly host: DevelopPreviewHost
 	) {}
 
-	schedule(adjustments: DevelopSettings) {
+	schedule(adjustments: DevelopSettings, crop: NormalizedCrop | null) {
 		this.clearPreviewTimer();
 		this.show('applying');
 		this.previewTimer = setTimeout(() => {
 			this.previewTimer = null;
-			this.request(adjustments, 'applying');
+			this.request(adjustments, crop, 'applying');
 		}, 40);
 	}
 
-	request(adjustments: DevelopSettings, phase: DevelopPreviewPhase) {
+	request(adjustments: DevelopSettings, crop: NormalizedCrop | null, phase: DevelopPreviewPhase) {
 		this.clearPreviewTimer();
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
 		const photoId = this.host.selectedPhoto.id;
 		const revision = ++this.previewRevision;
 		this.show(phase);
 		void this.workerClient
-			.preview(adjustments, true)
+			.preview(adjustments, crop, true)
 			.then((preview) => {
 				if (revision !== this.previewRevision || this.host.selectedPhoto?.id !== photoId) return;
 				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
@@ -58,7 +59,7 @@ export class DevelopPreviewController {
 					src,
 					phase: this.host.developPreview?.phase ?? phase
 				};
-				this.scheduleScope(adjustments, photoId, phase === 'refining');
+				this.scheduleScope(adjustments, crop, photoId, phase === 'refining');
 			})
 			.catch(() => {
 				if (revision === this.previewRevision && this.refinementRevision === null) {
@@ -73,9 +74,9 @@ export class DevelopPreviewController {
 
 	// Re-measures the scope at the committed settings after a preview that
 	// never became a document change.
-	refreshScope(adjustments: DevelopSettings) {
+	refreshScope(adjustments: DevelopSettings, crop: NormalizedCrop | null) {
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
-		this.scheduleScope(adjustments, this.host.selectedPhoto.id, true);
+		this.scheduleScope(adjustments, crop, this.host.selectedPhoto.id, true);
 	}
 
 	settle(revision: number) {
@@ -116,7 +117,12 @@ export class DevelopPreviewController {
 		this.previewTimer = null;
 	}
 
-	private scheduleScope(adjustments: DevelopSettings, photoId: string, committed: boolean) {
+	private scheduleScope(
+		adjustments: DevelopSettings,
+		crop: NormalizedCrop | null,
+		photoId: string,
+		committed: boolean
+	) {
 		this.clearScopeTimer();
 		const revision = ++this.scopeRevision;
 		const elapsed = Date.now() - this.lastScopeAt;
@@ -127,6 +133,7 @@ export class DevelopPreviewController {
 			void this.workerClient
 				?.scope(
 					adjustments,
+					crop,
 					true,
 					committed ? COMMITTED_SCOPE_SAMPLE_TARGET : INTERACTIVE_SCOPE_SAMPLE_TARGET
 				)

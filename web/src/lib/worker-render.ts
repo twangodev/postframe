@@ -3,6 +3,7 @@ import {
 	sameDevelopSettings,
 	type DevelopSettings
 } from './develop-settings';
+import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
 import type { WasmSession } from './wasm-runtime';
 import { wasm } from './worker-wasm.ts';
@@ -19,18 +20,43 @@ export function imageData(pixels: Uint8Array, width: number, height: number) {
 	return new ImageData(new Uint8ClampedArray(pixels), width, height);
 }
 
-export function displayTransform(active: DisplayDocument, adjustments: DevelopSettings) {
-	if (sameDevelopSettings(active.adjustments, adjustments)) return active.light;
+export function displayTransform(
+	active: DisplayDocument,
+	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null
+) {
+	if (sameDevelopSettings(active.adjustments, adjustments) && sameCrop(active.crop, crop)) {
+		return active.light;
+	}
 	active.light.free();
 	active.adjustments = cloneDevelopSettings(adjustments);
-	active.light = new wasm.DisplayTransform(active.adjustments);
+	active.crop = cloneCrop(crop);
+	active.light = new wasm.DisplayTransform(active.adjustments, active.crop);
 	active.adjusted = null;
 	return active.light;
 }
 
-function displayAdjusted(active: DisplayDocument, adjustments: DevelopSettings) {
-	const light = displayTransform(active, adjustments);
-	active.adjusted ??= light.apply_rgba(new Uint8Array(active.preview.data));
+export function sameCrop(left: NormalizedCrop | null, right: NormalizedCrop | null) {
+	if (!left || !right) return left === right;
+	return (
+		left.x === right.x &&
+		left.y === right.y &&
+		left.width === right.width &&
+		left.height === right.height
+	);
+}
+
+function displayAdjusted(
+	active: DisplayDocument,
+	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null
+) {
+	const light = displayTransform(active, adjustments, crop);
+	active.adjusted ??= light.apply_rgba(
+		new Uint8Array(active.preview.data),
+		active.preview.width,
+		active.preview.height
+	);
 	return active.adjusted;
 }
 
@@ -48,19 +74,21 @@ export function displayPreview(bitmap: ImageBitmap, maxDimension: number) {
 export async function renderPreviewImage(
 	active: ActiveDocument,
 	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
 	tone: boolean
 ) {
 	return active.kind === 'raw'
-		? renderRawPreviewImage(active.session, adjustments, tone)
-		: renderDisplayImage(active, adjustments);
+		? renderRawPreviewImage(active.session, adjustments, crop, tone)
+		: renderDisplayImage(active, adjustments, crop);
 }
 
 export function renderRawPreview(
 	session: WasmSession,
 	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
 	tone: boolean
 ) {
-	const frame = session.preview_frame(adjustments, tone);
+	const frame = session.preview_frame(adjustments, crop, tone);
 	try {
 		const image = frame.jpeg.buffer as ArrayBuffer;
 		const histogram = frame.histogram.buffer as ArrayBuffer;
@@ -83,8 +111,13 @@ export function renderRawPreview(
 	}
 }
 
-function renderRawPreviewImage(session: WasmSession, adjustments: DevelopSettings, tone: boolean) {
-	const image = session.preview_jpeg(adjustments, tone).buffer as ArrayBuffer;
+function renderRawPreviewImage(
+	session: WasmSession,
+	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
+	tone: boolean
+) {
+	const image = session.preview_jpeg(adjustments, crop, tone).buffer as ArrayBuffer;
 	return {
 		image,
 		mediaType: 'image/jpeg' as const,
@@ -95,21 +128,28 @@ function renderRawPreviewImage(session: WasmSession, adjustments: DevelopSetting
 export function renderScope(
 	active: ActiveDocument,
 	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
 	tone: boolean,
 	sampleTarget: number
 ) {
 	return active.kind === 'raw'
-		? renderRawScope(active.session, adjustments, tone, sampleTarget)
-		: renderDisplayScope(active, adjustments, sampleTarget);
+		? renderRawScope(active.session, adjustments, crop, tone, sampleTarget)
+		: renderDisplayScope(active, adjustments, crop, sampleTarget);
 }
 
 function renderRawScope(
 	session: WasmSession,
 	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
 	tone: boolean,
 	sampleTarget: number
 ) {
-	const frame = session.preview_scope(adjustments, tone, Math.max(1, Math.floor(sampleTarget)));
+	const frame = session.preview_scope(
+		adjustments,
+		crop,
+		tone,
+		Math.max(1, Math.floor(sampleTarget))
+	);
 	try {
 		return transferableScope({
 			histogram: frame.histogram,
@@ -123,9 +163,13 @@ function renderRawScope(
 	}
 }
 
-export async function renderDisplayPreview(active: DisplayDocument, adjustments: DevelopSettings) {
-	const image = await renderDisplayImage(active, adjustments);
-	const scope = renderDisplayScope(active, adjustments);
+export async function renderDisplayPreview(
+	active: DisplayDocument,
+	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null
+) {
+	const image = await renderDisplayImage(active, adjustments, crop);
+	const scope = renderDisplayScope(active, adjustments, crop);
 	return {
 		...image,
 		scope: scope.data,
@@ -133,8 +177,12 @@ export async function renderDisplayPreview(active: DisplayDocument, adjustments:
 	};
 }
 
-async function renderDisplayImage(active: DisplayDocument, adjustments: DevelopSettings) {
-	const rgba = new Uint8ClampedArray(displayAdjusted(active, adjustments));
+async function renderDisplayImage(
+	active: DisplayDocument,
+	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null
+) {
+	const rgba = new Uint8ClampedArray(displayAdjusted(active, adjustments, crop));
 	const context = canvasContext(active.preview.width, active.preview.height, false);
 	context.putImageData(new ImageData(rgba, active.preview.width, active.preview.height), 0, 0);
 	const image = await (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
@@ -148,11 +196,12 @@ async function renderDisplayImage(active: DisplayDocument, adjustments: DevelopS
 function renderDisplayScope(
 	active: DisplayDocument,
 	adjustments: DevelopSettings,
+	crop: NormalizedCrop | null,
 	sampleTarget?: number
 ) {
 	return transferableScope(
 		imageScopeFromRgba(
-			new Uint8ClampedArray(displayAdjusted(active, adjustments)),
+			new Uint8ClampedArray(displayAdjusted(active, adjustments, crop)),
 			active.preview.width,
 			active.preview.height,
 			sampleTarget

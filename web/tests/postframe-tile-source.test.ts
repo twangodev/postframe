@@ -15,6 +15,7 @@ import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
 const image = { width: 6001, height: 4003 };
 const adjustments = defaultDevelopSettings();
+const crop = { x: 0.05, y: 0.1, width: 0.8, height: 0.75 };
 
 test('limits the client-rendered pyramid to supported power-of-two bins', () => {
 	const levels = pyramidLevels(image);
@@ -84,6 +85,7 @@ function tileSource(renderTile: Parameters<typeof createPostframeTileSource>[1][
 			image,
 			renderTile,
 			adjustments,
+			crop,
 			tone: true
 		}
 	) as OpenSeadragon.TileSource & {

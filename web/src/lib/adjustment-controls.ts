@@ -36,8 +36,10 @@ export class AdjustmentControls {
 	) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		Object.assign(this.host.adjustments, { [control]: value });
+		const edit = this.host.selectedPhoto.edit;
 		this.develop.schedule(
-			withAdjustment(this.host.selectedPhoto.edit.adjustments, group, control, value)
+			withAdjustment(edit.adjustments, group, control, value),
+			edit.geometry.crop
 		);
 	}
 
@@ -70,8 +72,8 @@ export class AdjustmentControls {
 
 	private releaseUnchangedPreview() {
 		this.develop.release();
-		const adjustments = this.host.selectedPhoto?.edit.adjustments;
-		if (adjustments) this.develop.refreshScope(adjustments);
+		const edit = this.host.selectedPhoto?.edit;
+		if (edit) this.develop.refreshScope(edit.adjustments, edit.geometry.crop);
 	}
 
 	previewMaskLight(control: LightControlName, value: number) {

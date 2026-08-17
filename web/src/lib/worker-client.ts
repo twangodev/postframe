@@ -9,6 +9,7 @@ import type {
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
 import { cloneDevelopSettings, type DevelopSettings } from './develop-settings.ts';
+import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
 import {
 	RenderPerformanceRecorder,
@@ -48,6 +49,7 @@ interface PreviewWaiter {
 
 interface QueuedPreview {
 	adjustments: DevelopSettings;
+	crop: NormalizedCrop | null;
 	tone: boolean;
 	waiters: PreviewWaiter[];
 }
@@ -113,7 +115,8 @@ export class PostframeWorkerClient {
 		frames: RawFrameHandleInput[],
 		cache: FileSystemFileHandle,
 		maxDimension: number,
-		adjustments: DevelopSettings
+		adjustments: DevelopSettings,
+		crop: NormalizedCrop | null
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -122,7 +125,8 @@ export class PostframeWorkerClient {
 				frames,
 				cache,
 				maxDimension,
-				adjustments: cloneDevelopSettings(adjustments)
+				adjustments: cloneDevelopSettings(adjustments),
+				crop: cloneCrop(crop)
 			}),
 			'opened'
 		);
@@ -132,7 +136,8 @@ export class PostframeWorkerClient {
 	async openDisplayDocument(
 		source: FileSystemFileHandle,
 		maxDimension: number,
-		adjustments: DevelopSettings
+		adjustments: DevelopSettings,
+		crop: NormalizedCrop | null
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -140,7 +145,8 @@ export class PostframeWorkerClient {
 				type: 'open-display',
 				source,
 				maxDimension,
-				adjustments: cloneDevelopSettings(adjustments)
+				adjustments: cloneDevelopSettings(adjustments),
+				crop: cloneCrop(crop)
 			}),
 			'opened'
 		);
@@ -148,7 +154,11 @@ export class PostframeWorkerClient {
 	}
 
 	async renderTile(tile: RenderTileRequest, signal?: AbortSignal) {
-		const request = { ...tile, adjustments: cloneDevelopSettings(tile.adjustments) };
+		const request = {
+			...tile,
+			adjustments: cloneDevelopSettings(tile.adjustments),
+			crop: cloneCrop(tile.crop)
+		};
 		const response = await this.send(
 			(id) => ({ id, type: 'tile', ...request }),
 			'tile',
@@ -184,7 +194,7 @@ export class PostframeWorkerClient {
 		return new Uint8Array(response.alpha);
 	}
 
-	preview(adjustments: DevelopSettings, tone: boolean) {
+	preview(adjustments: DevelopSettings, crop: NormalizedCrop | null, tone: boolean) {
 		return new Promise<RenderedPreview>((resolve, reject) => {
 			if (this.destroyed) {
 				reject(new Error('Postframe worker closed'));
@@ -193,11 +203,13 @@ export class PostframeWorkerClient {
 			const waiter = { resolve, reject };
 			if (this.queuedPreview) {
 				this.queuedPreview.adjustments = cloneDevelopSettings(adjustments);
+				this.queuedPreview.crop = cloneCrop(crop);
 				this.queuedPreview.tone = tone;
 				this.queuedPreview.waiters.push(waiter);
 			} else {
 				this.queuedPreview = {
 					adjustments: cloneDevelopSettings(adjustments),
+					crop: cloneCrop(crop),
 					tone,
 					waiters: [waiter]
 				};
@@ -206,12 +218,18 @@ export class PostframeWorkerClient {
 		});
 	}
 
-	async scope(adjustments: DevelopSettings, tone: boolean, sampleTarget: number) {
+	async scope(
+		adjustments: DevelopSettings,
+		crop: NormalizedCrop | null,
+		tone: boolean,
+		sampleTarget: number
+	) {
 		const response = await this.send(
 			(id) => ({
 				id,
 				type: 'scope',
 				adjustments: cloneDevelopSettings(adjustments),
+				crop: cloneCrop(crop),
 				tone,
 				sampleTarget
 			}),
@@ -341,6 +359,7 @@ export class PostframeWorkerClient {
 				id,
 				type: 'preview',
 				adjustments: preview.adjustments,
+				crop: preview.crop,
 				tone: preview.tone
 			}),
 			'preview'

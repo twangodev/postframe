@@ -1,4 +1,5 @@
 import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
+import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
 import { RawWebGpuRenderer, type RawRenderProfile } from './webgpu-renderer.ts';
@@ -23,6 +24,7 @@ export interface DisplayDocument {
 	bitmap: ImageBitmap;
 	preview: ImageData;
 	adjustments: DevelopSettings;
+	crop: NormalizedCrop | null;
 	light: WasmDisplayTransform;
 	adjusted: Uint8Array | null;
 }
@@ -182,7 +184,9 @@ async function publishRawDocument(
 		lightLut: null,
 		metadataSource: exportMetadataSource(message.frames)
 	};
-	const preview = measure('preview', () => renderRawPreview(session, message.adjustments, true));
+	const preview = measure('preview', () =>
+		renderRawPreview(session, message.adjustments, message.crop, true)
+	);
 	post(
 		{
 			id: message.id,
@@ -233,7 +237,7 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 		() => createImageBitmap(source, { imageOrientation: 'from-image' }),
 		source.name
 	);
-	const light = new wasm.DisplayTransform(message.adjustments);
+	const light = new wasm.DisplayTransform(message.adjustments, message.crop);
 	try {
 		postDisplayProgress(message, 'decoding', source.size, source.size);
 		const preview = displayPreview(bitmap, message.maxDimension);
@@ -243,13 +247,14 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 			bitmap,
 			preview,
 			adjustments: cloneDevelopSettings(message.adjustments),
+			crop: cloneCrop(message.crop),
 			light,
 			adjusted: null
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);
 		const rendered = await measureAsync('preview', () =>
-			renderDisplayPreview(next, message.adjustments)
+			renderDisplayPreview(next, message.adjustments, message.crop)
 		);
 		post(
 			{

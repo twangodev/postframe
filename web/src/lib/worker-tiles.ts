@@ -60,6 +60,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			request.height,
 			request.bin,
 			request.adjustments,
+			request.crop,
 			request.tone
 		);
 		try {
@@ -88,8 +89,18 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 		height
 	);
 	const pixels = context.getImageData(0, 0, width, height);
-	const adjusted = displayTransform(active, request.adjustments).apply_rgba(
-		new Uint8Array(pixels.data)
+	const adjusted = displayTransform(active, request.adjustments, request.crop).apply_tile_rgba(
+		new Uint8Array(pixels.data),
+		width,
+		height,
+		{
+			imageWidth: active.bitmap.width,
+			imageHeight: active.bitmap.height,
+			x: request.x,
+			y: request.y,
+			width: request.width,
+			height: request.height
+		}
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
 	return context.canvas.transferToImageBitmap();
@@ -103,7 +114,8 @@ function rawLuminanceLut(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
 	if (active.lightLut?.key === key) return active.lightLut.values;
 	const transform = new wasm.DisplayTransform(
-		tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings())
+		tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings()),
+		null
 	);
 	try {
 		const values = transform.luminance_lut;

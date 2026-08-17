@@ -10,6 +10,7 @@
 	import type { Size, ViewportTransform } from '$lib/photo-viewport';
 	import type { RenderTileRequest } from '$lib/worker';
 	import type { DevelopSettings } from '$lib/develop-settings';
+	import type { NormalizedCrop } from '$lib/edit-document';
 
 	interface Props {
 		photoId: string;
@@ -25,6 +26,7 @@
 		renderRevision: number;
 		onRenderSettled?: (revision: number) => void;
 		adjustments: DevelopSettings;
+		crop: NormalizedCrop | null;
 		tone?: boolean;
 	}
 
@@ -55,6 +57,7 @@
 		renderRevision,
 		onRenderSettled = () => {},
 		adjustments,
+		crop,
 		tone = true
 	}: Props = $props();
 	let container: HTMLDivElement;
@@ -148,13 +151,13 @@
 			replacement = null;
 			opened = false;
 			resetDiagnostics();
-			viewer.open({ tileSource: tileSource(renderRevision, adjustments, tone) });
+			viewer.open({ tileSource: tileSource(renderRevision, adjustments, crop, tone) });
 			return;
 		}
 
 		if (!opened || renderedRevision === renderRevision) return;
 		renderedRevision = renderRevision;
-		queueReplacement(renderRevision, adjustments, tone);
+		queueReplacement(renderRevision, adjustments, crop, tone);
 	});
 
 	$effect(() => {
@@ -202,26 +205,37 @@
 		};
 	}
 
-	function tileSource(revision: number, settings: DevelopSettings, toneMapping: boolean) {
+	function tileSource(
+		revision: number,
+		settings: DevelopSettings,
+		frame: NormalizedCrop | null,
+		toneMapping: boolean
+	) {
 		return createPostframeTileSource(openSeadragon!, {
 			photoId,
 			revision,
 			image,
 			renderTile,
 			adjustments: settings,
+			crop: frame,
 			tone: toneMapping,
 			onTileEvent: handleTileEvent
 		});
 	}
 
-	function queueReplacement(revision: number, settings: DevelopSettings, toneMapping: boolean) {
+	function queueReplacement(
+		revision: number,
+		settings: DevelopSettings,
+		frame: NormalizedCrop | null,
+		toneMapping: boolean
+	) {
 		if (!viewer) return;
 		const nextGeneration = ++generation;
 		discardReplacement();
 		resetDiagnostics();
 
 		viewer.addTiledImage({
-			tileSource: tileSource(revision, settings, toneMapping),
+			tileSource: tileSource(revision, settings, frame, toneMapping),
 			opacity: 0,
 			preload: true,
 			success: (event) => {
