@@ -1,6 +1,7 @@
 import {
 	developSettingsKey,
 	type ColorSettings,
+	type DetailSettings,
 	type DevelopSettings,
 	type LightSettings
 } from './develop-settings.ts';
@@ -8,6 +9,7 @@ import {
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
 const UNIFORM_BYTES = 128;
+const DETAIL_PLANE_FORMAT: GPUTextureFormat = 'r32float';
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
 const BUFFER_STORAGE = 0x0080;
@@ -25,12 +27,14 @@ export interface RawRenderProfile {
 
 export interface LinearTileSource {
 	rgba: Float32Array;
+	detail: Float32Array;
 	width: number;
 	height: number;
 }
 
 interface CachedSource {
 	texture: GPUTexture;
+	detail: GPUTexture | null;
 	width: number;
 	height: number;
 	bytes: number;
@@ -42,6 +46,7 @@ export class RawWebGpuRenderer {
 	private readonly mixBuffer: GPUBuffer;
 	private readonly lightBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
+	private readonly detailFallback: GPUTexture;
 	private sourceBytes = 0;
 	private lutKey = '';
 	private lost = false;
@@ -61,6 +66,11 @@ export class RawWebGpuRenderer {
 		this.uniformBuffer = device.createBuffer({
 			size: UNIFORM_BYTES,
 			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
+		});
+		this.detailFallback = device.createTexture({
+			size: { width: 1, height: 2 },
+			format: DETAIL_PLANE_FORMAT,
+			usage: TEXTURE_BINDING | TEXTURE_COPY_DST
 		});
 		void device.lost.then(() => {
 			this.lost = true;
@@ -118,7 +128,8 @@ export class RawWebGpuRenderer {
 				{ binding: 1, resource: { buffer: this.transferBuffer } },
 				{ binding: 2, resource: { buffer: this.mixBuffer } },
 				{ binding: 3, resource: { buffer: this.lightBuffer } },
-				{ binding: 4, resource: { buffer: this.uniformBuffer } }
+				{ binding: 4, resource: { buffer: this.uniformBuffer } },
+				{ binding: 7, resource: (cached.detail ?? this.detailFallback).createView() }
 			]
 		});
 		const encoder = this.device.createCommandEncoder();
@@ -144,6 +155,7 @@ export class RawWebGpuRenderer {
 	destroy() {
 		this.lost = true;
 		this.clearSources();
+		this.detailFallback.destroy();
 		this.transferBuffer.destroy();
 		this.mixBuffer.destroy();
 		this.lightBuffer.destroy();
@@ -152,8 +164,9 @@ export class RawWebGpuRenderer {
 	}
 
 	private uploadSource(key: string, source: LinearTileSource) {
-		this.sources.get(key)?.texture.destroy();
 		const previous = this.sources.get(key);
+		previous?.texture.destroy();
+		previous?.detail?.destroy();
 		if (previous) this.sourceBytes -= previous.bytes;
 		const texture = this.device.createTexture({
 			size: { width: source.width, height: source.height },
@@ -168,9 +181,10 @@ export class RawWebGpuRenderer {
 		);
 		const cached = {
 			texture,
+			detail: this.uploadDetailPlanes(source),
 			width: source.width,
 			height: source.height,
-			bytes: source.rgba.byteLength
+			bytes: source.rgba.byteLength + source.detail.byteLength
 		};
 		this.sources.delete(key);
 		this.sources.set(key, cached);
@@ -187,19 +201,41 @@ export class RawWebGpuRenderer {
 		return cached;
 	}
 
+	// The fine plane stacked above the coarse one, so one tile needs one texture.
+	private uploadDetailPlanes(source: LinearTileSource) {
+		if (source.detail.length !== (source.rgba.length / 4) * 2) return null;
+		const height = source.height * 2;
+		const texture = this.device.createTexture({
+			size: { width: source.width, height },
+			format: DETAIL_PLANE_FORMAT,
+			usage: TEXTURE_BINDING | TEXTURE_COPY_DST
+		});
+		this.device.queue.writeTexture(
+			{ texture },
+			source.detail,
+			{ bytesPerRow: source.width * 4, rowsPerImage: height },
+			{ width: source.width, height }
+		);
+		return texture;
+	}
+
 	private evictSources(currentKey: string) {
 		while (this.sourceBytes > SOURCE_CACHE_BUDGET && this.sources.size > 1) {
 			const oldestKey = this.sources.keys().next().value as string | undefined;
 			if (!oldestKey || oldestKey === currentKey) break;
 			const oldest = this.sources.get(oldestKey)!;
 			oldest.texture.destroy();
+			oldest.detail?.destroy();
 			this.sourceBytes -= oldest.bytes;
 			this.sources.delete(oldestKey);
 		}
 	}
 
 	private clearSources() {
-		for (const source of this.sources.values()) source.texture.destroy();
+		for (const source of this.sources.values()) {
+			source.texture.destroy();
+			source.detail?.destroy();
+		}
 		this.sources.clear();
 		this.sourceBytes = 0;
 	}
@@ -215,7 +251,7 @@ export class RawWebGpuRenderer {
 	}
 
 	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
-		const { light, color } = adjustments;
+		const { light, color, detail } = adjustments;
 		const bytes = new ArrayBuffer(UNIFORM_BYTES);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
@@ -233,6 +269,11 @@ export class RawWebGpuRenderer {
 		floats[11] = color.vibrance / 100;
 		floats.set(balanceGains(color), 12);
 		integers[15] = adjustmentsIdentity(adjustments) ? 1 : 0;
+		integers[16] = detailIdentity(detail) ? 1 : 0;
+		floats[17] = (detail.texture / 100) * MAX_TEXTURE_STOPS;
+		floats[18] = (detail.clarity / 100) * MAX_CLARITY_STOPS;
+		floats[19] = (detail.sharpenAmount / SHARPEN_RANGE) * MAX_SHARPEN_STOPS;
+		floats[20] = detail.dehaze / 100;
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
 }
@@ -260,13 +301,32 @@ function colorIdentity(color: ColorSettings) {
 	);
 }
 
+function detailIdentity(detail: DetailSettings) {
+	return (
+		detail.texture === 0 &&
+		detail.clarity === 0 &&
+		detail.dehaze === 0 &&
+		detail.sharpenAmount === 0
+	);
+}
+
 function adjustmentsIdentity(adjustments: DevelopSettings) {
-	return lightIdentity(adjustments.light) && colorIdentity(adjustments.color);
+	return (
+		lightIdentity(adjustments.light) &&
+		colorIdentity(adjustments.color) &&
+		detailIdentity(adjustments.detail)
+	);
 }
 
 const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
 const MAX_TEMPERATURE_SHIFT_STOPS = 0.5;
 const MAX_TINT_SHIFT_STOPS = 0.5;
+
+// Mirrors src/detail.rs, which owns these ranges and is where they are tested.
+const MAX_TEXTURE_STOPS = 0.5;
+const MAX_CLARITY_STOPS = 0.75;
+const MAX_SHARPEN_STOPS = 0.6;
+const SHARPEN_RANGE = 150;
 
 function balanceGains(color: ColorSettings) {
 	const warmth = (color.temperature / 100) * MAX_TEMPERATURE_SHIFT_STOPS;
@@ -294,13 +354,26 @@ struct Params {
   vibrance_amount: f32,
   balance: vec3<f32>,
   adjustments_identity: u32,
+  detail_identity: u32,
+  texture_stops: f32,
+  clarity_stops: f32,
+  sharpen_stops: f32,
+  haze: f32,
 }
+
+const LUMINANCE_WEIGHTS = vec3<f32>(0.2126, 0.7152, 0.0722);
+const LUMINANCE_FLOOR = 0.0000152587890625;
+const DEHAZE_AMBIENT = 1.0;
+const MAX_DEHAZE_VEIL = 0.9;
+const MAX_HAZE_BLEND = 0.6;
+const MIN_TRANSMISSION = 0.1;
 
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read> transfer_lut: array<f32>;
 @group(0) @binding(2) var<storage, read> mix: array<f32>;
 @group(0) @binding(3) var<storage, read> light_lut: array<f32>;
 @group(0) @binding(4) var<uniform> params: Params;
+@group(0) @binding(7) var detail_planes: texture_2d<f32>;
 
 fn camera_lookup(channel: u32, value: f32) -> f32 {
   let low = bitcast<f32>(params.lookup_low_bits);
@@ -343,12 +416,49 @@ fn apply_color(linear: vec3<f32>) -> vec3<f32> {
   if (scale == 1.0) {
     return balanced;
   }
-  let luminance = dot(balanced, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let luminance = dot(balanced, LUMINANCE_WEIGHTS);
   return max(vec3<f32>(luminance) + (balanced - vec3<f32>(luminance)) * scale, vec3<f32>(0.0));
 }
 
+// The fine plane occupies the tile's rows, the coarse plane the rows below it.
+fn detail_sample(position: vec2<i32>) -> vec2<f32> {
+  let coarse = position + vec2<i32>(0, i32(params.size.y));
+  return vec2<f32>(
+    textureLoad(detail_planes, position, 0).r,
+    textureLoad(detail_planes, coarse, 0).r
+  );
+}
+
+fn apply_dehaze(linear: vec3<f32>) -> vec3<f32> {
+  if (params.haze < 0.0) {
+    let blend = -params.haze * MAX_HAZE_BLEND;
+    return linear + (vec3<f32>(DEHAZE_AMBIENT) - linear) * blend;
+  }
+  let dark = min(linear.r, min(linear.g, linear.b));
+  let transmission = max(1.0 - params.haze * MAX_DEHAZE_VEIL * dark, MIN_TRANSMISSION);
+  let veil = vec3<f32>(DEHAZE_AMBIENT * (1.0 - transmission));
+  return max((linear - veil) / transmission, vec3<f32>(0.0));
+}
+
+fn apply_detail(linear: vec3<f32>, detail: vec2<f32>) -> vec3<f32> {
+  let luminance = dot(linear, LUMINANCE_WEIGHTS);
+  if (luminance <= LUMINANCE_FLOOR) {
+    return linear;
+  }
+  let encoded = encode_srgb(vec3<f32>(luminance)).r;
+  let midtone = 4.0 * encoded * (1.0 - encoded);
+  let stops = (params.texture_stops + params.sharpen_stops) * detail.x
+    + params.clarity_stops * midtone * detail.y;
+  if (stops == 0.0) {
+    return linear;
+  }
+  let maximum = max(linear.r, max(linear.g, linear.b));
+  let gamut = select(3.402823466e+38, 1.0 / maximum, maximum > 0.0);
+  return linear * min(exp2(stops), gamut);
+}
+
 fn apply_light(linear: vec3<f32>) -> vec3<f32> {
-  let luminance = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let luminance = dot(linear, LUMINANCE_WEIGHTS);
   let position = clamp(luminance, 0.0, 1.0) * f32(arrayLength(&light_lut) - 1u);
   let index = min(u32(position), arrayLength(&light_lut) - 2u);
   let fraction = position - f32(index);
@@ -363,13 +473,16 @@ fn apply_light(linear: vec3<f32>) -> vec3<f32> {
 }
 
 // Stages run in the order fixed by DevelopTransform in src/develop.rs.
-fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
+fn apply_adjustments(encoded: vec3<f32>, position: vec2<i32>) -> vec3<f32> {
   if (params.adjustments_identity == 1u) {
     return encoded;
   }
   var linear = decode_srgb(encoded);
   if (params.color_identity != 1u) {
     linear = apply_color(linear);
+  }
+  if (params.detail_identity != 1u) {
+    linear = apply_detail(apply_dehaze(linear), detail_sample(position));
   }
   if (params.light_identity != 1u) {
     linear = apply_light(linear);
@@ -389,7 +502,8 @@ fn vertex(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 
 @fragment
 fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-  var exposed = textureLoad(source, vec2<i32>(position.xy), 0).rgb * params.exposure_gain;
+  let pixel = vec2<i32>(position.xy);
+  var exposed = textureLoad(source, pixel, 0).rgb * params.exposure_gain;
   if (params.tone == 1u) {
     let brightest = max(exposed.r, max(exposed.g, exposed.b));
     let compression = (1.0 + brightest / (params.white * params.white)) / (1.0 + brightest);
@@ -405,6 +519,6 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     camera_lookup(1u, mixed.g),
     camera_lookup(2u, mixed.b)
   ) / 255.0, vec3<f32>(0.0), vec3<f32>(1.0));
-  return vec4<f32>(apply_adjustments(encoded), 1.0);
+  return vec4<f32>(apply_adjustments(encoded, pixel), 1.0);
 }
 `;

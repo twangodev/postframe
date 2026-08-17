@@ -297,6 +297,15 @@ export function withAdjustment<Group extends ScalarGroupName>(
 	return next;
 }
 
+// Identifies the tile-side spatial work a cached source tile already carries.
+// Mirrors DetailKey in src/wasm/session.rs: cleaning a tile and building its
+// blur planes depend on the noise controls and on whether any stage reads a
+// plane, so dragging clarity keeps the cached tile and its planes.
+export function detailTileKey(detail: DetailSettings) {
+	const planes = detail.texture !== 0 || detail.clarity !== 0 || detail.sharpenAmount !== 0;
+	return `${detail.noiseLuminance}:${detail.noiseColor}:${planes}`;
+}
+
 export function developSettingsKey(settings: DevelopSettings) {
 	return canonicalKey(settings);
 }

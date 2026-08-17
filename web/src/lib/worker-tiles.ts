@@ -1,6 +1,7 @@
 import {
 	defaultColorSettings,
 	developSettingsKey,
+	detailTileKey,
 	tonalDevelopSettings,
 	type DevelopSettings
 } from './develop-settings';
@@ -35,9 +36,15 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 						request.y,
 						request.width,
 						request.height,
-						request.bin
+						request.bin,
+						request.adjustments
 					);
-					source = { rgba: tile.rgba, width: tile.width, height: tile.height };
+					source = {
+						rgba: tile.rgba,
+						detail: tile.detail,
+						width: tile.width,
+						height: tile.height
+					};
 				}
 				return await active.renderer.render(
 					key,
@@ -96,7 +103,8 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 }
 
 function rawTileKey(tile: RenderTileRequest) {
-	return `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
+	const region = `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
+	return `${region}:${detailTileKey(tile.adjustments.detail)}`;
 }
 
 function rawLuminanceLut(active: RawDocument, adjustments: DevelopSettings) {

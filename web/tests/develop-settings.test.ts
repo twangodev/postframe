@@ -3,12 +3,30 @@ import test from 'node:test';
 
 import {
 	curvePointsSchema,
+	defaultDetailSettings,
 	defaultDevelopSettings,
 	cloneDevelopSettings,
+	detailTileKey,
 	developSettingsSchema,
 	identityCurve,
 	tonalDevelopSettings
 } from '../src/lib/develop-settings.ts';
+
+test('the source tile key tracks the tile-side detail work and nothing else', () => {
+	const neutral = defaultDetailSettings();
+	const key = (changed: Partial<typeof neutral>) => detailTileKey({ ...neutral, ...changed });
+
+	assert.equal(key({ dehaze: 60 }), key({}));
+	assert.notEqual(key({ noiseLuminance: 30 }), key({}));
+	assert.notEqual(key({ noiseColor: 30 }), key({}));
+	assert.notEqual(key({ clarity: 10 }), key({}));
+
+	// Every plane reader shares one key, so dragging clarity reuses the planes.
+	assert.equal(key({ clarity: 10 }), key({ clarity: 90 }));
+	assert.equal(key({ clarity: 10 }), key({ texture: -80 }));
+	assert.equal(key({ clarity: 10 }), key({ sharpenAmount: 150 }));
+	assert.equal(key({ clarity: 10, dehaze: -40 }), key({ texture: 5 }));
+});
 
 test('the neutral develop aggregate satisfies its own schema', () => {
 	const settings = defaultDevelopSettings();

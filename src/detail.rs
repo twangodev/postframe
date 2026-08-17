@@ -175,8 +175,18 @@ impl DetailTransform {
 /// Clarity leans on the midtones so it neither crushes blacks nor blows
 /// highlights, weighted where the eye reads tone rather than in linear light.
 fn midtone_weight(luminance: f32) -> f32 {
-    let encoded = f32::from(linear_to_srgb(luminance)) / 255.0;
+    let encoded = encode_srgb(luminance.clamp(0.0, 1.0));
     4.0 * encoded * (1.0 - encoded)
+}
+
+/// The continuous transfer the shader also evaluates, where `light`'s table
+/// would quantise the weight to a code and drift the two paths apart.
+fn encode_srgb(linear: f32) -> f32 {
+    if linear <= 0.003_130_8 {
+        12.92 * linear
+    } else {
+        1.055 * linear.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// Edge-preserving smoothing of luminance, then of chroma, leaving the tile
