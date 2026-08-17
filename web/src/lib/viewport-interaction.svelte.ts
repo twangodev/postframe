@@ -3,24 +3,9 @@ import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import { GizmoSession } from './gizmo-session.svelte.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
+import { screenToImage, withinImage, type Point, type Size } from './photo-viewport.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
-import {
-	clampTransform,
-	fitScale,
-	fittedTransform,
-	nextZoomScale,
-	panBy,
-	pixelGridOpacity,
-	screenToImage,
-	surfaceTransform,
-	visibleImageRect,
-	wheelNavigation,
-	withinImage,
-	zoomAt,
-	type Point,
-	type Size,
-	type ViewportTransform
-} from './photo-viewport.ts';
+import { ViewportCamera } from './viewport-camera.svelte.ts';
 import type { LivePaint } from './components/MaskPaintPreview.svelte';
 
 export const MASK_BRUSH_FEATHER = 0.45;
@@ -50,10 +35,6 @@ export class ViewportInteraction {
 	private readonly context: ViewportContext;
 
 	element = $state<HTMLDivElement | null>(null);
-	size = $state<Size>({ width: 1, height: 1 });
-	transform = $state<ViewportTransform>({ scale: 1, pan: { x: 0, y: 0 } });
-	mode = $state<'fit' | 'manual'>('fit');
-	panning = $state(false);
 	spaceHeld = $state(false);
 	objectStroke = $state<{
 		pointerId: number;
@@ -68,9 +49,7 @@ export class ViewportInteraction {
 	maskStroke = $state<{ pointerId: number; points: NormalizedPoint[] } | null>(null);
 	brushPoint = $state<NormalizedPoint | null>(null);
 
-	private drag: { pointerId: number; origin: Point; transform: ViewportTransform } | null = null;
-	private pinch: { origin: Point; distance: number; transform: ViewportTransform } | null = null;
-	private readonly pointers = new Map<number, Point>();
+	private readonly camera = new ViewportCamera(() => this.image);
 
 	private readonly gizmos = new GizmoSession({
 		image: () => this.image,
@@ -81,7 +60,7 @@ export class ViewportInteraction {
 		spaceHeld: () => this.spaceHeld,
 		imagePixel: (point) => this.imagePixel(point),
 		capturePointer: (pointerId) => this.capturePointer(pointerId),
-		adoptPointer: (pointerId, screen) => void this.pointers.set(pointerId, screen),
+		adoptPointer: (pointerId, screen) => this.camera.adoptPointer(pointerId, screen),
 		placeGradientComponent: (component) => this.context.placeGradientComponent(component)
 	});
 
@@ -91,6 +70,34 @@ export class ViewportInteraction {
 
 	get image() {
 		return this.context.image();
+	}
+
+	get size() {
+		return this.camera.size;
+	}
+
+	get transform() {
+		return this.camera.transform;
+	}
+
+	get mode() {
+		return this.camera.mode;
+	}
+
+	get panning() {
+		return this.camera.panning;
+	}
+
+	get imageOffset() {
+		return this.camera.imageOffset;
+	}
+
+	get visiblePixels() {
+		return this.camera.visiblePixels;
+	}
+
+	get pixelGridStrength() {
+		return this.camera.pixelGridStrength;
 	}
 
 	get gizmoDrag() {
@@ -117,9 +124,6 @@ export class ViewportInteraction {
 		return this.gizmos.angle;
 	}
 
-	imageOffset = $derived(surfaceTransform(this.size, this.image, this.transform));
-	visiblePixels = $derived(visibleImageRect(this.size, this.image, this.transform));
-	pixelGridStrength = $derived(pixelGridOpacity(this.transform.scale));
 	refineBrushRadius = $derived.by(
 		() =>
 			this.context.brushSize() /
@@ -144,66 +148,18 @@ export class ViewportInteraction {
 			: null;
 	});
 
-	resize = (next: Size) => {
-		this.size = next;
-		this.transform =
-			this.mode === 'fit'
-				? fittedTransform(next, this.image)
-				: clampTransform(this.transform, next, this.image);
-	};
-
-	fitPhoto = () => {
-		this.mode = 'fit';
-		this.transform = fittedTransform(this.size, this.image);
-	};
-
-	showActualPixels = () => {
-		this.setZoom(1);
-	};
-
-	setZoom = (scale: number, anchor = this.center()) => {
-		this.mode = 'manual';
-		this.transform = zoomAt(this.transform, scale, anchor, this.size, this.image);
-	};
-
-	stepZoom = (direction: -1 | 1, anchor = this.center()) => {
-		this.setZoom(
-			nextZoomScale(this.transform.scale, direction, fitScale(this.size, this.image)),
-			anchor
-		);
-	};
-
-	zoomIn = () => {
-		this.stepZoom(1);
-	};
-
-	zoomOut = () => {
-		this.stepZoom(-1);
-	};
-
-	chooseZoom = (scale: number) => () => this.setZoom(scale);
+	resize = (next: Size) => this.camera.resize(next);
+	fitPhoto = () => this.camera.fitPhoto();
+	showActualPixels = () => this.camera.showActualPixels();
+	setZoom = (scale: number, anchor?: Point) => this.camera.setZoom(scale, anchor);
+	stepZoom = (direction: -1 | 1, anchor?: Point) => this.camera.stepZoom(direction, anchor);
+	zoomIn = () => this.camera.stepZoom(1);
+	zoomOut = () => this.camera.stepZoom(-1);
+	chooseZoom = (scale: number) => () => this.camera.setZoom(scale);
 
 	handleWheel = (event: WheelEvent) => {
 		if (!this.context.enabled()) return;
-		event.preventDefault();
-		const unit =
-			event.deltaMode === WheelEvent.DOM_DELTA_LINE
-				? 16
-				: event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-					? this.size.height
-					: 1;
-		const delta = { x: event.deltaX * unit, y: event.deltaY * unit };
-		const navigation = wheelNavigation(delta, event);
-		if (navigation.kind === 'pan') {
-			this.mode = 'manual';
-			this.transform = panBy(this.transform, navigation.delta, this.size, this.image);
-			return;
-		}
-		const sensitivity = event.ctrlKey ? 0.008 : 0.0018;
-		this.setZoom(
-			this.transform.scale * Math.exp(-navigation.delta * sensitivity),
-			this.pointFor(event)
-		);
+		this.camera.wheel(event, this.pointFor(event));
 	};
 
 	handlePointerDown = (event: PointerEvent) => {
@@ -215,15 +171,13 @@ export class ViewportInteraction {
 		if (event.pointerType === 'touch') {
 			event.preventDefault();
 			this.capturePointer(event.pointerId);
-			this.pointers.set(event.pointerId, point);
-			if (this.pointers.size >= 2) this.beginPinch();
-			else this.beginPan(event.pointerId, point);
+			this.camera.beginTouch(event.pointerId, point);
 			return;
 		}
 
 		if (tool === 'zoom' && event.button === 0) {
 			event.preventDefault();
-			this.stepZoom(event.altKey ? -1 : 1, point);
+			this.camera.stepZoom(event.altKey ? -1 : 1, point);
 			return;
 		}
 
@@ -270,7 +224,7 @@ export class ViewportInteraction {
 		if (tool === 'hand' || this.spaceHeld || event.button === 1) {
 			event.preventDefault();
 			this.capturePointer(event.pointerId);
-			this.beginPan(event.pointerId, point);
+			this.camera.beginPan(event.pointerId, point);
 		}
 	};
 
@@ -322,33 +276,7 @@ export class ViewportInteraction {
 			if (extended) this.maskStroke = { ...this.maskStroke, points: extended };
 			return;
 		}
-		if (this.pointers.has(event.pointerId)) this.pointers.set(event.pointerId, point);
-
-		if (this.pinch && this.pointers.size >= 2) {
-			const [first, second] = [...this.pointers.values()];
-			if (!first || !second) return;
-			const center = midpoint(first, second);
-			const scale = this.pinch.transform.scale * (distance(first, second) / this.pinch.distance);
-			const zoomed = zoomAt(this.pinch.transform, scale, this.pinch.origin, this.size, this.image);
-			this.mode = 'manual';
-			this.transform = panBy(
-				zoomed,
-				{ x: center.x - this.pinch.origin.x, y: center.y - this.pinch.origin.y },
-				this.size,
-				this.image
-			);
-			return;
-		}
-
-		if (!this.drag || this.drag.pointerId !== event.pointerId) return;
-		event.preventDefault();
-		this.mode = 'manual';
-		this.transform = panBy(
-			this.drag.transform,
-			{ x: point.x - this.drag.origin.x, y: point.y - this.drag.origin.y },
-			this.size,
-			this.image
-		);
+		this.camera.movePointer(event, point);
 	};
 
 	handlePointerLeave = () => {
@@ -388,16 +316,7 @@ export class ViewportInteraction {
 			return;
 		}
 		if (this.gizmos.finish(event)) return;
-		const wasPinching = this.pinch !== null;
-		this.pointers.delete(event.pointerId);
-		if (this.drag?.pointerId === event.pointerId) this.drag = null;
-		if (wasPinching && this.pointers.size === 1) {
-			const [remaining] = this.pointers.entries();
-			if (remaining) this.beginPan(...remaining);
-		} else if (this.pointers.size < 2) {
-			this.pinch = null;
-		}
-		this.panning = this.drag !== null || this.pinch !== null;
+		this.camera.releasePointer(event.pointerId);
 	};
 
 	handleDoubleClick = (event: MouseEvent) => {
@@ -411,8 +330,8 @@ export class ViewportInteraction {
 			return;
 		}
 		event.preventDefault();
-		if (this.mode === 'fit') this.setZoom(1, this.pointFor(event));
-		else this.fitPhoto();
+		if (this.mode === 'fit') this.camera.setZoom(1, this.pointFor(event));
+		else this.camera.fitPhoto();
 	};
 
 	handleKeyDown = (event: KeyboardEvent) => {
@@ -428,16 +347,16 @@ export class ViewportInteraction {
 		}
 		if (event.key === '0') {
 			event.preventDefault();
-			this.fitPhoto();
+			this.camera.fitPhoto();
 		} else if (event.key === '1') {
 			event.preventDefault();
-			this.showActualPixels();
+			this.camera.showActualPixels();
 		} else if (event.key === '+' || event.key === '=') {
 			event.preventDefault();
-			this.stepZoom(1);
+			this.camera.stepZoom(1);
 		} else if (event.key === '-' || event.key === '_') {
 			event.preventDefault();
-			this.stepZoom(-1);
+			this.camera.stepZoom(-1);
 		}
 	};
 
@@ -449,13 +368,9 @@ export class ViewportInteraction {
 		this.spaceHeld = false;
 	};
 
-	private center() {
-		return { x: this.size.width / 2, y: this.size.height / 2 };
-	}
-
 	private pointFor(event: PointerEvent | WheelEvent | MouseEvent) {
 		const bounds = this.element?.getBoundingClientRect();
-		if (!bounds) return this.center();
+		if (!bounds) return { x: this.size.width / 2, y: this.size.height / 2 };
 		return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
 	}
 
@@ -480,32 +395,6 @@ export class ViewportInteraction {
 			return false;
 		}
 	}
-
-	private beginPan(pointerId: number, origin: Point) {
-		this.drag = { pointerId, origin, transform: this.transform };
-		this.pinch = null;
-		this.panning = true;
-	}
-
-	private beginPinch() {
-		const [first, second] = [...this.pointers.values()];
-		if (!first || !second) return;
-		this.drag = null;
-		this.pinch = {
-			origin: midpoint(first, second),
-			distance: Math.max(1, distance(first, second)),
-			transform: this.transform
-		};
-		this.panning = true;
-	}
-}
-
-function midpoint(first: Point, second: Point) {
-	return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-}
-
-function distance(first: Point, second: Point) {
-	return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
 function editableTarget(target: EventTarget | null) {
