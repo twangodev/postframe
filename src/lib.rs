@@ -10,6 +10,7 @@ pub mod bracket;
 mod cache;
 pub mod color;
 pub mod composite;
+pub mod curve;
 pub mod decode;
 pub mod develop;
 pub mod error;
@@ -27,6 +28,7 @@ mod wasm;
 pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
+pub use curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 pub use develop::{
     CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
     EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings,
