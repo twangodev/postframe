@@ -70,7 +70,8 @@
 		paintObjectMask: (points, label) => workspace.paintObjectMask(points, label),
 		paintBrushMask: (stroke, operation) => workspace.paintBrushMask(stroke, operation),
 		placeLinearMask: (start, end) => workspace.placeLinearMask(start, end),
-		placeRadialMask: (center, radius) => workspace.placeRadialMask(center, radius)
+		placeRadialMask: (center, radius) => workspace.placeRadialMask(center, radius),
+		placeGradientComponent: (component) => workspace.placeGradientComponent(component)
 	});
 
 	$effect(() => {

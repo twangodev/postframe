@@ -1,6 +1,7 @@
 import type { EditMask, MaskComponent, NormalizedPoint } from './edit-document.ts';
 import { linearLayout } from './mask-gizmo-linear.ts';
 import { pixelToNormalized } from './mask-gizmo.ts';
+import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
 import {
@@ -41,6 +42,7 @@ export interface ViewportContext {
 	paintBrushMask: (stroke: MaskBrushStroke, operation: 'add' | 'subtract') => Promise<unknown>;
 	placeLinearMask: (start: NormalizedPoint, end: NormalizedPoint) => Promise<unknown>;
 	placeRadialMask: (center: NormalizedPoint, radius: number) => Promise<unknown>;
+	placeGradientComponent: (component: GradientComponent) => Promise<unknown>;
 }
 
 export class ViewportInteraction {

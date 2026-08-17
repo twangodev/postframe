@@ -37,7 +37,7 @@ import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-pr
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { defaultAdjustments, EditorSession } from './editor-session';
 import { entityId } from './entity-id';
-import { MaskPainting } from './mask-painting';
+import { MaskPainting, type GradientComponent } from './mask-painting';
 import { MaskRasterPipeline, type SelectedMaskRaster } from './mask-raster-pipeline';
 import { ObjectUrlRegistry } from './object-url-registry';
 import { PhotoIngest } from './photo-ingest';
@@ -537,6 +537,9 @@ export class WorkspaceState {
 
 	placeRadialMask = (center: NormalizedPoint, radius: number) =>
 		this.painting.placeRadialMask(center, radius);
+
+	placeGradientComponent = (component: GradientComponent) =>
+		this.painting.placeGradientComponent(component);
 
 	chooseDetectedSubject = (index: number) => this.smartMasks.chooseDetectedSubject(index);
 
