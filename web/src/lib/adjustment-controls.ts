@@ -1,6 +1,8 @@
 import {
-	withAdjustment,
-	type AdjustmentRecord,
+	mirrorAdjustments,
+	withAdjustmentAt,
+	type AdjustmentMirror,
+	type AdjustmentTarget,
 	type ColorControlName,
 	type LightControlName,
 	type ScalarControlName,
@@ -13,11 +15,10 @@ import type { MaskEdgeControlName } from './mask-edge-settings';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
 import type { Photo } from './photo-record';
 
-export interface AdjustmentControlsHost {
+export interface AdjustmentControlsHost extends AdjustmentMirror {
 	readonly selectedPhoto: Photo | null;
 	readonly canAdjustLight: boolean;
 	readonly selectedMaskId: string | null;
-	readonly adjustments: AdjustmentRecord;
 	masks: EditMask[];
 	dispatchEditorCommand(command: EditorCommand): boolean;
 }
@@ -34,11 +35,7 @@ export class AdjustmentControls {
 		control: ScalarControlName<Group>,
 		value: number
 	) {
-		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		Object.assign(this.host.adjustments, { [control]: value });
-		this.develop.schedule(
-			withAdjustment(this.host.selectedPhoto.edit.adjustments, group, control, value)
-		);
+		this.previewAdjustmentAt({ group, control } as AdjustmentTarget, value);
 	}
 
 	commitAdjustment<Group extends ScalarGroupName>(
@@ -46,8 +43,19 @@ export class AdjustmentControls {
 		control: ScalarControlName<Group>,
 		value: number
 	) {
+		this.commitAdjustmentAt({ group, control } as AdjustmentTarget, value);
+	}
+
+	previewAdjustmentAt(target: AdjustmentTarget, value: number) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		if (!this.host.dispatchEditorCommand(adjustmentCommand(group, control, value))) {
+		const adjustments = withAdjustmentAt(this.host.selectedPhoto.edit.adjustments, target, value);
+		mirrorAdjustments(this.host, adjustments);
+		this.develop.schedule(adjustments);
+	}
+
+	commitAdjustmentAt(target: AdjustmentTarget, value: number) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		if (!this.host.dispatchEditorCommand(adjustmentCommand(target, value))) {
 			this.releaseUnchangedPreview();
 		}
 	}

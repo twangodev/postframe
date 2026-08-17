@@ -1,9 +1,9 @@
 import {
 	cloneDevelopSettings,
 	defaultDevelopSettings,
+	mirrorAdjustments,
 	sameDevelopSettings,
-	scalarAdjustments,
-	type AdjustmentRecord,
+	type AdjustmentMirror,
 	type DevelopSettings
 } from './develop-settings';
 import {
@@ -21,14 +21,13 @@ import type { Photo } from './photo-record';
 import type { SmartMaskStatus } from './smart-masking';
 import type { WorkspacePersistence } from './workspace-persistence';
 
-export interface EditorSessionHost {
+export interface EditorSessionHost extends AdjustmentMirror {
 	readonly selectedPhoto: Photo | null;
 	masks: EditMask[];
 	selectedMaskId: string | null;
 	selectedMaskRaster: SelectedMaskRaster | null;
 	imageScope: ImageScopeData | null;
 	smartMaskStatus: SmartMaskStatus;
-	adjustments: AdjustmentRecord;
 	renderSettings: { adjustments: DevelopSettings; revision: number };
 	history: string[];
 	canUndo: boolean;
@@ -85,7 +84,7 @@ export class EditorSession {
 		this.host.selectedMaskId = null;
 		this.host.selectedMaskRaster = null;
 		this.host.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
-		this.host.adjustments = scalarAdjustments(adjustments);
+		mirrorAdjustments(this.host, adjustments);
 		this.host.renderSettings = {
 			adjustments: cloneDevelopSettings(adjustments),
 			revision: this.host.renderSettings.revision + 1
@@ -108,7 +107,7 @@ export class EditorSession {
 		) {
 			this.host.selectedMaskId = this.host.masks.at(-1)?.id ?? null;
 		}
-		Object.assign(this.host.adjustments, scalarAdjustments(next.adjustments));
+		mirrorAdjustments(this.host, next.adjustments);
 
 		if (invalidation === 'render') {
 			if (globalAdjustmentsChanged) this.develop.request(next.adjustments, 'refining');

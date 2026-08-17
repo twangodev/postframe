@@ -13,7 +13,10 @@ import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
 	defaultDevelopSettings,
+	defaultGradingSettings,
+	defaultMixerSettings,
 	scalarAdjustments,
+	type AdjustmentTarget,
 	type ColorControlName,
 	type LightControlName,
 	type ScalarControlName,
@@ -128,6 +131,8 @@ export class WorkspaceState {
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
+	mixer = $state(defaultMixerSettings());
+	grading = $state(defaultGradingSettings());
 	renderSettings = $state({ adjustments: defaultDevelopSettings(), revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
@@ -200,6 +205,8 @@ export class WorkspaceState {
 				'selectedPhoto',
 				'canAdjustLight',
 				'adjustments',
+				'mixer',
+				'grading',
 				'masks',
 				'selectedMaskId',
 				'documentStatus',
@@ -388,6 +395,12 @@ export class WorkspaceState {
 		control: ScalarControlName<Group>,
 		value: number
 	) => this.controls.commitAdjustment(group, control, value);
+
+	previewAdjustmentAt = (target: AdjustmentTarget, value: number) =>
+		this.controls.previewAdjustmentAt(target, value);
+
+	commitAdjustmentAt = (target: AdjustmentTarget, value: number) =>
+		this.controls.commitAdjustmentAt(target, value);
 
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);

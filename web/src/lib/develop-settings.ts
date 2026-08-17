@@ -180,9 +180,47 @@ export const MIXER_BAND_NAMES = [
 
 export type MixerBandName = (typeof MIXER_BAND_NAMES)[number];
 
-export const GRADING_RANGE_NAMES = ['shadows', 'midtones', 'highlights'] as const;
+export const MIXER_BAND_CONTROL_NAMES = [
+	'hue',
+	'saturation',
+	'luminance'
+] as const satisfies readonly (keyof MixerBand)[];
+
+export type MixerBandControlName = (typeof MIXER_BAND_CONTROL_NAMES)[number];
+
+export const GRADING_RANGE_NAMES = [
+	'shadows',
+	'midtones',
+	'highlights'
+] as const satisfies readonly (keyof GradingSettings)[];
 
 export type GradingRangeName = (typeof GRADING_RANGE_NAMES)[number];
+
+export const GRADING_WHEEL_CONTROL_NAMES = [
+	'hue',
+	'saturation',
+	'luminance'
+] as const satisfies readonly (keyof GradingWheel)[];
+
+export type GradingWheelControlName = (typeof GRADING_WHEEL_CONTROL_NAMES)[number];
+
+export const GRADING_BLEND_CONTROL_NAMES = [
+	'blending',
+	'balance'
+] as const satisfies readonly (keyof GradingSettings)[];
+
+export type GradingBlendControlName = (typeof GRADING_BLEND_CONTROL_NAMES)[number];
+
+/// Where one control lives in the settings tree. Flat groups need a group and a
+/// control; the mixer and the grading wheels also need the band or range whose
+/// wheel is being moved.
+export type AdjustmentTarget =
+	| {
+			[Group in ScalarGroupName]: { group: Group; control: ScalarControlName<Group> };
+	  }[ScalarGroupName]
+	| { group: 'mixer'; band: MixerBandName; control: MixerBandControlName }
+	| { group: 'grading'; range: GradingRangeName; control: GradingWheelControlName }
+	| { group: 'grading'; control: GradingBlendControlName };
 
 export function defaultLightSettings(): LightSettings {
 	return {
@@ -286,15 +324,44 @@ export function scalarAdjustments(settings: DevelopSettings): AdjustmentRecord {
 	return { ...settings.light, ...settings.color, ...settings.detail, ...settings.effects };
 }
 
+/// The panel's own editable copy of the settings, detached from the document so
+/// a slider cannot write through to it without passing a command.
+export interface AdjustmentMirror {
+	adjustments: AdjustmentRecord;
+	mixer: MixerSettings;
+	grading: GradingSettings;
+}
+
+export function mirrorAdjustments(mirror: AdjustmentMirror, settings: DevelopSettings) {
+	const detached = cloneDevelopSettings(settings);
+	Object.assign(mirror.adjustments, scalarAdjustments(detached));
+	mirror.mixer = detached.mixer;
+	mirror.grading = detached.grading;
+}
+
 export function withAdjustment<Group extends ScalarGroupName>(
 	settings: DevelopSettings,
 	group: Group,
 	control: ScalarControlName<Group>,
 	value: number
 ): DevelopSettings {
+	return withAdjustmentAt(settings, { group, control } as AdjustmentTarget, value);
+}
+
+export function withAdjustmentAt(
+	settings: DevelopSettings,
+	target: AdjustmentTarget,
+	value: number
+): DevelopSettings {
 	const next = cloneDevelopSettings(settings);
-	Object.assign(next[group], { [control]: value });
+	Object.assign(addressed(next, target), { [target.control]: value });
 	return next;
+}
+
+function addressed(settings: DevelopSettings, target: AdjustmentTarget) {
+	if ('band' in target) return settings.mixer[target.band];
+	if ('range' in target) return settings.grading[target.range];
+	return settings[target.group];
 }
 
 export function developSettingsKey(settings: DevelopSettings) {

@@ -14,32 +14,20 @@ import {
 	developSettingsSchema,
 	lightSettingsSchema,
 	sameDevelopSettings,
-	withAdjustment,
+	withAdjustmentAt,
+	type AdjustmentTarget,
 	type ColorControlName,
 	type DevelopSettings,
-	type LightControlName,
-	type ScalarControlName,
-	type ScalarGroupName
+	type LightControlName
 } from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
-export type AdjustmentCommand = {
-	[Group in ScalarGroupName]: {
-		type: 'adjustment.set';
-		group: Group;
-		control: ScalarControlName<Group>;
-		value: number;
-	};
-}[ScalarGroupName];
+export type AdjustmentCommand = AdjustmentTarget & { type: 'adjustment.set'; value: number };
 
-export function adjustmentCommand<Group extends ScalarGroupName>(
-	group: Group,
-	control: ScalarControlName<Group>,
-	value: number
-): AdjustmentCommand {
-	return { type: 'adjustment.set', group, control, value } as AdjustmentCommand;
+export function adjustmentCommand(target: AdjustmentTarget, value: number): AdjustmentCommand {
+	return { type: 'adjustment.set', ...target, value } as AdjustmentCommand;
 }
 
 export type EditorCommand =
@@ -87,11 +75,11 @@ export function applyEditorCommand(
 	switch (command.type) {
 		case 'adjustment.set': {
 			const adjustments: DevelopSettings = developSettingsSchema.parse(
-				withAdjustment(next.adjustments, command.group, command.control, command.value)
+				withAdjustmentAt(next.adjustments, command, command.value)
 			);
 			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
 			next.adjustments = adjustments;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
+			return transition(command, targetLabel(command), 'render', next);
 		}
 		case 'mask.light.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -185,6 +173,11 @@ function transition(
 	document: EditDocument
 ): EditorTransition {
 	return { command, label, invalidation, document: editDocumentSchema.parse(document) };
+}
+
+function targetLabel(target: AdjustmentTarget & { value: number }) {
+	const section = 'band' in target ? target.band : 'range' in target ? target.range : null;
+	return controlLabel(section ? `${section} ${target.control}` : target.control, target.value);
 }
 
 function controlLabel(control: string, value: number) {
