@@ -1,10 +1,9 @@
+import { axisLockedDelta, normalizeRotation, snapRotation } from './drag-constraints.ts';
 import {
 	clampExtent,
 	maxDimension,
-	normalizeRotation,
 	normalizedToPixel,
 	pixelToNormalized,
-	snapRotation,
 	type GizmoHit,
 	type GizmoModifiers,
 	type RadialGizmoGeometry
@@ -132,12 +131,13 @@ export function reduceRadialDrag(
 	const maxDim = maxDimension(image);
 	const center = normalizedToPixel(start.center, image);
 	if (grip.kind === 'body') {
+		const delta = axisLockedDelta(
+			{ x: point.x - origin.x, y: point.y - origin.y },
+			modifiers.shift
+		);
 		return {
 			...start,
-			center: pixelToNormalized(
-				{ x: center.x + (point.x - origin.x), y: center.y + (point.y - origin.y) },
-				image
-			)
+			center: pixelToNormalized({ x: center.x + delta.x, y: center.y + delta.y }, image)
 		};
 	}
 	const majorDirection = { x: Math.cos(start.rotation), y: Math.sin(start.rotation) };

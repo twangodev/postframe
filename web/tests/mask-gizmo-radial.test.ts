@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ROTATION_SNAP } from '../src/lib/mask-gizmo.ts';
+import { ROTATION_SNAP } from '../src/lib/drag-constraints.ts';
 import {
 	ellipseOutlineDistance,
 	hitTestRadial,
@@ -130,4 +130,16 @@ test('body drags translate the center', () => {
 		{ shift: false }
 	);
 	assert.deepEqual(dragged.center, { x: 0.6, y: 0.4 });
+});
+
+test('shift locks body drags to the dominant axis', () => {
+	const dragged = reduceRadialDrag(
+		geometry,
+		{ kind: 'body' },
+		{ x: 100, y: 50 },
+		{ x: 108, y: 90 },
+		image,
+		{ shift: true }
+	);
+	assert.deepEqual(dragged.center, { x: 0.5, y: 0.9 });
 });

@@ -24,7 +24,6 @@ export const MIN_GRADIENT_EXTENT = 0.001;
 export const GIZMO_HIT_TOLERANCE_PX = 10;
 export const GIZMO_ROTATE_OFFSET_PX = 24;
 export const GIZMO_DRAG_THRESHOLD_PX = 10;
-export const ROTATION_SNAP = Math.PI / 12;
 
 export function maxDimension(image: Size) {
 	return Math.max(image.width, image.height);
@@ -43,19 +42,6 @@ export function pixelToNormalized(point: Point, image: Size) {
 
 export function clampExtent(value: number) {
 	return Math.min(1, Math.max(MIN_GRADIENT_EXTENT, value));
-}
-
-export function normalizeRotation(rotation: number) {
-	const wrapped = rotation % (Math.PI * 2);
-	if (wrapped > Math.PI) return wrapped - Math.PI * 2;
-	if (wrapped <= -Math.PI) return wrapped + Math.PI * 2;
-	return wrapped;
-}
-
-export function snapRotation(rotation: number, active: boolean) {
-	return active
-		? normalizeRotation(Math.round(rotation / ROTATION_SNAP) * ROTATION_SNAP)
-		: rotation;
 }
 
 export function linearGeometryFromSpan(

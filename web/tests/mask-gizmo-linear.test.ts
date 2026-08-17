@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-	MIN_GRADIENT_EXTENT,
-	ROTATION_SNAP,
-	linearGeometryFromSpan,
-	normalizeRotation,
-	snapRotation
-} from '../src/lib/mask-gizmo.ts';
+import { ROTATION_SNAP } from '../src/lib/drag-constraints.ts';
+import { MIN_GRADIENT_EXTENT, linearGeometryFromSpan } from '../src/lib/mask-gizmo.ts';
 import { hitTestLinear, linearLayout, reduceLinearDrag } from '../src/lib/mask-gizmo-linear.ts';
 
 const image = { width: 200, height: 100 };
@@ -181,9 +176,14 @@ test('converts an endpoint span into transform parameters aspect-correctly', () 
 	assert.equal(collapsed.compression, MIN_GRADIENT_EXTENT);
 });
 
-test('normalizes and snaps rotations', () => {
-	assertClose(normalizeRotation(Math.PI * 2.5), Math.PI / 2);
-	assertClose(normalizeRotation(-Math.PI * 1.5), Math.PI / 2);
-	assert.equal(snapRotation(0.3, false), 0.3);
-	assertClose(snapRotation(0.3, true), ROTATION_SNAP);
+test('shift locks body drags to the dominant axis', () => {
+	const grip = { kind: 'body' } as const;
+	const horizontal = reduceLinearDrag(geometry, grip, { x: 100, y: 50 }, { x: 140, y: 62 }, image, {
+		shift: true
+	});
+	assert.deepEqual(horizontal.anchor, { x: 0.7, y: 0.5 });
+	const vertical = reduceLinearDrag(geometry, grip, { x: 100, y: 50 }, { x: 110, y: 90 }, image, {
+		shift: true
+	});
+	assert.deepEqual(vertical.anchor, { x: 0.5, y: 0.9 });
 });
