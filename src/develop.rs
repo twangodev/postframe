@@ -572,7 +572,6 @@ mod wire {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 
     fn vivid() -> DevelopSettings {
         DevelopSettings::tonal(

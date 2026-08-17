@@ -96,7 +96,7 @@ impl LightTransform {
 
     /// The same response with its luminance table rewritten, so a tone curve
     /// composes into the table every render path already samples.
-    pub fn remapping_luminance(mut self, remap: impl Fn(f32) -> f32) -> Self {
+    pub(crate) fn remapping_luminance(mut self, remap: impl Fn(f32) -> f32) -> Self {
         for sample in self.luminance.iter_mut() {
             *sample = remap(*sample);
         }
