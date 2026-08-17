@@ -1,4 +1,4 @@
-import { rotationLabel } from './drag-constraints.ts';
+import { extendedStroke, rotationLabel } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import {
 	GIZMO_DRAG_THRESHOLD_PX,
@@ -33,6 +33,7 @@ export const MASK_BRUSH_FEATHER = 0.45;
 export const MASK_BRUSH_FLOW = 1;
 
 const rotationalHandles = new Set(['positive', 'negative', 'span', 'rotate']);
+const STROKE_MIN_SPACING = 0.003;
 
 export interface ViewportContext {
 	image: () => Size;
@@ -407,46 +408,34 @@ export class ViewportInteraction {
 				: null;
 		if (this.objectStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
-			const imagePoint = this.normalizedImagePoint(point);
-			const previous = this.objectStroke.points.at(-1);
-			if (
-				imagePoint &&
-				(!previous || Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) > 0.003)
-			) {
-				this.objectStroke = {
-					...this.objectStroke,
-					points: [...this.objectStroke.points, imagePoint]
-				};
-			}
+			const extended = extendedStroke(
+				this.objectStroke.points,
+				this.normalizedImagePoint(point),
+				STROKE_MIN_SPACING
+			);
+			if (extended) this.objectStroke = { ...this.objectStroke, points: extended };
 			return;
 		}
 		if (this.edgeRefinementStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
-			const imagePoint = this.normalizedImagePoint(point);
-			const previous = this.edgeRefinementStroke.points.at(-1);
-			if (
-				imagePoint &&
-				(!previous ||
-					Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) >
-						this.edgeRefinementStroke.radius / 4)
-			) {
-				this.edgeRefinementStroke = {
-					...this.edgeRefinementStroke,
-					points: [...this.edgeRefinementStroke.points, imagePoint]
-				};
+			const extended = extendedStroke(
+				this.edgeRefinementStroke.points,
+				this.normalizedImagePoint(point),
+				this.edgeRefinementStroke.radius / 4
+			);
+			if (extended) {
+				this.edgeRefinementStroke = { ...this.edgeRefinementStroke, points: extended };
 			}
 			return;
 		}
 		if (this.maskStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
-			const imagePoint = this.normalizedImagePoint(point);
-			const previous = this.maskStroke.points.at(-1);
-			if (
-				imagePoint &&
-				(!previous || Math.hypot(imagePoint.x - previous.x, imagePoint.y - previous.y) > 0.003)
-			) {
-				this.maskStroke = { ...this.maskStroke, points: [...this.maskStroke.points, imagePoint] };
-			}
+			const extended = extendedStroke(
+				this.maskStroke.points,
+				this.normalizedImagePoint(point),
+				STROKE_MIN_SPACING
+			);
+			if (extended) this.maskStroke = { ...this.maskStroke, points: extended };
 			return;
 		}
 		if (this.pointers.has(event.pointerId)) this.pointers.set(event.pointerId, point);

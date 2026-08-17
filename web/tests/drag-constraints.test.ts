@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	ROTATION_SNAP,
 	axisLockedDelta,
+	extendedStroke,
 	normalizeRotation,
 	rotationLabel,
 	snapRotation
@@ -45,6 +46,22 @@ test('labels free rotations with one decimal and locked ones as whole degrees', 
 	assert.equal(rotationLabel(0.653, false), '37.4°');
 	assert.equal(rotationLabel(Math.PI / 4, true), '45°');
 	assert.equal(rotationLabel(-Math.PI / 2, true), '-90°');
+});
+
+test('starts a stroke from its first point', () => {
+	assert.deepEqual(extendedStroke([], { x: 0.5, y: 0.5 }, 0.003), [{ x: 0.5, y: 0.5 }]);
+});
+
+test('appends points that clear the minimum spacing', () => {
+	assert.deepEqual(extendedStroke([{ x: 0.5, y: 0.5 }], { x: 0.51, y: 0.5 }, 0.003), [
+		{ x: 0.5, y: 0.5 },
+		{ x: 0.51, y: 0.5 }
+	]);
+});
+
+test('declines points that crowd the previous one or are missing', () => {
+	assert.equal(extendedStroke([{ x: 0.5, y: 0.5 }], { x: 0.501, y: 0.5 }, 0.003), null);
+	assert.equal(extendedStroke([{ x: 0.5, y: 0.5 }], null, 0.003), null);
 });
 
 test('labels normalize wrapped rotations and never show negative zero', () => {

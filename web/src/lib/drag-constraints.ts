@@ -20,6 +20,19 @@ export function axisLockedDelta(delta: Point, active: boolean): Point {
 	return Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y };
 }
 
+export function extendedStroke<P extends Point>(
+	points: P[],
+	point: P | null,
+	minSpacing: number
+): P[] | null {
+	if (!point) return null;
+	const previous = points.at(-1);
+	if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) <= minSpacing) {
+		return null;
+	}
+	return [...points, point];
+}
+
 export function rotationLabel(rotation: number, locked: boolean): string {
 	const degrees = (normalizeRotation(rotation) * 180) / Math.PI;
 	const text = locked ? String(Math.round(degrees)) : degrees.toFixed(1);
