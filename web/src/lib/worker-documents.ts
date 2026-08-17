@@ -1,7 +1,7 @@
 import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
-import { RawWebGpuRenderer, type RawRenderProfile } from './webgpu-renderer.ts';
+import { RawWebGpuRenderer, type DevelopLuts, type RawRenderProfile } from './webgpu-renderer.ts';
 import { post, type DevelopPhase, type Request } from './worker-protocol.ts';
 import { wasm } from './worker-wasm.ts';
 import { measure, measureAsync } from './worker-performance.ts';
@@ -13,7 +13,7 @@ export interface RawDocument {
 	kind: 'raw';
 	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
-	lightLut: { key: string; values: Float32Array } | null;
+	developLuts: (DevelopLuts & { key: string }) | null;
 	metadataSource: FileSystemFileHandle | null;
 }
 
@@ -179,7 +179,7 @@ async function publishRawDocument(
 		kind: 'raw',
 		session,
 		renderer: await createRawRenderer(session),
-		lightLut: null,
+		developLuts: null,
 		metadataSource: exportMetadataSource(message.frames)
 	};
 	const preview = measure('preview', () => renderRawPreview(session, message.adjustments, true));

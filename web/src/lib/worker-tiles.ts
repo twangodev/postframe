@@ -1,9 +1,4 @@
-import {
-	defaultColorSettings,
-	developSettingsKey,
-	tonalDevelopSettings,
-	type DevelopSettings
-} from './develop-settings';
+import { defaultColorSettings, developSettingsKey, type DevelopSettings } from './develop-settings';
 import type { WasmSession } from './wasm-runtime';
 import type { LinearTileSource } from './webgpu-renderer.ts';
 import { wasm } from './worker-wasm.ts';
@@ -44,7 +39,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 					source,
 					request.adjustments,
 					request.tone,
-					rawLuminanceLut(active, request.adjustments)
+					rawDevelopLuts(active, request.adjustments)
 				);
 			} catch {
 				active.renderer.destroy();
@@ -99,16 +94,23 @@ function rawTileKey(tile: RenderTileRequest) {
 	return `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
 }
 
-function rawLuminanceLut(active: RawDocument, adjustments: DevelopSettings) {
+function rawDevelopLuts(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
-	if (active.lightLut?.key === key) return active.lightLut.values;
-	const transform = new wasm.DisplayTransform(
-		tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings())
-	);
+	if (active.developLuts?.key === key) return active.developLuts;
+	const transform = new wasm.DisplayTransform({
+		...adjustments,
+		light: { ...adjustments.light, exposure: 0 },
+		color: defaultColorSettings()
+	});
 	try {
-		const values = transform.luminance_lut;
-		active.lightLut = { key, values };
-		return values;
+		const luts = {
+			key,
+			luminance: transform.luminance_lut,
+			mixer: transform.mixer_luts,
+			grading: transform.grading_scalars
+		};
+		active.developLuts = luts;
+		return luts;
 	} finally {
 		transform.free();
 	}
