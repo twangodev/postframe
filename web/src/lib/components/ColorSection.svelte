@@ -57,6 +57,7 @@
 	/>
 	<button
 		type="button"
+		aria-label="open color mixer"
 		onclick={onOpenMixer}
 		class="mt-2 flex w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 py-2 text-[11px] text-muted hover:text-text"
 	>

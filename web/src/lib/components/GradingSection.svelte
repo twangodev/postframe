@@ -21,6 +21,7 @@
 
 	let { workspace }: Props = $props();
 
+	const DISC_MARGIN = 1.08;
 	const WEDGE_DEGREES = 6;
 	const WEDGES = Array.from({ length: 360 / WEDGE_DEGREES }, (_, index) => {
 		const hue = index * WEDGE_DEGREES;
@@ -47,8 +48,8 @@
 	function discPosition(event: DiscEvent) {
 		const bounds = event.currentTarget.getBoundingClientRect();
 		return clampToDisc({
-			x: (2 * (event.clientX - bounds.left)) / bounds.width - 1,
-			y: (2 * (event.clientY - bounds.top)) / bounds.height - 1
+			x: ((2 * (event.clientX - bounds.left)) / bounds.width - 1) * DISC_MARGIN,
+			y: ((2 * (event.clientY - bounds.top)) / bounds.height - 1) * DISC_MARGIN
 		});
 	}
 
@@ -101,7 +102,7 @@
 	</div>
 	<div class="flex items-center gap-3">
 		<svg
-			viewBox="-1.08 -1.08 2.16 2.16"
+			viewBox={`${-DISC_MARGIN} ${-DISC_MARGIN} ${2 * DISC_MARGIN} ${2 * DISC_MARGIN}`}
 			role="slider"
 			tabindex="-1"
 			aria-label={`${range} hue and saturation`}

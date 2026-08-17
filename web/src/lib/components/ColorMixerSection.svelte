@@ -63,7 +63,7 @@
 	</div>
 	{#each MIXER_BAND_CONTROL_NAMES as control (control)}
 		<AdjustmentSlider
-			label={control}
+			label={`Band ${control}`}
 			bind:value={workspace.mixer[band][control]}
 			min={-100}
 			max={100}
