@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -13,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && github.ref || 'deploy-svelte' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -116,7 +115,7 @@ jobs:
       - run: bun run build
 
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         with:
           name: web-${{ github.sha }}
           path: web/.svelte-kit
@@ -127,7 +126,7 @@ jobs:
   release-please:
     name: Release Please
     needs: web
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -141,7 +140,7 @@ jobs:
   deploy:
     name: Deploy
     needs: web
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: production
