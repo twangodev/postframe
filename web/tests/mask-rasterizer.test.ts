@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { linearGeometryFromSpan } from '../src/lib/mask-gizmo.ts';
 import {
 	paintRasterDimensions,
 	rasterizeBrushStrokes,
@@ -127,32 +128,52 @@ test('clips brush dabs at the raster bounds', () => {
 
 test('ramps a linear gradient from its start to its end', () => {
 	assert.deepEqual(
-		rasterizeLinearGradient({ start: point(0.25, 0.5), end: point(0.75, 0.5) }, 4, 1),
+		rasterizeLinearGradient(
+			linearGeometryFromSpan(point(0.25, 0.5), point(0.75, 0.5), { width: 4, height: 1 }),
+			4,
+			1
+		),
 		Uint8Array.from([0, 64, 191, 255])
 	);
 	assert.deepEqual(
-		rasterizeLinearGradient({ start: point(0.75, 0.5), end: point(0.25, 0.5) }, 4, 1),
+		rasterizeLinearGradient(
+			linearGeometryFromSpan(point(0.75, 0.5), point(0.25, 0.5), { width: 4, height: 1 }),
+			4,
+			1
+		),
 		Uint8Array.from([255, 191, 64, 0])
 	);
 });
 
 test('ramps a vertical gradient uniformly across each row', () => {
 	assert.deepEqual(
-		rasterizeLinearGradient({ start: point(0.5, 0), end: point(0.5, 1) }, 2, 4),
+		rasterizeLinearGradient(
+			linearGeometryFromSpan(point(0.5, 0), point(0.5, 1), { width: 2, height: 4 }),
+			2,
+			4
+		),
 		Uint8Array.from([32, 32, 96, 96, 159, 159, 223, 223])
 	);
 });
 
-test('leaves a degenerate linear gradient empty', () => {
+test('clamps a degenerate linear gradient to a hard edge at its anchor', () => {
 	assert.deepEqual(
-		rasterizeLinearGradient({ start: point(0.5, 0.5), end: point(0.5, 0.5) }, 2, 2),
-		Uint8Array.from([0, 0, 0, 0])
+		rasterizeLinearGradient(
+			linearGeometryFromSpan(point(0.5, 0.5), point(0.5, 0.5), { width: 2, height: 2 }),
+			2,
+			2
+		),
+		Uint8Array.from([0, 255, 0, 255])
 	);
 });
 
 test('fills a hard radial gradient inside its radius', () => {
 	assert.deepEqual(
-		rasterizeRadialGradient({ center: point(0.5, 0.5), radius: 0.4, feather: 0 }, 5, 5),
+		rasterizeRadialGradient(
+			{ center: point(0.5, 0.5), radiusX: 0.4, radiusY: 0.4, rotation: 0, feather: 0 },
+			5,
+			5
+		),
 		Uint8Array.from([
 			...[0, 0, 0, 0, 0],
 			...[0, 255, 255, 255, 0],
@@ -165,14 +186,48 @@ test('fills a hard radial gradient inside its radius', () => {
 
 test('feathers a radial gradient from its core to its edge', () => {
 	assert.deepEqual(
-		rasterizeRadialGradient({ center: point(0.5, 0.5), radius: 4 / 9, feather: 0.5 }, 9, 1),
+		rasterizeRadialGradient(
+			{ center: point(0.5, 0.5), radiusX: 4 / 9, radiusY: 4 / 9, rotation: 0, feather: 0.5 },
+			9,
+			1
+		),
 		Uint8Array.from([0, 128, 255, 255, 255, 255, 255, 128, 0])
 	);
 });
 
 test('measures the radial radius against the longest dimension', () => {
 	assert.deepEqual(
-		rasterizeRadialGradient({ center: point(0.5, 0.5), radius: 1 / 3, feather: 0 }, 2, 6),
+		rasterizeRadialGradient(
+			{ center: point(0.5, 0.5), radiusX: 1 / 3, radiusY: 1 / 3, rotation: 0, feather: 0 },
+			2,
+			6
+		),
 		Uint8Array.from([0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0])
 	);
+});
+
+test('rotates an ellipse so its filled span runs along the rotated major axis', () => {
+	assert.deepEqual(
+		rasterizeRadialGradient(
+			{ center: point(0.5, 0.5), radiusX: 0.5, radiusY: 0.1, rotation: Math.PI / 2, feather: 0 },
+			5,
+			5
+		),
+		Uint8Array.from([
+			...[0, 0, 255, 0, 0],
+			...[0, 0, 255, 0, 0],
+			...[0, 0, 255, 0, 0],
+			...[0, 0, 255, 0, 0],
+			...[0, 0, 255, 0, 0]
+		])
+	);
+});
+
+test('lands the 50% row at an off-center anchor', () => {
+	const alpha = rasterizeLinearGradient(
+		{ anchor: point(0.5, 0.25), rotation: Math.PI / 2, compression: 0.4 },
+		3,
+		10
+	);
+	assert.deepEqual(Array.from(alpha.slice(2 * 3, 2 * 3 + 3)), [128, 128, 128]);
 });

@@ -8,13 +8,16 @@ export interface MaskBrushStroke {
 }
 
 export interface LinearMaskGeometry {
-	start: NormalizedPoint;
-	end: NormalizedPoint;
+	anchor: NormalizedPoint;
+	rotation: number;
+	compression: number;
 }
 
 export interface RadialMaskGeometry {
 	center: NormalizedPoint;
-	radius: number;
+	radiusX: number;
+	radiusY: number;
+	rotation: number;
 	feather: number;
 }
 
@@ -43,37 +46,42 @@ export function rasterizeBrushStrokes(
 }
 
 export function rasterizeLinearGradient(
-	{ start, end }: LinearMaskGeometry,
+	{ anchor, rotation, compression }: LinearMaskGeometry,
 	width: number,
 	height: number
 ): Uint8Array {
 	const alpha = emptyPlane(width, height);
-	const origin = toPixel(start, width, height);
-	const axis = { x: end.x * width - origin.x, y: end.y * height - origin.y };
-	const lengthSquared = axis.x * axis.x + axis.y * axis.y;
-	if (lengthSquared === 0) return alpha;
+	const origin = toPixel(anchor, width, height);
+	const direction = { x: Math.cos(rotation), y: Math.sin(rotation) };
+	const band = 2 * compression * Math.max(width, height);
 	for (let y = 0; y < height; y += 1) {
 		for (let x = 0; x < width; x += 1) {
-			const progress =
-				((x + 0.5 - origin.x) * axis.x + (y + 0.5 - origin.y) * axis.y) / lengthSquared;
-			alpha[y * width + x] = Math.round(clamp01(progress) * 255);
+			const along = (x + 0.5 - origin.x) * direction.x + (y + 0.5 - origin.y) * direction.y;
+			alpha[y * width + x] = Math.round(clamp01(0.5 + along / band) * 255);
 		}
 	}
 	return alpha;
 }
 
 export function rasterizeRadialGradient(
-	{ center, radius, feather }: RadialMaskGeometry,
+	{ center, radiusX, radiusY, rotation, feather }: RadialMaskGeometry,
 	width: number,
 	height: number
 ): Uint8Array {
 	const alpha = emptyPlane(width, height);
 	const origin = toPixel(center, width, height);
-	const edge = radius * Math.max(width, height);
+	const maxDim = Math.max(width, height);
+	const cos = Math.cos(rotation);
+	const sin = Math.sin(rotation);
 	for (let y = 0; y < height; y += 1) {
 		for (let x = 0; x < width; x += 1) {
-			const distance = Math.hypot(x + 0.5 - origin.x, y + 0.5 - origin.y);
-			alpha[y * width + x] = Math.round(featheredCoverage(distance, edge, feather) * 255);
+			const dx = x + 0.5 - origin.x;
+			const dy = y + 0.5 - origin.y;
+			const major = (dx * cos + dy * sin) / (radiusX * maxDim);
+			const minor = (dy * cos - dx * sin) / (radiusY * maxDim);
+			alpha[y * width + x] = Math.round(
+				featheredCoverage(Math.hypot(major, minor), 1, feather) * 255
+			);
 		}
 	}
 	return alpha;

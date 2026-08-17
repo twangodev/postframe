@@ -7,6 +7,7 @@ import type {
 } from './edit-document';
 import type { EditorCommand } from './editor-command';
 import { entityId } from './entity-id';
+import { linearGeometryFromSpan } from './mask-gizmo';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
 import {
 	paintRasterDimensions,
@@ -78,7 +79,11 @@ export class MaskPainting {
 				end,
 				raster: null
 			},
-			rasterizeLinearGradient({ start, end }, target.paintDims.width, target.paintDims.height)
+			rasterizeLinearGradient(
+				linearGeometryFromSpan(start, end, target.paintDims),
+				target.paintDims.width,
+				target.paintDims.height
+			)
 		);
 	};
 
@@ -99,7 +104,17 @@ export class MaskPainting {
 				...geometry,
 				raster: null
 			},
-			rasterizeRadialGradient(geometry, target.paintDims.width, target.paintDims.height)
+			rasterizeRadialGradient(
+				{
+					center,
+					radiusX: geometry.radius,
+					radiusY: geometry.radius,
+					rotation: 0,
+					feather: geometry.feather
+				},
+				target.paintDims.width,
+				target.paintDims.height
+			)
 		);
 	};
 
