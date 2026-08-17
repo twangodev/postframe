@@ -12,6 +12,7 @@ import { clearMaskCompositors } from './worker-masks.ts';
 
 export interface RawDocument {
 	kind: 'raw';
+	image: { width: number; height: number };
 	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
 	lightLut: { key: string; values: Float32Array } | null;
@@ -179,6 +180,7 @@ async function publishRawDocument(
 ) {
 	document = {
 		kind: 'raw',
+		image: { width: session.width(), height: session.height() },
 		session,
 		renderer: await createRawRenderer(session),
 		lightLut: null,

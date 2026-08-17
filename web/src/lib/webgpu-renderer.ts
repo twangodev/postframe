@@ -2,12 +2,15 @@ import {
 	developSettingsKey,
 	type ColorSettings,
 	type DevelopSettings,
+	type EffectsSettings,
 	type LightSettings
 } from './develop-settings.ts';
+import type { NormalizedCrop } from './edit-document.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
 const UNIFORM_BYTES = 128;
+const EFFECTS_UNIFORM_BYTES = 64;
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
 const BUFFER_STORAGE = 0x0080;
@@ -29,6 +32,16 @@ export interface LinearTileSource {
 	height: number;
 }
 
+/// Where a tile sits in its image, which the position-dependent stages read.
+export interface RawTilePlacement {
+	x: number;
+	y: number;
+	bin: number;
+	imageWidth: number;
+	imageHeight: number;
+	crop: NormalizedCrop | null;
+}
+
 interface CachedSource {
 	texture: GPUTexture;
 	width: number;
@@ -42,6 +55,7 @@ export class RawWebGpuRenderer {
 	private readonly mixBuffer: GPUBuffer;
 	private readonly lightBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
+	private readonly effectsBuffer: GPUBuffer;
 	private sourceBytes = 0;
 	private lutKey = '';
 	private lost = false;
@@ -60,6 +74,10 @@ export class RawWebGpuRenderer {
 		});
 		this.uniformBuffer = device.createBuffer({
 			size: UNIFORM_BYTES,
+			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
+		});
+		this.effectsBuffer = device.createBuffer({
+			size: EFFECTS_UNIFORM_BYTES,
 			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
 		});
 		void device.lost.then(() => {
@@ -97,6 +115,7 @@ export class RawWebGpuRenderer {
 	async render(
 		key: string,
 		source: LinearTileSource | null,
+		placement: RawTilePlacement,
 		adjustments: DevelopSettings,
 		tone: boolean,
 		luminanceLut: Float32Array
@@ -106,6 +125,7 @@ export class RawWebGpuRenderer {
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
 		this.updateLuminanceLut(adjustments, luminanceLut);
 		this.updateUniforms(cached, adjustments, tone);
+		this.updateEffects(placement, adjustments.effects);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
 		const context = canvas.getContext('webgpu') as unknown as GPUCanvasContext | null;
@@ -118,7 +138,8 @@ export class RawWebGpuRenderer {
 				{ binding: 1, resource: { buffer: this.transferBuffer } },
 				{ binding: 2, resource: { buffer: this.mixBuffer } },
 				{ binding: 3, resource: { buffer: this.lightBuffer } },
-				{ binding: 4, resource: { buffer: this.uniformBuffer } }
+				{ binding: 4, resource: { buffer: this.uniformBuffer } },
+				{ binding: 8, resource: { buffer: this.effectsBuffer } }
 			]
 		});
 		const encoder = this.device.createCommandEncoder();
@@ -148,6 +169,7 @@ export class RawWebGpuRenderer {
 		this.mixBuffer.destroy();
 		this.lightBuffer.destroy();
 		this.uniformBuffer.destroy();
+		this.effectsBuffer.destroy();
 		this.device.destroy();
 	}
 
@@ -235,6 +257,31 @@ export class RawWebGpuRenderer {
 		integers[15] = adjustmentsIdentity(adjustments) ? 1 : 0;
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
+
+	private updateEffects(placement: RawTilePlacement, effects: EffectsSettings) {
+		const bytes = new ArrayBuffer(EFFECTS_UNIFORM_BYTES);
+		const integers = new Uint32Array(bytes);
+		const floats = new Float32Array(bytes);
+		integers[0] = placement.x;
+		integers[1] = placement.y;
+		integers[2] = placement.imageWidth;
+		integers[3] = placement.imageHeight;
+		const crop = placement.crop ?? { x: 0, y: 0, width: 1, height: 1 };
+		floats.set([crop.x, crop.y, crop.width, crop.height], 4);
+		floats.set(
+			[
+				effects.vignetteAmount,
+				effects.vignetteMidpoint,
+				effects.vignetteRoundness,
+				effects.vignetteFeather
+			],
+			8
+		);
+		floats.set([effects.grainAmount, effects.grainSize], 12);
+		integers[14] = placement.bin;
+		integers[15] = effectsIdentity(effects) ? 1 : 0;
+		this.device.queue.writeBuffer(this.effectsBuffer, 0, bytes);
+	}
 }
 
 function floatBuffer(device: GPUDevice, values: Float32Array, usage: GPUBufferUsageFlags) {
@@ -260,8 +307,16 @@ function colorIdentity(color: ColorSettings) {
 	);
 }
 
+function effectsIdentity(effects: EffectsSettings) {
+	return effects.vignetteAmount === 0 && effects.grainAmount === 0;
+}
+
 function adjustmentsIdentity(adjustments: DevelopSettings) {
-	return lightIdentity(adjustments.light) && colorIdentity(adjustments.color);
+	return (
+		lightIdentity(adjustments.light) &&
+		colorIdentity(adjustments.color) &&
+		effectsIdentity(adjustments.effects)
+	);
 }
 
 const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
@@ -296,11 +351,34 @@ struct Params {
   adjustments_identity: u32,
 }
 
+// Vignette and grain in the shape src/effects.rs computes them, whose tests
+// pin the grain values this must reproduce.
+struct Effects {
+  origin: vec2<u32>,
+  image: vec2<u32>,
+  crop: vec4<f32>,
+  vignette: vec4<f32>,
+  grain: vec2<f32>,
+  bin: u32,
+  identity: u32,
+}
+
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read> transfer_lut: array<f32>;
 @group(0) @binding(2) var<storage, read> mix: array<f32>;
 @group(0) @binding(3) var<storage, read> light_lut: array<f32>;
 @group(0) @binding(4) var<uniform> params: Params;
+@group(0) @binding(8) var<uniform> effects: Effects;
+
+const MAX_VIGNETTE_STOPS: f32 = 2.0;
+const MAX_ROUNDNESS_EXPONENT: f32 = 6.0;
+const ELLIPSE_EXPONENT: f32 = 2.0;
+const MIN_FEATHER_SPAN: f32 = 0.08;
+const MIN_ASPECT: f32 = 1.1920929e-7;
+const MIN_GRAIN_FRACTION: f32 = 0.00025;
+const MAX_GRAIN_FRACTION: f32 = 0.002;
+const MAX_GRAIN_AMPLITUDE: f32 = 24.0;
+const GRAIN_SEED: u32 = 0x9E3779B9u;
 
 fn camera_lookup(channel: u32, value: f32) -> f32 {
   let low = bitcast<f32>(params.lookup_low_bits);
@@ -362,8 +440,68 @@ fn apply_light(linear: vec3<f32>) -> vec3<f32> {
   return linear * scale;
 }
 
+fn image_pixel(position: vec2<f32>) -> vec2<u32> {
+  return effects.origin + vec2<u32>(position) * effects.bin + vec2<u32>(effects.bin / 2u);
+}
+
+fn superellipse(point: vec2<f32>, exponent: f32) -> f32 {
+  let raised = pow(abs(point), vec2<f32>(exponent));
+  return pow(raised.x + raised.y, 1.0 / exponent);
+}
+
+fn apply_vignette(linear: vec3<f32>, pixel: vec2<u32>) -> vec3<f32> {
+  let amount = effects.vignette.x;
+  if (amount == 0.0) {
+    return linear;
+  }
+  let image = max(vec2<f32>(effects.image), vec2<f32>(1.0));
+  let at = (vec2<f32>(pixel) + vec2<f32>(0.5)) / image;
+  let aspect = max(image.x / image.y, MIN_ASPECT);
+  let centre = effects.crop.xy + effects.crop.zw * 0.5;
+  let reach = vec2<f32>(effects.crop.z * 0.5 * aspect, effects.crop.w * 0.5);
+  let roundness = effects.vignette.z / 100.0;
+  let exponent = ELLIPSE_EXPONENT
+    + max(roundness, 0.0) * (MAX_ROUNDNESS_EXPONENT - ELLIPSE_EXPONENT);
+  let semi_axis = pow(reach.x / reach.y, clamp(roundness + 1.0, 0.0, 1.0));
+  let offset = vec2<f32>((at.x - centre.x) * aspect / semi_axis, at.y - centre.y);
+  let corner = vec2<f32>(reach.x / semi_axis, reach.y);
+  let distance = superellipse(offset, exponent) / superellipse(corner, exponent);
+  let midpoint = effects.vignette.y / 100.0;
+  let span = MIN_FEATHER_SPAN + effects.vignette.w / 100.0 * (1.0 - MIN_FEATHER_SPAN);
+  let start = max(midpoint - span * 0.5, 0.0);
+  let end = max(midpoint + span * 0.5, start + MIN_FEATHER_SPAN);
+  let falloff = smoothstep(start, end, distance);
+  return linear * exp2(amount / 100.0 * MAX_VIGNETTE_STOPS * falloff);
+}
+
+fn grain_at(x: u32, y: u32, cell: u32) -> f32 {
+  let span = max(cell, 1u);
+  var mixed = ((x / span) * 0x8DA6B343u + (y / span) * 0xD8163841u) ^ GRAIN_SEED;
+  mixed ^= mixed >> 16u;
+  mixed = mixed * 0x7FEB352Du;
+  mixed ^= mixed >> 15u;
+  mixed = mixed * 0x846CA68Bu;
+  mixed ^= mixed >> 16u;
+  return f32(mixed >> 8u) / 8388607.5 - 1.0;
+}
+
+fn apply_grain(encoded: vec3<f32>, pixel: vec2<u32>) -> vec3<f32> {
+  let amount = effects.grain.x;
+  if (amount == 0.0) {
+    return encoded;
+  }
+  let reference = f32(max(max(effects.image.x, effects.image.y), 1u));
+  let fraction = MIN_GRAIN_FRACTION
+    + (MAX_GRAIN_FRACTION - MIN_GRAIN_FRACTION) * effects.grain.y / 100.0;
+  let cell = max(u32(floor(reference * fraction + 0.5)), 1u);
+  let luminance = clamp(dot(encoded, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+  let weight = 4.0 * luminance * (1.0 - luminance);
+  let offset = amount / 100.0 * MAX_GRAIN_AMPLITUDE * weight * grain_at(pixel.x, pixel.y, cell);
+  return clamp(encoded + vec3<f32>(offset / 255.0), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 // Stages run in the order fixed by DevelopTransform in src/develop.rs.
-fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
+fn apply_adjustments(encoded: vec3<f32>, pixel: vec2<u32>) -> vec3<f32> {
   if (params.adjustments_identity == 1u) {
     return encoded;
   }
@@ -371,10 +509,17 @@ fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
   if (params.color_identity != 1u) {
     linear = apply_color(linear);
   }
+  if (effects.identity != 1u) {
+    linear = apply_vignette(linear, pixel);
+  }
   if (params.light_identity != 1u) {
     linear = apply_light(linear);
   }
-  return encode_srgb(linear);
+  var coded = encode_srgb(linear);
+  if (effects.identity != 1u) {
+    coded = apply_grain(coded, pixel);
+  }
+  return coded;
 }
 
 @vertex
@@ -405,6 +550,6 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     camera_lookup(1u, mixed.g),
     camera_lookup(2u, mixed.b)
   ) / 255.0, vec3<f32>(0.0), vec3<f32>(1.0));
-  return vec4<f32>(apply_adjustments(encoded), 1.0);
+  return vec4<f32>(apply_adjustments(encoded, image_pixel(position.xy)), 1.0);
 }
 `;

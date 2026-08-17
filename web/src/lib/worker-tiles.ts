@@ -42,6 +42,14 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 				return await active.renderer.render(
 					key,
 					source,
+					{
+						x: request.x,
+						y: request.y,
+						bin: request.bin,
+						imageWidth: active.image.width,
+						imageHeight: active.image.height,
+						crop: request.crop
+					},
 					request.adjustments,
 					request.tone,
 					rawLuminanceLut(active, request.adjustments)
