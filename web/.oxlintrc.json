@@ -1,0 +1,29 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"env": {
+		"browser": true,
+		"node": true,
+		"svelte": true
+	},
+	"ignorePatterns": ["worker-configuration.d.ts", "src/lib/pf/**", "src/lib/pf-threaded/**"],
+	"overrides": [
+		{
+			"files": ["**/*.svelte"],
+			"rules": {
+				"eslint/no-unassigned-vars": "off"
+			}
+		},
+		{
+			"files": ["src/lib/index.ts"],
+			"rules": {
+				"unicorn/no-empty-file": "off"
+			}
+		},
+		{
+			"files": ["tests/**/*.ts"],
+			"rules": {
+				"unicorn/no-useless-spread": "off"
+			}
+		}
+	]
+}

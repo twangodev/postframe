@@ -2,7 +2,6 @@ import {
 	SMART_MASK_PACK,
 	maskEdgeStrokeSchema,
 	smartMaskStrokeSchema,
-	type SmartMaskProgress,
 	type MaskEdgeStroke,
 	type SmartMaskRaster,
 	type SmartMaskRequest,
