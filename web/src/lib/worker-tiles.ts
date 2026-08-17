@@ -44,7 +44,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 					source,
 					request.adjustments,
 					request.tone,
-					rawLuminanceLut(active, request.adjustments)
+					rawToneTables(active, request.adjustments)
 				);
 			} catch {
 				active.renderer.destroy();
@@ -99,16 +99,24 @@ function rawTileKey(tile: RenderTileRequest) {
 	return `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
 }
 
-function rawLuminanceLut(active: RawDocument, adjustments: DevelopSettings) {
+// The shader applies exposure and color itself, so the tables only have to
+// carry the stages Rust resolves: the light response composed with the
+// luminance curve, and the three channel curves.
+function rawToneTables(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
-	if (active.lightLut?.key === key) return active.lightLut.values;
-	const transform = new wasm.DisplayTransform(
-		tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings())
-	);
+	if (active.toneTables?.key === key) return active.toneTables;
+	const transform = new wasm.DisplayTransform({
+		...tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings()),
+		curve: adjustments.curve
+	});
 	try {
-		const values = transform.luminance_lut;
-		active.lightLut = { key, values };
-		return values;
+		const tables = {
+			key,
+			luminance: transform.luminance_lut,
+			channels: transform.channel_luts
+		};
+		active.toneTables = tables;
+		return tables;
 	} finally {
 		transform.free();
 	}

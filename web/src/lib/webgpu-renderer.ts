@@ -1,12 +1,15 @@
 import {
 	developSettingsKey,
+	isIdentityCurve,
 	type ColorSettings,
+	type CurveSettings,
 	type DevelopSettings,
 	type LightSettings
 } from './develop-settings.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
+const CHANNEL_LUT_LENGTH = 3 * 1024;
 const UNIFORM_BYTES = 128;
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
@@ -29,6 +32,16 @@ export interface LinearTileSource {
 	height: number;
 }
 
+/**
+ * Tables Rust resolved for the tone stages: the light response with the
+ * luminance curve already composed in, and the three channel curves back to
+ * back — empty while all three are the identity.
+ */
+export interface ToneTables {
+	luminance: Float32Array;
+	channels: Float32Array;
+}
+
 interface CachedSource {
 	texture: GPUTexture;
 	width: number;
@@ -41,6 +54,7 @@ export class RawWebGpuRenderer {
 	private readonly transferBuffer: GPUBuffer;
 	private readonly mixBuffer: GPUBuffer;
 	private readonly lightBuffer: GPUBuffer;
+	private readonly channelBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
 	private sourceBytes = 0;
 	private lutKey = '';
@@ -56,6 +70,10 @@ export class RawWebGpuRenderer {
 		this.mixBuffer = floatBuffer(device, profile.mix, BUFFER_STORAGE);
 		this.lightBuffer = device.createBuffer({
 			size: LIGHT_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
+			usage: BUFFER_STORAGE | BUFFER_COPY_DST
+		});
+		this.channelBuffer = device.createBuffer({
+			size: CHANNEL_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
 		});
 		this.uniformBuffer = device.createBuffer({
@@ -99,12 +117,12 @@ export class RawWebGpuRenderer {
 		source: LinearTileSource | null,
 		adjustments: DevelopSettings,
 		tone: boolean,
-		luminanceLut: Float32Array
+		tables: ToneTables
 	) {
 		if (this.lost) throw new Error('WebGPU device is unavailable');
 		const cached = source ? this.uploadSource(key, source) : this.touchSource(key);
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
-		this.updateLuminanceLut(adjustments, luminanceLut);
+		this.updateToneTables(adjustments, tables);
 		this.updateUniforms(cached, adjustments, tone);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
@@ -118,7 +136,8 @@ export class RawWebGpuRenderer {
 				{ binding: 1, resource: { buffer: this.transferBuffer } },
 				{ binding: 2, resource: { buffer: this.mixBuffer } },
 				{ binding: 3, resource: { buffer: this.lightBuffer } },
-				{ binding: 4, resource: { buffer: this.uniformBuffer } }
+				{ binding: 4, resource: { buffer: this.uniformBuffer } },
+				{ binding: 5, resource: { buffer: this.channelBuffer } }
 			]
 		});
 		const encoder = this.device.createCommandEncoder();
@@ -147,6 +166,7 @@ export class RawWebGpuRenderer {
 		this.transferBuffer.destroy();
 		this.mixBuffer.destroy();
 		this.lightBuffer.destroy();
+		this.channelBuffer.destroy();
 		this.uniformBuffer.destroy();
 		this.device.destroy();
 	}
@@ -204,18 +224,24 @@ export class RawWebGpuRenderer {
 		this.sourceBytes = 0;
 	}
 
-	private updateLuminanceLut(adjustments: DevelopSettings, luminanceLut: Float32Array) {
+	private updateToneTables(adjustments: DevelopSettings, tables: ToneTables) {
 		const key = developSettingsKey(adjustments);
 		if (this.lutKey === key) return;
-		if (luminanceLut.length !== LIGHT_LUT_LENGTH) {
+		if (tables.luminance.length !== LIGHT_LUT_LENGTH) {
 			throw new Error('Light LUT has an unexpected size');
 		}
-		this.device.queue.writeBuffer(this.lightBuffer, 0, luminanceLut);
+		this.device.queue.writeBuffer(this.lightBuffer, 0, tables.luminance);
+		if (tables.channels.length > 0) {
+			if (tables.channels.length !== CHANNEL_LUT_LENGTH) {
+				throw new Error('Channel curve LUTs have an unexpected size');
+			}
+			this.device.queue.writeBuffer(this.channelBuffer, 0, tables.channels);
+		}
 		this.lutKey = key;
 	}
 
 	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
-		const { light, color } = adjustments;
+		const { color } = adjustments;
 		const bytes = new ArrayBuffer(UNIFORM_BYTES);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
@@ -225,14 +251,15 @@ export class RawWebGpuRenderer {
 		integers[3] = this.profile.lookupShift;
 		integers[4] = this.profile.transferLutLength;
 		integers[5] = tone ? 1 : 0;
-		integers[6] = lightIdentity(light) ? 1 : 0;
+		integers[6] = luminanceIdentity(adjustments) ? 1 : 0;
 		integers[7] = colorIdentity(color) ? 1 : 0;
-		floats[8] = 2 ** light.exposure;
+		floats[8] = 2 ** adjustments.light.exposure;
 		floats[9] = Math.max(1, this.profile.radianceMax * floats[8]);
 		floats[10] = 1 + color.saturation / 100;
 		floats[11] = color.vibrance / 100;
 		floats.set(balanceGains(color), 12);
 		integers[15] = adjustmentsIdentity(adjustments) ? 1 : 0;
+		integers[16] = channelCurvesIdentity(adjustments.curve) ? 1 : 0;
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
 }
@@ -254,6 +281,16 @@ function lightIdentity(settings: LightSettings) {
 	);
 }
 
+// The luminance curve is composed into the light LUT, so it decides with the
+// light controls whether the tone stage has anything to do.
+function luminanceIdentity({ light, curve }: DevelopSettings) {
+	return lightIdentity(light) && isIdentityCurve(curve.luminance);
+}
+
+function channelCurvesIdentity(curve: CurveSettings) {
+	return [curve.red, curve.green, curve.blue].every(isIdentityCurve);
+}
+
 function colorIdentity(color: ColorSettings) {
 	return (
 		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
@@ -261,7 +298,11 @@ function colorIdentity(color: ColorSettings) {
 }
 
 function adjustmentsIdentity(adjustments: DevelopSettings) {
-	return lightIdentity(adjustments.light) && colorIdentity(adjustments.color);
+	return (
+		luminanceIdentity(adjustments) &&
+		colorIdentity(adjustments.color) &&
+		channelCurvesIdentity(adjustments.curve)
+	);
 }
 
 const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
@@ -294,6 +335,7 @@ struct Params {
   vibrance_amount: f32,
   balance: vec3<f32>,
   adjustments_identity: u32,
+  curve_identity: u32,
 }
 
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -301,6 +343,7 @@ struct Params {
 @group(0) @binding(2) var<storage, read> mix: array<f32>;
 @group(0) @binding(3) var<storage, read> light_lut: array<f32>;
 @group(0) @binding(4) var<uniform> params: Params;
+@group(0) @binding(5) var<storage, read> channel_lut: array<f32>;
 
 fn camera_lookup(channel: u32, value: f32) -> f32 {
   let low = bitcast<f32>(params.lookup_low_bits);
@@ -362,6 +405,23 @@ fn apply_light(linear: vec3<f32>) -> vec3<f32> {
   return linear * scale;
 }
 
+fn channel_curve(channel: u32, value: f32) -> f32 {
+  let samples = arrayLength(&channel_lut) / 3u;
+  let position = clamp(value, 0.0, 1.0) * f32(samples - 1u);
+  let index = min(u32(position), samples - 2u);
+  let base = channel * samples + index;
+  let below = channel_lut[base];
+  return below + (position - f32(index)) * (channel_lut[base + 1u] - below);
+}
+
+fn apply_channel_curves(encoded: vec3<f32>) -> vec3<f32> {
+  return vec3<f32>(
+    channel_curve(0u, encoded.r),
+    channel_curve(1u, encoded.g),
+    channel_curve(2u, encoded.b)
+  );
+}
+
 // Stages run in the order fixed by DevelopTransform in src/develop.rs.
 fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
   if (params.adjustments_identity == 1u) {
@@ -374,7 +434,11 @@ fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
   if (params.light_identity != 1u) {
     linear = apply_light(linear);
   }
-  return encode_srgb(linear);
+  var display = encode_srgb(linear);
+  if (params.curve_identity != 1u) {
+    display = apply_channel_curves(display);
+  }
+  return display;
 }
 
 @vertex
