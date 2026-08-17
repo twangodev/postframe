@@ -1,5 +1,6 @@
+use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 use crate::grade::{ColorSettings, ColorTransform};
-use crate::light::{LightSettings, LightTransform};
+use crate::light::{LightSettings, LightTransform, decode_srgb, encode_srgb};
 use crate::{Error, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -410,14 +411,19 @@ pub struct DevelopTransform {
     settings: DevelopSettings,
     light: LightTransform,
     color: ColorTransform,
+    channels: Option<[ToneCurve; 3]>,
 }
 
 impl DevelopTransform {
     pub fn new(settings: DevelopSettings) -> Result<Self> {
         let settings = settings.validated()?;
         Ok(Self {
-            light: LightTransform::new(settings.light)?,
+            light: with_luminance_curve(
+                LightTransform::new(settings.light)?,
+                &settings.curve.luminance,
+            ),
             color: ColorTransform::new(settings.color)?,
+            channels: channel_curves(&settings.curve),
             settings,
         })
     }
@@ -426,8 +432,17 @@ impl DevelopTransform {
         &self.settings
     }
 
+    /// The luminance response with the luminance curve already composed in.
     pub fn luminance_lut(&self) -> &[f32] {
         self.light.luminance_lut()
+    }
+
+    /// Dense tables for the per-channel curves, absent while all three are the
+    /// identity.
+    pub fn channel_luts(&self) -> Option<[&[f32]; 3]> {
+        self.channels
+            .as_ref()
+            .map(|curves| curves.each_ref().map(ToneCurve::samples))
     }
 
     pub fn apply_display_rgba8(&self, rgba: &[u8]) -> Result<Vec<u8>> {
@@ -443,14 +458,48 @@ impl DevelopTransform {
     }
 
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        self.light
-            .apply_display_pixel(self.color.apply_display_pixel(pixel))
+        self.apply_channel_curves(
+            self.light
+                .apply_display_pixel(self.color.apply_display_pixel(pixel)),
+        )
     }
 
     pub fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        self.light
-            .apply_encoded_pixel(self.color.apply_display_pixel(pixel))
+        self.apply_channel_curves(
+            self.light
+                .apply_encoded_pixel(self.color.apply_display_pixel(pixel)),
+        )
     }
+
+    fn apply_channel_curves(&self, encoded: [u8; 3]) -> [u8; 3] {
+        match &self.channels {
+            None => encoded,
+            Some(curves) => std::array::from_fn(|channel| {
+                let curved = curves[channel].eval(f32::from(encoded[channel]) / 255.0);
+                (curved * 255.0).round() as u8
+            }),
+        }
+    }
+}
+
+/// Folds the luminance curve into the light response, which every render path
+/// already samples, so the curve reaches them all without a new stage. The
+/// curve shapes encoded values, so the response is decoded around it.
+fn with_luminance_curve(light: LightTransform, points: &CurvePoints) -> LightTransform {
+    let curve = ToneCurve::new(points, light.luminance_lut().len());
+    if curve.is_identity() {
+        return light;
+    }
+    light.remapping_luminance(|linear| decode_srgb(curve.eval(encode_srgb(linear))))
+}
+
+fn channel_curves(settings: &CurveSettings) -> Option<[ToneCurve; 3]> {
+    let curves = [&settings.red, &settings.green, &settings.blue]
+        .map(|points| ToneCurve::new(points, CHANNEL_CURVE_SAMPLES));
+    curves
+        .iter()
+        .any(|curve| !curve.is_identity())
+        .then_some(curves)
 }
 
 fn within(values: &[f32], minimum: f32, maximum: f32) -> bool {
@@ -523,6 +572,7 @@ mod wire {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 
     fn vivid() -> DevelopSettings {
         DevelopSettings::tonal(
@@ -630,6 +680,131 @@ mod tests {
             ..DevelopSettings::neutral()
         }));
         assert!(DevelopSettings::neutral().validated().is_ok());
+    }
+
+    fn shaped(points: &[(f32, f32)]) -> CurvePoints {
+        CurvePoints(
+            points
+                .iter()
+                .map(|&(x, y)| CurvePoint { x, y })
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn curved(curve: CurveSettings) -> DevelopTransform {
+        DevelopTransform::new(DevelopSettings {
+            curve,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap()
+    }
+
+    fn gray(transform: &DevelopTransform, value: u8) -> [u8; 3] {
+        transform.apply_display_pixel([value; 3])
+    }
+
+    #[test]
+    fn an_identity_curve_leaves_the_light_response_untouched() {
+        let settings = LightSettings {
+            contrast: 35.0,
+            shadows: -20.0,
+            ..LightSettings::NEUTRAL
+        };
+        let transform = DevelopTransform::new(DevelopSettings {
+            light: settings,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        assert_eq!(
+            transform.luminance_lut(),
+            LightTransform::new(settings).unwrap().luminance_lut()
+        );
+        assert!(transform.channel_luts().is_none());
+    }
+
+    #[test]
+    fn the_luminance_curve_reaches_every_path_through_the_light_response() {
+        let transform = curved(CurveSettings {
+            luminance: shaped(&[(0.0, 0.0), (0.25, 0.45), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        });
+        assert_ne!(
+            transform.luminance_lut(),
+            LightTransform::new(LightSettings::NEUTRAL)
+                .unwrap()
+                .luminance_lut()
+        );
+        assert!(gray(&transform, 128)[1] > 128);
+        for (index, pair) in transform.luminance_lut().windows(2).enumerate() {
+            assert!(
+                pair[0] <= pair[1],
+                "composed response reverses at sample {index}: {} then {}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    #[test]
+    fn a_channel_curve_moves_only_its_own_channel() {
+        let transform = curved(CurveSettings {
+            red: shaped(&[(0.0, 0.0), (0.5, 0.7), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        });
+        let adjusted = gray(&transform, 128);
+        assert!(adjusted[0] > 128, "red stayed at {}", adjusted[0]);
+        assert_eq!([adjusted[1], adjusted[2]], [128, 128]);
+        assert_eq!(
+            transform.channel_luts().map(|luts| luts.map(<[f32]>::len)),
+            Some([CHANNEL_CURVE_SAMPLES; 3])
+        );
+    }
+
+    #[test]
+    fn channel_curves_run_on_encoded_values_after_the_light_stage() {
+        let curve = CurveSettings {
+            blue: shaped(&[(0.0, 0.0), (0.5, 0.3), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        };
+        let transform = DevelopTransform::new(DevelopSettings {
+            light: LightSettings {
+                contrast: 30.0,
+                ..LightSettings::NEUTRAL
+            },
+            curve: curve.clone(),
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let lit = DevelopTransform::new(DevelopSettings {
+            light: transform.settings().light,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let blue = ToneCurve::new(&curve.blue, CHANNEL_CURVE_SAMPLES);
+        let source = [90, 140, 200];
+        let expected = lit.apply_display_pixel(source);
+        assert_eq!(
+            transform.apply_display_pixel(source),
+            [
+                expected[0],
+                expected[1],
+                (blue.eval(f32::from(expected[2]) / 255.0) * 255.0).round() as u8
+            ]
+        );
+    }
+
+    #[test]
+    fn a_malformed_curve_never_reaches_the_curve_stage() {
+        assert!(
+            DevelopTransform::new(DevelopSettings {
+                curve: CurveSettings {
+                    red: shaped(&[(0.0, 0.0), (0.5, 1.5), (1.0, 1.0)]),
+                    ..CurveSettings::neutral()
+                },
+                ..DevelopSettings::neutral()
+            })
+            .is_err()
+        );
     }
 
     #[test]
