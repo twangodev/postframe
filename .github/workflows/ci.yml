@@ -105,7 +105,7 @@ jobs:
           tool: wasm-pack
       - uses: oven-sh/setup-bun@v2
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/.wasm-pack
           key: wasm-pack-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
