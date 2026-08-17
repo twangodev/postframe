@@ -219,6 +219,83 @@ test('renders and persists every color control for a display photo', async ({ pa
 	await expect.poll(() => tileFailures).toEqual([]);
 });
 
+test('renders and persists every detail control for a display photo', async ({ page }) => {
+	const tileFailures: string[] = [];
+	page.on('console', (message) => {
+		if (/tile .*failed|could not be cloned/i.test(message.text()))
+			tileFailures.push(message.text());
+	});
+	await page.goto('/');
+	const dataUrl = await page.evaluate(() => {
+		const canvas = document.createElement('canvas');
+		canvas.width = 32;
+		canvas.height = 32;
+		const context = canvas.getContext('2d')!;
+		const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+		gradient.addColorStop(0, '#20303c');
+		gradient.addColorStop(0.5, '#9aa7ad');
+		gradient.addColorStop(1, '#f2ece0');
+		context.fillStyle = gradient;
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		return canvas.toDataURL('image/png');
+	});
+	await page
+		.locator('main input[type="file"]')
+		.first()
+		.setInputFiles({
+			name: 'detail.png',
+			mimeType: 'image/png',
+			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
+		});
+	await page.getByRole('tab', { name: 'edit', exact: true }).click();
+	await expect(page.getByRole('textbox', { name: 'Exposure value' })).toBeEnabled({
+		timeout: 20_000
+	});
+	await page.getByRole('button', { name: 'Presence' }).click();
+	await page.getByRole('button', { name: 'Detail', exact: true }).click();
+
+	const edits = [
+		['Texture', '35', '+35'],
+		['Clarity', '-20', '-20'],
+		['Dehaze', '48', '+48'],
+		['Sharpening', '90', '90'],
+		['Noise reduction', '30', '30'],
+		['Color noise', '55', '55']
+	] as const;
+	for (const [label, draft, formatted] of edits) {
+		const value = page.getByRole('textbox', { name: `${label} value` });
+		await value.fill(draft);
+		await value.press('Enter');
+		await expect(value).toHaveValue(formatted);
+	}
+	await expect(page.getByText(/refining tiles|applying light/)).toHaveCount(0, {
+		timeout: 20_000
+	});
+	await expect(page.locator('[data-photo-pyramid] canvas')).toBeVisible();
+
+	await expect
+		.poll(() => storedEdit(page))
+		.toMatchObject({
+			version: EDIT_DOCUMENT_VERSION,
+			adjustments: {
+				detail: {
+					texture: 35,
+					clarity: -20,
+					dehaze: 48,
+					sharpenAmount: 90,
+					noiseLuminance: 30,
+					noiseColor: 55
+				}
+			}
+		});
+
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect
+		.poll(() => storedEdit(page))
+		.toMatchObject({ adjustments: { detail: { noiseColor: 0, noiseLuminance: 30 } } });
+	await expect.poll(() => tileFailures).toEqual([]);
+});
+
 test('keeps transparent PNG pixels transparent while developing', async ({ page }) => {
 	await page.goto('/');
 	const dataUrl = await page.evaluate(() => {
