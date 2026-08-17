@@ -36,7 +36,7 @@ export function displayTransform(
 	return active.light;
 }
 
-export function sameCrop(left: NormalizedCrop | null, right: NormalizedCrop | null) {
+function sameCrop(left: NormalizedCrop | null, right: NormalizedCrop | null) {
 	if (!left || !right) return left === right;
 	return (
 		left.x === right.x &&

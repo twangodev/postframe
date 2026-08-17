@@ -232,6 +232,23 @@ mod tests {
     }
 
     #[test]
+    fn a_round_contour_is_round_in_pixels_and_an_elliptical_one_fits_the_frame() {
+        let edges = |settings: EffectsSettings| {
+            (
+                vignette_gain(settings, VignetteFrame::FULL, 2.0, (0.0, 0.5)),
+                vignette_gain(settings, VignetteFrame::FULL, 2.0, (0.5, 0.0)),
+            )
+        };
+        let (long_edge, short_edge) = edges(effects(-100.0, 40.0, -100.0, 20.0));
+        assert!(long_edge < short_edge, "{long_edge} vs {short_edge}");
+        let (long_edge, short_edge) = edges(effects(-100.0, 40.0, 0.0, 20.0));
+        assert!(
+            (long_edge - short_edge).abs() < 1e-6,
+            "{long_edge} vs {short_edge}"
+        );
+    }
+
+    #[test]
     fn the_contour_follows_the_frame_rather_than_the_image() {
         let settings = effects(-100.0, 20.0, 100.0, 10.0);
         let inside = vignette_gain(settings, OFF_CENTRE, 1.5, OFF_CENTRE.centre());
