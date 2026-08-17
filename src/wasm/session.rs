@@ -3,12 +3,10 @@ use std::sync::Arc;
 use lru::LruCache;
 use wasm_bindgen::prelude::*;
 
-use super::shared::{color_settings, encode_jpeg, err, light_settings};
+use super::shared::{develop_settings, encode_jpeg, err};
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::{MipPyramid, PreparedRegion};
-use crate::{
-    ColorSettings, ColorTransform, ImageScope, LightSettings, LightTransform, Merged, Preview,
-};
+use crate::{DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const MAX_PYRAMID_BIN: usize = 64;
@@ -137,8 +135,7 @@ impl ScopeFrame {
 }
 
 struct CachedPreview {
-    settings: LightSettings,
-    color: ColorSettings,
+    settings: DevelopSettings,
     tone: bool,
     rgb8: Vec<u8>,
 }
@@ -183,8 +180,7 @@ pub struct Session {
     thumb: Option<(Merged, Preview)>,
     pyramid: Option<MipPyramid>,
     tiles: TileCache,
-    light: Option<LightTransform>,
-    color: Option<ColorTransform>,
+    develop: Option<DevelopTransform>,
     preview: Option<CachedPreview>,
 }
 
@@ -291,8 +287,7 @@ impl Session {
             thumb: None,
             pyramid: None,
             tiles: TileCache::new(TILE_CACHE_BUDGET),
-            light: None,
-            color: None,
+            develop: None,
             preview: None,
         }
     }
@@ -381,24 +376,8 @@ impl Session {
     }
 
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
-    #[allow(clippy::too_many_arguments)]
-    pub fn preview_jpeg(
-        &mut self,
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
-        tone: bool,
-    ) -> Result<Vec<u8>, JsError> {
-        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        let color = color_settings(temperature, tint, vibrance, saturation);
-        self.prepare_preview(settings, color, tone)?;
+    pub fn preview_jpeg(&mut self, settings: JsValue, tone: bool) -> Result<Vec<u8>, JsError> {
+        self.prepare_preview(develop_settings(settings)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -407,24 +386,12 @@ impl Session {
         encode_jpeg(&preview.rgb8, thumb.radiance.width, thumb.radiance.height)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn preview_frame(
         &mut self,
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
+        settings: JsValue,
         tone: bool,
     ) -> Result<PreviewFrame, JsError> {
-        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        let color = color_settings(temperature, tint, vibrance, saturation);
-        self.prepare_preview(settings, color, tone)?;
+        self.prepare_preview(develop_settings(settings)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -442,25 +409,13 @@ impl Session {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn preview_scope(
         &mut self,
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
+        settings: JsValue,
         tone: bool,
         sample_target: u32,
     ) -> Result<ScopeFrame, JsError> {
-        let settings = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        let color = color_settings(temperature, tint, vibrance, saturation);
-        self.prepare_preview(settings, color, tone)?;
+        self.prepare_preview(develop_settings(settings)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -490,22 +445,10 @@ impl Session {
         width: u32,
         height: u32,
         bin: u32,
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
+        settings: JsValue,
         tone: bool,
     ) -> Result<RenderedTile, JsError> {
-        self.prepare_light(light_settings(
-            exposure, contrast, highlights, shadows, whites, blacks,
-        ))?;
-        self.prepare_color(color_settings(temperature, tint, vibrance, saturation))?;
+        self.prepare_develop(develop_settings(settings)?)?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
@@ -535,15 +478,11 @@ impl Session {
             .tiles
             .get(&region)
             .ok_or(JsError::new("unable to prepare tile"))?;
-        let light = self
-            .light
+        let develop = self
+            .develop
             .as_ref()
-            .ok_or(JsError::new("missing light transform"))?;
-        let color = self
-            .color
-            .as_ref()
-            .ok_or(JsError::new("missing color transform"))?;
-        let rendered = lut.render_prepared_adjusted(merged, prepared, light, color, tone);
+            .ok_or(JsError::new("missing develop transform"))?;
+        let rendered = lut.render_prepared_adjusted(merged, prepared, develop, tone);
         let mut rgba = Vec::with_capacity(rendered.width * rendered.height * 4);
         for pixel in rendered.rgb8.chunks_exact(3) {
             rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], u8::MAX]);
@@ -611,49 +550,31 @@ impl Session {
         Ok(crate::hdr::encode(merged).map_err(err)?.bytes)
     }
 
-    fn prepare_light(&mut self, settings: LightSettings) -> Result<(), JsError> {
-        settings.validated().map_err(err)?;
-        if self.light.as_ref().map(LightTransform::settings) != Some(settings) {
-            self.light = Some(LightTransform::new(settings).map_err(err)?);
+    fn prepare_develop(&mut self, settings: DevelopSettings) -> Result<(), JsError> {
+        if self.develop.as_ref().map(DevelopTransform::settings) != Some(&settings) {
+            self.develop = Some(DevelopTransform::new(settings).map_err(err)?);
         }
         Ok(())
     }
 
-    fn prepare_color(&mut self, settings: ColorSettings) -> Result<(), JsError> {
-        settings.validated().map_err(err)?;
-        if self.color.as_ref().map(ColorTransform::settings) != Some(settings) {
-            self.color = Some(ColorTransform::new(settings).map_err(err)?);
-        }
-        Ok(())
-    }
-
-    fn prepare_preview(
-        &mut self,
-        settings: LightSettings,
-        color: ColorSettings,
-        tone: bool,
-    ) -> Result<(), JsError> {
-        if self.preview.as_ref().is_some_and(|preview| {
-            preview.settings == settings && preview.color == color && preview.tone == tone
-        }) {
+    fn prepare_preview(&mut self, settings: DevelopSettings, tone: bool) -> Result<(), JsError> {
+        if self
+            .preview
+            .as_ref()
+            .is_some_and(|preview| preview.settings == settings && preview.tone == tone)
+        {
             return Ok(());
         }
-        self.prepare_light(settings)?;
-        self.prepare_color(color)?;
-        let light = self
-            .light
+        self.prepare_develop(settings.clone())?;
+        let develop = self
+            .develop
             .as_ref()
-            .ok_or(JsError::new("missing light transform"))?;
-        let grade = self
-            .color
-            .as_ref()
-            .ok_or(JsError::new("missing color transform"))?;
+            .ok_or(JsError::new("missing develop transform"))?;
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         self.preview = Some(CachedPreview {
             settings,
-            color,
             tone,
-            rgb8: lut.render_adjusted(thumb, light, grade, tone),
+            rgb8: lut.render_adjusted(thumb, develop, tone),
         });
         Ok(())
     }

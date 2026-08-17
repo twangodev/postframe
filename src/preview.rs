@@ -1,6 +1,6 @@
 use crate::color;
 use crate::{
-    ColorSettings, ColorTransform, LightSettings, LightTransform, Merged, Rendered, Result,
+    ColorSettings, DevelopSettings, DevelopTransform, LightSettings, Merged, Rendered, Result,
     parallel,
 };
 
@@ -306,29 +306,19 @@ impl Preview {
     }
 
     pub fn render(&self, merged: &Merged, ev: f32, tone: bool) -> Result<Vec<u8>> {
-        let settings = LightSettings {
-            exposure: ev,
-            ..LightSettings::NEUTRAL
-        };
-        Ok(self.render_adjusted(
-            merged,
-            &LightTransform::new(settings)?,
-            &ColorTransform::new(ColorSettings::NEUTRAL)?,
-            tone,
-        ))
+        Ok(self.render_adjusted(merged, &exposure_only(ev)?, tone))
     }
 
     pub fn render_adjusted(
         &self,
         merged: &Merged,
-        light: &LightTransform,
-        grade: &ColorTransform,
+        develop: &DevelopTransform,
         tone: bool,
     ) -> Vec<u8> {
-        let gain = (2.0f32).powf(light.settings().exposure);
+        let gain = (2.0f32).powf(develop.settings().light.exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
         parallel::map_pixels(&merged.radiance.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, light, grade)
+            self.render_pixel(pixel, gain, white, tone, develop)
         })
     }
 
@@ -342,31 +332,20 @@ impl Preview {
         tone: bool,
     ) -> Result<Rendered> {
         let region = PreparedRegion::new(merged, origin, size, bin);
-        let settings = LightSettings {
-            exposure: ev,
-            ..LightSettings::NEUTRAL
-        };
-        Ok(self.render_prepared_adjusted(
-            merged,
-            &region,
-            &LightTransform::new(settings)?,
-            &ColorTransform::new(ColorSettings::NEUTRAL)?,
-            tone,
-        ))
+        Ok(self.render_prepared_adjusted(merged, &region, &exposure_only(ev)?, tone))
     }
 
     pub(crate) fn render_prepared_adjusted(
         &self,
         merged: &Merged,
         region: &PreparedRegion,
-        light: &LightTransform,
-        grade: &ColorTransform,
+        develop: &DevelopTransform,
         tone: bool,
     ) -> Rendered {
-        let gain = (2.0f32).powf(light.settings().exposure);
+        let gain = (2.0f32).powf(develop.settings().light.exposure);
         let white = (merged.report.radiance_max * gain).max(1.0);
         let rgb8 = parallel::map_pixels(&region.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, light, grade)
+            self.render_pixel(pixel, gain, white, tone, develop)
         });
 
         Rendered {
@@ -382,8 +361,7 @@ impl Preview {
         gain: f32,
         white: f32,
         tone: bool,
-        light: &LightTransform,
-        grade: &ColorTransform,
+        develop: &DevelopTransform,
     ) -> [u8; 3] {
         let exposed = pixel.map(|channel| channel * gain);
         let compress = if tone {
@@ -400,8 +378,18 @@ impl Preview {
                 .round()
                 .clamp(0.0, 255.0) as u8
         });
-        light.apply_encoded_pixel(grade.apply_display_pixel(coded))
+        develop.apply_encoded_pixel(coded)
     }
+}
+
+fn exposure_only(ev: f32) -> Result<DevelopTransform> {
+    DevelopTransform::new(DevelopSettings::tonal(
+        LightSettings {
+            exposure: ev,
+            ..LightSettings::NEUTRAL
+        },
+        ColorSettings::NEUTRAL,
+    ))
 }
 
 #[cfg(test)]
@@ -409,6 +397,11 @@ mod tests {
     use super::*;
     use crate::decode::linear::Linear;
     use crate::fit::pair::{Pairing, Sample};
+    use crate::{ColorTransform, LightTransform};
+
+    fn developed(light: LightSettings, color: ColorSettings) -> DevelopTransform {
+        DevelopTransform::new(DevelopSettings::tonal(light, color)).unwrap()
+    }
 
     fn merged_fixture() -> Merged {
         let samples: Vec<Sample> = (0..6_000)
@@ -504,13 +497,14 @@ mod tests {
 
         let preview = Preview::new(&merged);
         let prepared = PreparedRegion::new(&merged, (2, 1), (3, 4), 1);
-        let light = LightTransform::new(LightSettings {
-            exposure: 0.5,
-            ..LightSettings::NEUTRAL
-        })
-        .unwrap();
-        let tile =
-            preview.render_prepared_adjusted(&merged, &prepared, &light, &neutral_color(), false);
+        let brighter = developed(
+            LightSettings {
+                exposure: 0.5,
+                ..LightSettings::NEUTRAL
+            },
+            ColorSettings::NEUTRAL,
+        );
+        let tile = preview.render_prepared_adjusted(&merged, &prepared, &brighter, false);
         let expected = (1..5)
             .flat_map(|y| {
                 let start = (y * 8 + 2) * 3;
@@ -520,13 +514,14 @@ mod tests {
         assert_eq!((tile.width, tile.height), (3, 4));
         assert_eq!(tile.rgb8, expected);
 
-        let light = LightTransform::new(LightSettings {
-            exposure: -0.5,
-            ..LightSettings::NEUTRAL
-        })
-        .unwrap();
-        let rerendered =
-            preview.render_prepared_adjusted(&merged, &prepared, &light, &neutral_color(), false);
+        let darker = developed(
+            LightSettings {
+                exposure: -0.5,
+                ..LightSettings::NEUTRAL
+            },
+            ColorSettings::NEUTRAL,
+        );
+        let rerendered = preview.render_prepared_adjusted(&merged, &prepared, &darker, false);
         let direct = preview
             .render_region(&merged, (2, 1), (3, 4), 1, -0.5, false)
             .unwrap();
@@ -609,8 +604,9 @@ mod tests {
 
         for settings in settings {
             let light = LightTransform::new(settings).unwrap();
+            let develop = developed(settings, ColorSettings::NEUTRAL);
             for tone in [false, true] {
-                let fast = preview.render_adjusted(&merged, &light, &neutral_color(), tone);
+                let fast = preview.render_adjusted(&merged, &develop, tone);
                 let exact = exact_render(&merged, &light, &neutral_color(), tone);
                 let worst = worst_code_error(&fast, &exact);
                 assert!(
@@ -631,23 +627,27 @@ mod tests {
             })
             .collect();
         let preview = Preview::new(&merged);
-        let light = LightTransform::new(LightSettings {
+        let settings = LightSettings {
             exposure: 0.75,
             contrast: 40.0,
             ..LightSettings::NEUTRAL
-        })
-        .unwrap();
-        let grade = ColorTransform::new(ColorSettings {
+        };
+        let color = ColorSettings {
             temperature: 60.0,
             tint: -25.0,
             vibrance: 40.0,
             saturation: 30.0,
-        })
-        .unwrap();
+        };
+        let light = LightTransform::new(settings).unwrap();
+        let grade = ColorTransform::new(color).unwrap();
 
         for tone in [false, true] {
-            let graded = preview.render_adjusted(&merged, &light, &grade, tone);
-            let ungraded = preview.render_adjusted(&merged, &light, &neutral_color(), tone);
+            let graded = preview.render_adjusted(&merged, &developed(settings, color), tone);
+            let ungraded = preview.render_adjusted(
+                &merged,
+                &developed(settings, ColorSettings::NEUTRAL),
+                tone,
+            );
             assert_ne!(graded, ungraded);
             let worst = worst_code_error(&graded, &exact_render(&merged, &light, &grade, tone));
             assert!(worst <= 1, "graded preview drifted {worst} codes");

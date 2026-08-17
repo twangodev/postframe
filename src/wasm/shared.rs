@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use crate::{ColorSettings, LightSettings};
+use crate::DevelopSettings;
 
 pub(super) fn err(error: crate::Error) -> JsError {
     JsError::new(&error.to_string())
@@ -19,34 +19,9 @@ pub(super) fn encode_jpeg(rgb8: &[u8], width: usize, height: usize) -> Result<Ve
     Ok(bytes)
 }
 
-pub(super) fn light_settings(
-    exposure: f32,
-    contrast: f32,
-    highlights: f32,
-    shadows: f32,
-    whites: f32,
-    blacks: f32,
-) -> LightSettings {
-    LightSettings {
-        exposure,
-        contrast,
-        highlights,
-        shadows,
-        whites,
-        blacks,
-    }
-}
-
-pub(super) fn color_settings(
-    temperature: f32,
-    tint: f32,
-    vibrance: f32,
-    saturation: f32,
-) -> ColorSettings {
-    ColorSettings {
-        temperature,
-        tint,
-        vibrance,
-        saturation,
-    }
+pub(super) fn develop_settings(settings: JsValue) -> Result<DevelopSettings, JsError> {
+    serde_wasm_bindgen::from_value::<DevelopSettings>(settings)
+        .map_err(|error| JsError::new(&error.to_string()))?
+        .validated()
+        .map_err(err)
 }

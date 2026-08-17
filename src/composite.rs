@@ -1,4 +1,4 @@
-use crate::{ColorSettings, ColorTransform, Error, LightSettings, LightTransform, Result};
+use crate::{ColorSettings, DevelopSettings, DevelopTransform, Error, LightSettings, Result};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MaskPlane {
@@ -74,22 +74,19 @@ impl DevelopedTileRegion {
 #[derive(Clone)]
 pub struct LocalAdjustment {
     mask: MaskPlane,
-    light: LightTransform,
-    color: ColorTransform,
+    develop: DevelopTransform,
 }
 
 impl LocalAdjustment {
     pub fn new(mask: MaskPlane, light: LightSettings, color: ColorSettings) -> Result<Self> {
         Ok(Self {
             mask,
-            light: LightTransform::new(light)?,
-            color: ColorTransform::new(color)?,
+            develop: DevelopTransform::new(DevelopSettings::tonal(light, color))?,
         })
     }
 
     fn adjust_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        self.light
-            .apply_display_pixel(self.color.apply_display_pixel(pixel))
+        self.develop.apply_display_pixel(pixel)
     }
 }
 
@@ -157,6 +154,7 @@ fn mix(left: f32, right: f32, weight: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ColorTransform, LightTransform};
 
     fn region(width: usize, height: usize) -> DevelopedTileRegion {
         DevelopedTileRegion {

@@ -1,51 +1,32 @@
 use wasm_bindgen::prelude::*;
 
-use super::shared::{color_settings, err, light_settings};
+use super::shared::{develop_settings, err};
 use crate::{
-    ColorTransform, DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion,
-    LightTransform, LocalAdjustment, MaskPlane,
+    DevelopTransform, DevelopedTileCompositor as CoreDevelopedTileCompositor, DevelopedTileRegion,
+    LocalAdjustment, MaskPlane,
 };
 
 #[wasm_bindgen]
 pub struct DisplayTransform {
-    light: LightTransform,
-    color: ColorTransform,
+    develop: DevelopTransform,
 }
 
 #[wasm_bindgen]
 impl DisplayTransform {
     #[wasm_bindgen(constructor)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
-    ) -> Result<DisplayTransform, JsError> {
+    pub fn new(settings: JsValue) -> Result<DisplayTransform, JsError> {
         Ok(Self {
-            light: LightTransform::new(light_settings(
-                exposure, contrast, highlights, shadows, whites, blacks,
-            ))
-            .map_err(err)?,
-            color: ColorTransform::new(color_settings(temperature, tint, vibrance, saturation))
-                .map_err(err)?,
+            develop: DevelopTransform::new(develop_settings(settings)?).map_err(err)?,
         })
     }
 
     pub fn apply_rgba(&self, rgba: Vec<u8>) -> Result<Vec<u8>, JsError> {
-        let graded = self.color.apply_display_rgba8(&rgba).map_err(err)?;
-        self.light.apply_display_rgba8(&graded).map_err(err)
+        self.develop.apply_display_rgba8(&rgba).map_err(err)
     }
 
     #[wasm_bindgen(getter)]
     pub fn luminance_lut(&self) -> Vec<f32> {
-        self.light.luminance_lut().to_vec()
+        self.develop.luminance_lut().to_vec()
     }
 }
 
@@ -58,28 +39,17 @@ pub struct DevelopedTileCompositor {
 #[wasm_bindgen]
 impl DevelopedTileCompositor {
     #[wasm_bindgen(constructor)]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mask: Vec<u8>,
         mask_width: u32,
         mask_height: u32,
-        exposure: f32,
-        contrast: f32,
-        highlights: f32,
-        shadows: f32,
-        whites: f32,
-        blacks: f32,
-        temperature: f32,
-        tint: f32,
-        vibrance: f32,
-        saturation: f32,
+        settings: JsValue,
     ) -> Result<DevelopedTileCompositor, JsError> {
         let mask = MaskPlane::new(mask_width as usize, mask_height as usize, mask).map_err(err)?;
-        let light = light_settings(exposure, contrast, highlights, shadows, whites, blacks);
-        let color = color_settings(temperature, tint, vibrance, saturation);
+        let settings = develop_settings(settings)?;
         Ok(Self {
             compositor: CoreDevelopedTileCompositor,
-            adjustment: LocalAdjustment::new(mask, light, color).map_err(err)?,
+            adjustment: LocalAdjustment::new(mask, settings.light, settings.color).map_err(err)?,
         })
     }
 
