@@ -313,6 +313,7 @@ pub const MAX_GRADING_CROSSFADE_STOPS: f32 = 2.5;
 pub const MAX_GRADING_BALANCE_STOPS: f32 = 2.0;
 pub const MAX_GRADING_LUMINANCE_STOPS: f32 = 0.5;
 pub const MAX_GRADING_MIX: f32 = 0.5;
+pub const GRADING_SCALARS: usize = 12;
 
 /// One wheel reduced to what a pixel needs: a hue to move toward, how far to
 /// move at full range weight, and an exposure shift in stops.
@@ -370,6 +371,19 @@ impl GradingTransform {
         let shadow = 1.0 - above(self.shadow_edge);
         let highlight = above(self.highlight_edge);
         [shadow, 1.0 - shadow - highlight, highlight]
+    }
+
+    /// The ramp edges, the crossfade half-width, then each range's hue, mix and
+    /// stops — the order the shader's uniform block declares them in.
+    pub fn scalars(&self) -> Vec<f32> {
+        [self.shadow_edge, self.highlight_edge, self.crossfade]
+            .into_iter()
+            .chain(
+                self.ranges
+                    .iter()
+                    .flat_map(|range| [range.hue, range.mix, range.stops]),
+            )
+            .collect()
     }
 
     pub fn apply(&self, linear: [f32; 3]) -> [f32; 3] {
@@ -929,6 +943,46 @@ mod tests {
         .unwrap();
         let grays = [0, 0, 0, 255, 128, 128, 128, 255, 255, 255, 255, 255];
         assert_eq!(transform.apply_display_rgba8(&grays).unwrap(), grays);
+    }
+
+    #[test]
+    fn the_compact_gpu_forms_carry_the_whole_stage() {
+        let neutral = DevelopTransform::new(DevelopSettings::neutral()).unwrap();
+        let luts = neutral.mixer_luts().values();
+        assert_eq!(luts.len(), 3 * MIXER_LUT_LENGTH);
+        assert!(luts[..MIXER_LUT_LENGTH].iter().all(|&shift| shift == 0.0));
+        assert!(luts[MIXER_LUT_LENGTH..].iter().all(|&scale| scale == 1.0));
+
+        let scalars = neutral.grading().scalars();
+        assert_eq!(scalars.len(), GRADING_SCALARS);
+        assert_eq!(
+            scalars[..3],
+            [
+                GRADING_SHADOW_EDGE_STOPS,
+                GRADING_HIGHLIGHT_EDGE_STOPS,
+                MIN_GRADING_CROSSFADE_STOPS
+                    + 0.5 * (MAX_GRADING_CROSSFADE_STOPS - MIN_GRADING_CROSSFADE_STOPS)
+            ]
+        );
+        assert!(scalars[3..].iter().all(|&scalar| scalar == 0.0));
+    }
+
+    #[test]
+    fn the_hue_luts_interpolate_across_the_wrap() {
+        let luts = MixerLuts::new(&MixerSettings {
+            red: MixerBand {
+                saturation: 100.0,
+                ..NEUTRAL_BAND
+            },
+            ..MixerSettings::NEUTRAL
+        });
+        let below = sample(&luts.saturation, 359.0);
+        let across = sample(&luts.saturation, 359.5);
+        assert!(below < across && across < sample(&luts.saturation, 0.0));
+        assert_eq!(
+            sample(&luts.saturation, 360.0),
+            sample(&luts.saturation, 0.0)
+        );
     }
 
     #[test]

@@ -13,7 +13,9 @@ export class DisplayTransform {
     [Symbol.dispose](): void;
     apply_rgba(rgba: Uint8Array): Uint8Array;
     constructor(settings: any);
+    readonly grading_scalars: Float32Array;
     readonly luminance_lut: Float32Array;
+    readonly mixer_luts: Float32Array;
 }
 
 export class LinearTile {
@@ -152,7 +154,6 @@ export interface InitOutput {
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
-    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
     readonly lineartile_width: (a: number) => number;
@@ -198,8 +199,11 @@ export interface InitOutput {
     readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
     readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
     readonly displaytransform_apply_rgba: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly displaytransform_grading_scalars: (a: number) => [number, number];
     readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_mixer_luts: (a: number) => [number, number];
     readonly displaytransform_new: (a: any) => [number, number, number];
+    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

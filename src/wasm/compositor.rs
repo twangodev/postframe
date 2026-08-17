@@ -28,6 +28,16 @@ impl DisplayTransform {
     pub fn luminance_lut(&self) -> Vec<f32> {
         self.develop.luminance_lut().to_vec()
     }
+
+    #[wasm_bindgen(getter)]
+    pub fn mixer_luts(&self) -> Vec<f32> {
+        self.develop.mixer_luts().values()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn grading_scalars(&self) -> Vec<f32> {
+        self.develop.grading().scalars()
+    }
 }
 
 #[wasm_bindgen]
