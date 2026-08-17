@@ -2,14 +2,24 @@ use crate::grade::{ColorSettings, ColorTransform};
 use crate::light::{LightSettings, LightTransform};
 use crate::{Error, Result};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+pub struct CurvePoint {
+    pub x: f32,
+    pub y: f32,
+}
+
 /// Control points of a single tone curve, in ascending `x` order.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
-pub struct CurvePoints(pub Vec<[f32; 2]>);
+pub struct CurvePoints(pub Vec<CurvePoint>);
 
 impl CurvePoints {
     pub fn identity() -> Self {
-        Self(vec![[0.0, 0.0], [1.0, 1.0]])
+        Self(vec![
+            CurvePoint { x: 0.0, y: 0.0 },
+            CurvePoint { x: 1.0, y: 1.0 },
+        ])
     }
 
     pub fn is_identity(&self) -> bool {
@@ -22,15 +32,15 @@ impl CurvePoints {
         }
         let mut previous = f32::NEG_INFINITY;
         for point in &self.0 {
-            if !within(point, 0.0, 1.0) {
+            if !within(&[point.x, point.y], 0.0, 1.0) {
                 return Err(Error::Unsupported(
                     "curve points must lie inside the unit square",
                 ));
             }
-            if point[0] <= previous {
+            if point.x <= previous {
                 return Err(Error::Unsupported("curve points must ascend in x"));
             }
-            previous = point[0];
+            previous = point.x;
         }
         Ok(())
     }
@@ -449,6 +459,67 @@ fn within(values: &[f32], minimum: f32, maximum: f32) -> bool {
         .all(|value| value.is_finite() && (minimum..=maximum).contains(value))
 }
 
+/// The wire format the web app sends, pinned so a rename on either side of the
+/// boundary fails here rather than at runtime.
+#[cfg(all(test, feature = "wasm"))]
+mod wire {
+    use super::*;
+
+    const NEUTRAL_JSON: &str = r#"{
+        "light": {
+            "exposure": 0, "contrast": 0, "highlights": 0,
+            "shadows": 0, "whites": 0, "blacks": 0
+        },
+        "color": { "temperature": 0, "tint": 0, "vibrance": 0, "saturation": 0 },
+        "curve": {
+            "luminance": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }],
+            "red": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }],
+            "green": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }],
+            "blue": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }]
+        },
+        "mixer": {
+            "red": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "orange": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "yellow": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "green": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "aqua": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "blue": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "purple": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "magenta": { "hue": 0, "saturation": 0, "luminance": 0 }
+        },
+        "grading": {
+            "shadows": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "midtones": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "highlights": { "hue": 0, "saturation": 0, "luminance": 0 },
+            "blending": 50,
+            "balance": 0
+        },
+        "detail": {
+            "texture": 0, "clarity": 0, "dehaze": 0,
+            "sharpenAmount": 0, "noiseLuminance": 0, "noiseColor": 0
+        },
+        "effects": {
+            "vignetteAmount": 0, "vignetteMidpoint": 50, "vignetteRoundness": 0,
+            "vignetteFeather": 50, "grainAmount": 0, "grainSize": 25
+        }
+    }"#;
+
+    #[test]
+    fn the_web_apps_neutral_document_deserializes_to_neutral_settings() {
+        let parsed: DevelopSettings = serde_json::from_str(NEUTRAL_JSON).unwrap();
+        assert_eq!(parsed, DevelopSettings::neutral());
+    }
+
+    #[test]
+    fn a_missing_group_is_rejected_rather_than_silently_defaulted() {
+        let without_effects = NEUTRAL_JSON
+            .split_once(",\n        \"effects\"")
+            .map(|(head, _)| format!("{head}\n    }}"))
+            .unwrap();
+        assert!(serde_json::from_str::<DevelopSettings>(&without_effects).is_err());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,7 +569,11 @@ mod tests {
         assert!(!vivid().is_neutral());
         let curved = DevelopSettings {
             curve: CurveSettings {
-                luminance: CurvePoints(vec![[0.0, 0.0], [0.5, 0.6], [1.0, 1.0]]),
+                luminance: CurvePoints(vec![
+                    CurvePoint { x: 0.0, y: 0.0 },
+                    CurvePoint { x: 0.5, y: 0.6 },
+                    CurvePoint { x: 1.0, y: 1.0 },
+                ]),
                 ..CurveSettings::neutral()
             },
             ..DevelopSettings::neutral()
@@ -559,7 +634,7 @@ mod tests {
 
     #[test]
     fn validation_rejects_malformed_curves() {
-        let curve = |points: Vec<[f32; 2]>| {
+        let curve = |points: Vec<CurvePoint>| {
             DevelopSettings {
                 curve: CurveSettings {
                     luminance: CurvePoints(points),
@@ -570,9 +645,14 @@ mod tests {
             .validated()
             .is_err()
         };
-        assert!(curve(vec![[0.0, 0.0]]));
-        assert!(curve(vec![[0.5, 0.0], [0.5, 1.0]]));
-        assert!(curve(vec![[0.0, 0.0], [1.0, 1.5]]));
-        assert!(!curve(vec![[0.0, 0.0], [0.5, 0.6], [1.0, 1.0]]));
+        let point = |x: f32, y: f32| CurvePoint { x, y };
+        assert!(curve(vec![point(0.0, 0.0)]));
+        assert!(curve(vec![point(0.5, 0.0), point(0.5, 1.0)]));
+        assert!(curve(vec![point(0.0, 0.0), point(1.0, 1.5)]));
+        assert!(!curve(vec![
+            point(0.0, 0.0),
+            point(0.5, 0.6),
+            point(1.0, 1.0)
+        ]));
     }
 }

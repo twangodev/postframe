@@ -49,6 +49,8 @@ jobs:
             features: parallel
           - name: cli
             features: cli
+          - name: wasm
+            features: wasm
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
