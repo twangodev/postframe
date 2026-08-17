@@ -2,8 +2,11 @@
 	import { dev } from '$app/environment';
 	import './app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { reportUncaught } from '$lib/diagnostics';
 
 	let { children } = $props();
+
+	if (typeof window !== 'undefined') reportUncaught('page', window);
 </script>
 
 <svelte:head>

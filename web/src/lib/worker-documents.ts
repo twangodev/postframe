@@ -1,3 +1,4 @@
+import { reportError } from './diagnostics.ts';
 import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
 import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
@@ -308,7 +309,8 @@ async function createRawRenderer(session: WasmSession) {
 			lookupShift: profile.lookup_shift,
 			radianceMax: profile.radiance_max
 		} satisfies RawRenderProfile);
-	} catch {
+	} catch (error) {
+		reportError('webgpu renderer unavailable; using the cpu tile path', error);
 		return null;
 	} finally {
 		profile.free();

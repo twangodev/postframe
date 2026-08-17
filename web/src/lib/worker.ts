@@ -1,4 +1,5 @@
 import { adjustMaskEdges } from './mask-edge-adjustment.ts';
+import { reportError, reportUncaught } from './diagnostics.ts';
 import { post, type Request } from './worker-protocol.ts';
 import { ready, threadCount, threaded, wasm } from './worker-wasm.ts';
 import { measure, measureAsync, setPerformanceEnabled } from './worker-performance.ts';
@@ -132,9 +133,14 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				break;
 		}
 	} catch (error) {
+		// Stringifying for the client drops the stack, which is the only thing
+		// that says which request failed and where.
+		reportError(`worker request "${message.type}" failed`, error);
 		post({ id: message.id, type: 'error', message: String(error) });
 	}
 };
+
+reportUncaught('pipeline worker', self);
 
 function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 	const result = measure(

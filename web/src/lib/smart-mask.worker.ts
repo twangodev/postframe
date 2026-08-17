@@ -1,3 +1,4 @@
+import { reportError, reportUncaught } from './diagnostics.ts';
 import { RawImage, env, pipeline, type ProgressInfo } from '@huggingface/transformers';
 import { refineObjectMask, refinePaintedMask } from './mask-edge-refiner.ts';
 import { OpfsModelCache } from './model-cache.ts';
@@ -436,5 +437,8 @@ function positiveModulo(value: number, divisor: number) {
 }
 
 function errorMessage(error: unknown) {
+	reportError('smart mask worker failed', error);
 	return error instanceof Error ? error.message : 'Smart masking failed';
 }
+
+reportUncaught('smart mask worker', self);

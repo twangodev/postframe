@@ -1,3 +1,4 @@
+import { reportError } from './diagnostics.ts';
 import {
 	defaultColorSettings,
 	detailTileKey,
@@ -17,7 +18,8 @@ export async function renderTile(active: ActiveDocument, request: RenderTileRequ
 	if (!hasMaskCompositors()) return developed;
 	try {
 		return compositeDevelopedTile(active, developed, request);
-	} catch {
+	} catch (error) {
+		reportError('mask compositing fell back to the developed tile', error);
 		return developed;
 	}
 }
@@ -60,7 +62,8 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 					request.tone,
 					rawDevelopLuts(active, request.adjustments)
 				);
-			} catch {
+			} catch (error) {
+				reportError('gpu tile render failed; falling back to the cpu path', error);
 				active.renderer.destroy();
 				active.renderer = null;
 			} finally {
