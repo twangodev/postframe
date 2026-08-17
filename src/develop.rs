@@ -394,21 +394,13 @@ impl GradingTransform {
             tinted = range.blend(tinted, weight);
             stops += range.stops * weight;
         }
-        scale_luminance(tinted, exp2(stops))
+        scale_luminance(tinted, stops.exp2())
     }
 }
 
 fn smoothstep(start: f32, end: f32, value: f32) -> f32 {
     let position = ((value - start) / (end - start)).clamp(0.0, 1.0);
     position * position * (3.0 - 2.0 * position)
-}
-
-fn exp2(stops: f32) -> f32 {
-    if stops == 0.0 {
-        1.0
-    } else {
-        2.0f32.powf(stops)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
