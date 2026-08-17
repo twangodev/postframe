@@ -13,6 +13,7 @@ static SRGB_TO_LINEAR: OnceLock<[f32; 256]> = OnceLock::new();
 static LINEAR_TO_SRGB: OnceLock<[u8; CURVE_SAMPLES]> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 pub struct LightSettings {
     pub exposure: f32,
     pub contrast: f32,

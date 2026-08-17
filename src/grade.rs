@@ -7,6 +7,7 @@ pub const MAX_TINT_SHIFT_STOPS: f32 = 0.5;
 const LUMINANCE_WEIGHTS: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 pub struct ColorSettings {
     pub temperature: f32,
     pub tint: f32,
