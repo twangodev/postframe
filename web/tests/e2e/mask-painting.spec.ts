@@ -209,3 +209,57 @@ test('keeps the live gradient preview mounted until the committed overlay return
 	await expect.poll(async () => (await handoff())?.sawOverlay).toBe(true);
 	expect((await handoff())?.gapFrames).toBe(0);
 });
+
+test('edits a linear gradient with its on-canvas handles', async ({ page }) => {
+	await openEditor(page, 'gizmo.png');
+	const viewport = page.getByRole('application', { name: 'Photo viewport' });
+	const aside = page.locator('aside');
+	const rect = await photoRect(viewport, 'gizmo.png');
+	const guideLines = viewport.locator('svg[preserveAspectRatio="none"] line');
+
+	await aside.getByRole('button', { name: 'linear', exact: true }).click();
+	await dragStroke(page, pointAt(rect, 0.3, 0.5), pointAt(rect, 0.7, 0.5));
+	await expect
+		.poll(() => storedMasks(page), { timeout: 15_000 })
+		.toMatchObject([{ kind: 'linear', components: [{ type: 'linear' }] }]);
+	const placed = (await storedMasks(page))![0].components[0];
+	expect(placed.anchor).toEqual({ x: 0.5, y: 0.5 });
+
+	// A second mask takes the selection; reselecting the linear mask must show
+	// its gizmo even though the active tool is now the radial one.
+	await aside.getByRole('button', { name: 'radial', exact: true }).click();
+	await dragStroke(page, pointAt(rect, 0.5, 0.25), pointAt(rect, 0.6, 0.3));
+	await expect
+		.poll(() => storedMasks(page), { timeout: 15_000 })
+		.toMatchObject([{ kind: 'linear' }, { kind: 'radial' }]);
+	await aside.getByRole('button', { name: /linear gradient/ }).click();
+	await expect(guideLines).toHaveCount(6);
+
+	// Drag the positive endpoint dot: rotation and compression change, the
+	// anchor does not.
+	await dragStroke(page, pointAt(rect, 0.7, 0.5), pointAt(rect, 0.5, 0.28));
+	await expect
+		.poll(async () => (await storedMasks(page))?.[0]?.components?.[0]?.rotation, {
+			timeout: 15_000
+		})
+		.not.toBe(placed.rotation);
+	const rotated = (await storedMasks(page))![0].components[0];
+	expect(rotated.anchor).toEqual(placed.anchor);
+	expect(rotated.rotation).toBeLessThan(0);
+
+	// Drag the dashed center line through the anchor: pure translation.
+	await dragStroke(page, pointAt(rect, 0.5, 0.5), pointAt(rect, 0.58, 0.6));
+	await expect
+		.poll(async () => (await storedMasks(page))?.[0]?.components?.[0]?.anchor?.x, {
+			timeout: 15_000
+		})
+		.toBeGreaterThan(0.55);
+
+	// Undo restores the pre-translation geometry in one step.
+	await page.keyboard.press('Control+z');
+	await expect
+		.poll(async () => (await storedMasks(page))?.[0]?.components?.[0]?.anchor?.x, {
+			timeout: 15_000
+		})
+		.toBe(rotated.anchor.x);
+});
