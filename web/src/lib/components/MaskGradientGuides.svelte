@@ -86,6 +86,33 @@
 	/>
 {/snippet}
 
+{#snippet ellipsePair(
+	rx: number,
+	ry: number,
+	dash: string | null,
+	emphasized: boolean,
+	innerOpacity: string | null = null
+)}
+	<ellipse
+		{rx}
+		{ry}
+		fill="none"
+		stroke="black"
+		stroke-opacity="0.9"
+		stroke-width={outerStroke}
+		stroke-dasharray={dash}
+	/>
+	<ellipse
+		{rx}
+		{ry}
+		fill="none"
+		stroke="white"
+		stroke-opacity={innerOpacity}
+		stroke-width={emphasized ? 2 * innerStroke : innerStroke}
+		stroke-dasharray={dash}
+	/>
+{/snippet}
+
 <svg
 	aria-hidden="true"
 	class="pointer-events-none absolute inset-0 size-full overflow-visible"
@@ -123,40 +150,15 @@
 	{/if}
 	{#if radial}
 		<g transform={`translate(${radial.center.x} ${radial.center.y}) rotate(${rotationDegrees})`}>
-			<ellipse
-				rx={radial.radiusXPx}
-				ry={radial.radiusYPx}
-				fill="none"
-				stroke="black"
-				stroke-opacity="0.9"
-				stroke-width={outerStroke}
-			/>
-			<ellipse
-				rx={radial.radiusXPx}
-				ry={radial.radiusYPx}
-				fill="none"
-				stroke="white"
-				stroke-width={grip?.kind === 'body' ? 2 * innerStroke : innerStroke}
-			/>
+			{@render ellipsePair(radial.radiusXPx, radial.radiusYPx, null, grip?.kind === 'body')}
 			{#if core > 0 && core < 1}
-				<ellipse
-					rx={radial.radiusXPx * core}
-					ry={radial.radiusYPx * core}
-					fill="none"
-					stroke="black"
-					stroke-opacity="0.9"
-					stroke-width={outerStroke}
-					stroke-dasharray={dashPattern}
-				/>
-				<ellipse
-					rx={radial.radiusXPx * core}
-					ry={radial.radiusYPx * core}
-					fill="none"
-					stroke="white"
-					stroke-opacity="0.7"
-					stroke-width={gripped('feather') ? 2 * innerStroke : innerStroke}
-					stroke-dasharray={dashPattern}
-				/>
+				{@render ellipsePair(
+					radial.radiusXPx * core,
+					radial.radiusYPx * core,
+					dashPattern,
+					gripped('feather'),
+					'0.7'
+				)}
 			{/if}
 		</g>
 		{@render guideLine(

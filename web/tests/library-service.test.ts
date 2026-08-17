@@ -128,7 +128,7 @@ class MemoryAssetStore {
 	}
 }
 
-test('round-trips versioned edit documents and rejects earlier schema formats', async () => {
+test('round-trips versioned edit documents through the asset store', async () => {
 	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
 	const assets = new MemoryAssetStore();
 	const service = new LibraryService(catalog, assets as unknown as AssetStore);

@@ -46,6 +46,23 @@
 
 	const active = $derived(workspace.editingPhoto);
 	const imageSize = $derived(viewport.image);
+	const surfaceStyle = $derived(
+		`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`
+	);
+	const cursorClass = $derived(
+		viewport.gizmoCursor ??
+			(viewport.panning
+				? 'cursor-grabbing'
+				: activeTool === 'hand' || viewport.spaceHeld
+					? 'cursor-grab'
+					: activeTool === 'zoom'
+						? 'cursor-zoom-in'
+						: (activeTool === 'mask-refine' || activeTool === 'mask') && viewport.brushPoint
+							? 'cursor-none'
+							: activeTool === 'object-select' || activeTool.startsWith('mask')
+								? 'cursor-crosshair'
+								: 'cursor-default')
+	);
 
 	type ViewportMenuAction = 'undo' | 'redo' | 'export';
 	const viewportMenu: MenuEntry<ViewportMenuAction>[] = $derived([
@@ -75,18 +92,7 @@
 			bind:this={viewport.element}
 			role="application"
 			aria-label="Photo viewport"
-			class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {viewport.gizmoCursor ??
-				(viewport.panning
-					? 'cursor-grabbing'
-					: activeTool === 'hand' || viewport.spaceHeld
-						? 'cursor-grab'
-						: activeTool === 'zoom'
-							? 'cursor-zoom-in'
-							: (activeTool === 'mask-refine' || activeTool === 'mask') && viewport.brushPoint
-								? 'cursor-none'
-								: activeTool === 'object-select' || activeTool.startsWith('mask')
-									? 'cursor-crosshair'
-									: 'cursor-default')}"
+			class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {cursorClass}"
 			onwheel={viewport.handleWheel}
 			onpointerdown={viewport.handlePointerDown}
 			onpointermove={viewport.handlePointerMove}
@@ -104,7 +110,7 @@
 					<div
 						class:viewport-pixelated={viewport.pixelGridStrength > 0}
 						class="motion-viewport-photo absolute top-0 left-0 z-0 overflow-hidden bg-black shadow-2xl will-change-transform"
-						style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`}
+						style={surfaceStyle}
 					>
 						<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
 						{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
@@ -142,7 +148,7 @@
 						<div
 							class="motion-viewport-photo pointer-events-none absolute top-0 left-0 z-[15] overflow-hidden will-change-transform"
 							class:bg-black={workspace.developPreview.src !== null}
-							style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`}
+							style={surfaceStyle}
 						>
 							{#if workspace.developPreview.src}
 								<img
@@ -159,7 +165,7 @@
 					{/if}
 					<div
 						class="pointer-events-none absolute top-0 left-0 z-20 overflow-hidden will-change-transform"
-						style={`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`}
+						style={surfaceStyle}
 					>
 						{#if viewport.pixelGridStrength > 0}
 							<div
