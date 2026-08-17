@@ -4,6 +4,10 @@ pub fn luminance([red, green, blue]: [f32; 3]) -> f32 {
     LUMINANCE_WEIGHTS[0] * red + LUMINANCE_WEIGHTS[1] * green + LUMINANCE_WEIGHTS[2] * blue
 }
 
+pub fn brightest(linear: [f32; 3]) -> f32 {
+    linear.into_iter().fold(0.0f32, f32::max)
+}
+
 pub fn chroma_fraction(linear: [f32; 3]) -> f32 {
     let (maximum, minimum) = extremes(linear);
     if maximum <= 0.0 {
@@ -139,9 +143,10 @@ mod tests {
     #[test]
     fn hues_round_trip_through_their_saturated_color() {
         for degrees in (0..360).step_by(7) {
-            let color = from_hue(degrees as f32, 1.0, 1.0);
+            let color = from_hue(degrees as f32, 1.0, 0.5);
             assert!((hue_degrees(color) - degrees as f32).abs() < 1e-3);
             assert_eq!(chroma_fraction(color), 1.0);
+            assert_eq!(brightest(color), 0.5);
         }
     }
 }

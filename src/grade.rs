@@ -76,16 +76,15 @@ impl ColorTransform {
         if self.settings == ColorSettings::NEUTRAL {
             return pixel;
         }
-        let linear = pixel.map(srgb_to_linear);
-        let balanced = [
-            linear[0] * self.balance[0],
-            linear[1] * self.balance[1],
-            linear[2] * self.balance[2],
-        ];
-        self.scale_chroma(balanced).map(linear_to_srgb)
+        self.scale_chroma(self.balanced(pixel.map(srgb_to_linear)))
+            .map(linear_to_srgb)
     }
 
-    fn scale_chroma(&self, linear: [f32; 3]) -> [f32; 3] {
+    pub(crate) fn balanced(&self, linear: [f32; 3]) -> [f32; 3] {
+        std::array::from_fn(|channel| linear[channel] * self.balance[channel])
+    }
+
+    pub(crate) fn scale_chroma(&self, linear: [f32; 3]) -> [f32; 3] {
         let scale = self.chroma_scale(linear);
         if scale == 1.0 {
             return linear;

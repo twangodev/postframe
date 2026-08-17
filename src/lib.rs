@@ -30,7 +30,8 @@ pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
 pub use develop::{
     CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
-    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings,
+    EffectsSettings, GradingRange, GradingSettings, GradingTransform, GradingWheel, MixerBand,
+    MixerLuts, MixerSettings,
 };
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
