@@ -1,12 +1,6 @@
-import { extendedStroke, rotationLabel } from './drag-constraints.ts';
+import { extendedStroke } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
-import {
-	GIZMO_DRAG_THRESHOLD_PX,
-	GIZMO_HIT_TOLERANCE_PX,
-	GIZMO_ROTATE_OFFSET_PX,
-	type GizmoHit
-} from './mask-gizmo.ts';
-import { hitTestGizmo, reduceGizmoDrag, seedGizmoComponent } from './mask-gizmo-drag.ts';
+import { GizmoSession } from './gizmo-session.svelte.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
@@ -32,7 +26,6 @@ import type { LivePaint } from './components/MaskPaintPreview.svelte';
 export const MASK_BRUSH_FEATHER = 0.45;
 export const MASK_BRUSH_FLOW = 1;
 
-const rotationalHandles = new Set(['positive', 'negative', 'span', 'rotate']);
 const STROKE_MIN_SPACING = 0.003;
 
 export interface ViewportContext {
@@ -73,24 +66,24 @@ export class ViewportInteraction {
 		radius: number;
 	} | null>(null);
 	maskStroke = $state<{ pointerId: number; points: NormalizedPoint[] } | null>(null);
-	gizmoDrag = $state<{
-		pointerId: number;
-		start: GradientComponent;
-		grip: GizmoHit;
-		origin: Point;
-		originScreen: Point;
-		screen: Point;
-		component: GradientComponent;
-		moved: boolean;
-		snapped: boolean;
-	} | null>(null);
-	gizmoHover = $state<GizmoHit | null>(null);
-	settlingPaint = $state<LivePaint | null>(null);
 	brushPoint = $state<NormalizedPoint | null>(null);
 
 	private drag: { pointerId: number; origin: Point; transform: ViewportTransform } | null = null;
 	private pinch: { origin: Point; distance: number; transform: ViewportTransform } | null = null;
 	private readonly pointers = new Map<number, Point>();
+
+	private readonly gizmos = new GizmoSession({
+		image: () => this.image,
+		scale: () => this.transform.scale,
+		enabled: () => this.context.enabled(),
+		tool: () => this.context.tool(),
+		selectedMask: () => this.context.selectedMask(),
+		spaceHeld: () => this.spaceHeld,
+		imagePixel: (point) => this.imagePixel(point),
+		capturePointer: (pointerId) => this.capturePointer(pointerId),
+		adoptPointer: (pointerId, screen) => void this.pointers.set(pointerId, screen),
+		placeGradientComponent: (component) => this.context.placeGradientComponent(component)
+	});
 
 	constructor(context: ViewportContext) {
 		this.context = context;
@@ -98,6 +91,30 @@ export class ViewportInteraction {
 
 	get image() {
 		return this.context.image();
+	}
+
+	get gizmoDrag() {
+		return this.gizmos.drag;
+	}
+
+	get gizmoHover() {
+		return this.gizmos.hover;
+	}
+
+	get settlingPaint() {
+		return this.gizmos.settling;
+	}
+
+	get gizmoCursor() {
+		return this.gizmos.cursor;
+	}
+
+	get gizmoComponent() {
+		return this.gizmos.component;
+	}
+
+	get gizmoAngle() {
+		return this.gizmos.angle;
 	}
 
 	imageOffset = $derived(surfaceTransform(this.size, this.image, this.transform));
@@ -112,41 +129,8 @@ export class ViewportInteraction {
 	);
 	maskBrushSize = $derived(Math.min(1, this.refineBrushRadius * 2));
 
-	private gizmoTolerance = $derived(GIZMO_HIT_TOLERANCE_PX / this.transform.scale);
-	private gizmoRotateOffset = $derived(GIZMO_ROTATE_OFFSET_PX / this.transform.scale);
-
-	gizmoCursor = $derived.by(() => {
-		if (this.gizmoDrag) return 'cursor-grabbing';
-		if (!this.gizmoHover) return null;
-		return this.gizmoHover.kind === 'body' ? 'cursor-move' : 'cursor-grab';
-	});
-
-	private selectedGradientComponent = $derived.by(() => {
-		const mask = this.context.selectedMask();
-		if (!mask?.visible || (mask.kind !== 'linear' && mask.kind !== 'radial')) return null;
-		return (
-			mask.components.find(
-				(component): component is GradientComponent => component.type === mask.kind
-			) ?? null
-		);
-	});
-
-	gizmoComponent = $derived.by((): GradientComponent | null => {
-		if (!this.context.enabled()) return null;
-		if (this.gizmoDrag?.moved) return this.gizmoDrag.component;
-		return this.selectedGradientComponent;
-	});
-
-	gizmoAngle = $derived.by(() => {
-		const drag = this.gizmoDrag;
-		if (!drag?.moved || drag.grip.kind !== 'handle') return null;
-		if (!rotationalHandles.has(drag.grip.handle)) return null;
-		return { label: rotationLabel(drag.component.rotation, drag.snapped), locked: drag.snapped };
-	});
-
 	livePaint: LivePaint | null = $derived.by(() => {
-		const component = this.gizmoDrag?.moved ? this.gizmoDrag.component : null;
-		if (component) return this.livePaintFor(component);
+		if (this.gizmos.livePaint) return this.gizmos.livePaint;
 		return this.maskStroke &&
 			this.context.tool() === 'mask' &&
 			this.context.maskBrushOperation() === 'add'
@@ -159,24 +143,6 @@ export class ViewportInteraction {
 				}
 			: null;
 	});
-
-	private livePaintFor(component: GradientComponent): LivePaint {
-		return component.type === 'linear'
-			? {
-					kind: 'linear',
-					anchor: component.anchor,
-					rotation: component.rotation,
-					compression: component.compression
-				}
-			: {
-					kind: 'radial',
-					center: component.center,
-					radiusX: component.radiusX,
-					radiusY: component.radiusY,
-					rotation: component.rotation,
-					feather: component.feather
-				};
-	}
 
 	resize = (next: Size) => {
 		this.size = next;
@@ -242,8 +208,8 @@ export class ViewportInteraction {
 
 	handlePointerDown = (event: PointerEvent) => {
 		if (!this.context.enabled() || !this.element) return;
-		if (this.tryBeginGizmoDrag(event)) return;
 		const point = this.pointFor(event);
+		if (this.gizmos.tryBegin(event, point)) return;
 		const tool = this.context.tool();
 
 		if (event.pointerType === 'touch') {
@@ -308,104 +274,22 @@ export class ViewportInteraction {
 		}
 	};
 
-	private tryBeginGizmoDrag(event: PointerEvent) {
-		if (event.button !== 0) return false;
-		const active = this.gizmoDrag;
-		if (active && active.pointerId !== event.pointerId) {
-			if (event.pointerType !== 'touch') return true; // one gesture at a time; swallow extra pointers
-			this.gizmoDrag = null;
-			this.pointers.set(active.pointerId, active.screen);
-			return false;
-		}
-		if (active) this.gizmoDrag = null;
-		if (this.spaceHeld) return false;
-		const point = this.pointFor(event);
-		const imagePoint = this.imagePixel(point);
-		const existing = this.selectedGradientComponent;
-		const grabbed = existing
-			? hitTestGizmo(existing, imagePoint, this.image, this.gizmoTolerance, this.gizmoRotateOffset)
-			: null;
-		const session = grabbed
-			? { component: existing!, grip: grabbed }
-			: this.seedComponent(imagePoint);
-		if (!session) return false;
-		if (!this.capturePointer(event.pointerId)) return false;
-		event.preventDefault();
-		this.gizmoDrag = {
-			pointerId: event.pointerId,
-			start: session.component,
-			grip: session.grip,
-			origin: imagePoint,
-			originScreen: point,
-			screen: point,
-			component: session.component,
-			moved: false,
-			snapped: false
-		};
-		this.gizmoHover = session.grip;
-		return true;
-	}
-
-	private seedComponent(imagePoint: Point) {
-		const tool = this.context.tool();
-		const kind = tool === 'mask-linear' ? 'linear' : tool === 'mask-radial' ? 'radial' : null;
-		const mask = this.context.selectedMask();
-		if (!kind || !mask) return null;
-		return seedGizmoComponent(kind, mask, imagePoint, this.image);
-	}
-
 	handlePointerMove = (event: PointerEvent) => {
-		if (this.gizmoDrag?.pointerId === event.pointerId) {
-			event.preventDefault();
-			const drag = this.gizmoDrag;
-			const point = this.pointFor(event);
-			if (
-				!drag.moved &&
-				Math.hypot(point.x - drag.originScreen.x, point.y - drag.originScreen.y) <
-					GIZMO_DRAG_THRESHOLD_PX
-			) {
-				return;
-			}
-			const imagePoint = this.imagePixel(point);
-			const modifiers = { shift: event.shiftKey };
-			this.gizmoDrag = {
-				...drag,
-				moved: true,
-				screen: point,
-				component: reduceGizmoDrag(
-					drag.start,
-					drag.grip,
-					drag.origin,
-					imagePoint,
-					this.image,
-					modifiers
-				),
-				snapped: modifiers.shift
-			};
-			return;
-		}
 		const point = this.pointFor(event);
+		if (this.gizmos.move(event, point)) return;
 		const tool = this.context.tool();
 		this.brushPoint =
 			(tool === 'mask-refine' || tool === 'mask') && event.pointerType !== 'touch'
 				? this.normalizedImagePoint(point)
 				: null;
-		this.gizmoHover =
-			!this.gizmoDrag &&
+		this.gizmos.updateHover(
+			point,
 			!this.panning &&
-			!this.objectStroke &&
-			!this.edgeRefinementStroke &&
-			!this.maskStroke &&
-			event.pointerType !== 'touch' &&
-			this.selectedGradientComponent
-				? hitTestGizmo(
-						this.selectedGradientComponent,
-						this.imagePixel(point),
-						this.image,
-						this.gizmoTolerance,
-						this.gizmoRotateOffset
-					)
-				: null;
+				!this.objectStroke &&
+				!this.edgeRefinementStroke &&
+				!this.maskStroke &&
+				event.pointerType !== 'touch'
+		);
 		if (this.objectStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
 			const extended = extendedStroke(
@@ -469,7 +353,7 @@ export class ViewportInteraction {
 
 	handlePointerLeave = () => {
 		this.brushPoint = null;
-		this.gizmoHover = null;
+		this.gizmos.clearHover();
 	};
 
 	handlePointerUp = (event: PointerEvent) => {
@@ -503,19 +387,7 @@ export class ViewportInteraction {
 			}
 			return;
 		}
-		if (this.gizmoDrag?.pointerId === event.pointerId) {
-			const completed = this.gizmoDrag;
-			this.gizmoDrag = null;
-			if (event.type === 'pointerup' && completed.moved) {
-				this.settlingPaint = this.livePaintFor(completed.component);
-				void this.context
-					.placeGradientComponent(completed.component)
-					.finally(() =>
-						requestAnimationFrame(() => requestAnimationFrame(() => (this.settlingPaint = null)))
-					);
-			}
-			return;
-		}
+		if (this.gizmos.finish(event)) return;
 		const wasPinching = this.pinch !== null;
 		this.pointers.delete(event.pointerId);
 		if (this.drag?.pointerId === event.pointerId) this.drag = null;
@@ -545,9 +417,8 @@ export class ViewportInteraction {
 
 	handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.context.enabled() || editableTarget(event.target)) return;
-		if (event.key === 'Escape' && this.gizmoDrag) {
+		if (event.key === 'Escape' && this.gizmos.cancel()) {
 			event.preventDefault();
-			this.gizmoDrag = null;
 			return;
 		}
 		if (event.code === 'Space') {
