@@ -70,12 +70,19 @@ export function closeDocument() {
 
 export async function openRawDocument(message: Extract<Request, { type: 'open-raw' }>) {
 	closeDocument();
-	const session = new wasm.Session();
+	let session = new wasm.Session();
 
 	try {
-		if (await restoreRawCache(session, message)) {
+		const restore = await restoreRawCache(session, message);
+		if (restore === 'restored') {
 			await publishRawDocument(message, session);
 			return;
+		}
+		if (restore === 'failed') {
+			// A panic inside Rust leaves the session unusable, so decode into a
+			// fresh one rather than carrying the damage into every later call.
+			freeQuietly('unreadable render cache', session);
+			session = new wasm.Session();
 		}
 		const sizes = await Promise.all(
 			message.frames.map(async (frame) => ({
@@ -145,12 +152,14 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 	}
 }
 
+type CacheRestore = 'restored' | 'absent' | 'failed';
+
 async function restoreRawCache(
 	session: WasmSession,
 	message: Extract<Request, { type: 'open-raw' }>
-) {
+): Promise<CacheRestore> {
 	const file = await message.cache.getFile();
-	if (file.size === 0) return false;
+	if (file.size === 0) return 'absent';
 	post({
 		id: message.id,
 		type: 'progress',
@@ -168,10 +177,11 @@ async function restoreRawCache(
 		measure('cache-restore', () =>
 			session.restore_cache(new Uint8Array(bytes), message.maxDimension)
 		);
-		return true;
-	} catch {
+		return 'restored';
+	} catch (error) {
+		reportError('discarding a render cache this build cannot read', error);
 		await writeFileHandle(message.cache, new Uint8Array());
-		return false;
+		return 'failed';
 	}
 }
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LibraryCatalog } from '../src/lib/library-catalog.ts';
+import { renderCacheStorageName } from '../src/lib/render-cache.ts';
 import type { LibraryManifest } from '../src/lib/library-schema.ts';
 
 function manifest(): LibraryManifest {
@@ -199,7 +200,7 @@ test('queues asset deletion with the photo catalog transaction', async () => {
 				{ kind: 'original', storageName: 'asset-one.dng' },
 				{ kind: 'thumbnail', storageName: 'photo-one.jpg' },
 				{ kind: 'edit', storageName: 'photo-one.json' },
-				{ kind: 'derived', storageName: 'render-2026-08-13-photo-one.pfc' }
+				{ kind: 'derived', storageName: renderCacheStorageName('photo-one') }
 			]
 		);
 		assert.equal((await catalog.loadLibrary())?.photos.length, 0);
