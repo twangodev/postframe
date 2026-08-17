@@ -1,4 +1,3 @@
-import type { DevelopSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import {
 	cropRegion,
@@ -56,7 +55,10 @@ function developExportImage(
 	request: Extract<Request, { type: 'export' }>,
 	onProgress: (completed: number, total: number) => void
 ) {
-	const light = active.kind === 'display' ? displayTransform(active, request.adjustments) : null;
+	const light =
+		active.kind === 'display'
+			? displayTransform(active, request.adjustments, request.geometry.crop)
+			: null;
 	const compositors = createMaskCompositors(request.masks);
 	try {
 		const rgba = new Uint8Array(width * height * 4);
@@ -65,8 +67,8 @@ function developExportImage(
 		for (const [index, region] of tiles.entries()) {
 			let tile =
 				active.kind === 'raw'
-					? developRawExportTile(active.session, request.adjustments, region)
-					: developDisplayExportTile(active.bitmap, light!, region);
+					? developRawExportTile(active.session, request, region)
+					: developDisplayExportTile(active.bitmap, light!, region, { width, height });
 			for (const mask of compositors) {
 				tile = mask.compositor.composite_rgba(
 					tile,
@@ -91,7 +93,7 @@ function developExportImage(
 
 function developRawExportTile(
 	session: WasmSession,
-	adjustments: DevelopSettings,
+	request: Extract<Request, { type: 'export' }>,
 	region: ExportRegion
 ) {
 	const tile = session.render_tile(
@@ -100,7 +102,8 @@ function developRawExportTile(
 		region.width,
 		region.height,
 		1,
-		adjustments,
+		request.adjustments,
+		request.geometry.crop,
 		true
 	);
 	try {
@@ -113,7 +116,8 @@ function developRawExportTile(
 function developDisplayExportTile(
 	bitmap: ImageBitmap,
 	light: WasmDisplayTransform,
-	region: ExportRegion
+	region: ExportRegion,
+	image: { width: number; height: number }
 ) {
 	const context = canvasContext(region.width, region.height);
 	context.drawImage(
@@ -128,7 +132,14 @@ function developDisplayExportTile(
 		region.height
 	);
 	const pixels = context.getImageData(0, 0, region.width, region.height);
-	return light.apply_rgba(new Uint8Array(pixels.data.buffer));
+	return light.apply_tile_rgba(new Uint8Array(pixels.data.buffer), region.width, region.height, {
+		imageWidth: image.width,
+		imageHeight: image.height,
+		x: region.x,
+		y: region.y,
+		width: region.width,
+		height: region.height
+	});
 }
 
 function blitExportTile(

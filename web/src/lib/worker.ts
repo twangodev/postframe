@@ -91,6 +91,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				const preview = await renderPreviewImage(
 					activeDocument(),
 					message.adjustments,
+					message.crop,
 					message.tone
 				);
 				post(
@@ -108,6 +109,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				const scope = renderScope(
 					activeDocument(),
 					message.adjustments,
+					message.crop,
 					message.tone,
 					message.sampleTarget
 				);

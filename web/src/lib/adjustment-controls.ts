@@ -1,13 +1,17 @@
 import {
 	withAdjustment,
+	withCurve,
 	type AdjustmentRecord,
 	type ColorControlName,
+	type CurveChannelName,
+	type CurvePoints,
+	type CurveSettings,
 	type LightControlName,
 	type ScalarControlName,
 	type ScalarGroupName
 } from './develop-settings';
 import { cloneEditDocument, cloneEditMask, type EditMask } from './edit-document';
-import { adjustmentCommand, type EditorCommand } from './editor-command';
+import { adjustmentCommand, curveCommand, type EditorCommand } from './editor-command';
 import type { DevelopPreviewController } from './develop-preview';
 import type { MaskEdgeControlName } from './mask-edge-settings';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
@@ -18,6 +22,7 @@ export interface AdjustmentControlsHost {
 	readonly canAdjustLight: boolean;
 	readonly selectedMaskId: string | null;
 	readonly adjustments: AdjustmentRecord;
+	readonly curve: CurveSettings;
 	masks: EditMask[];
 	dispatchEditorCommand(command: EditorCommand): boolean;
 }
@@ -36,8 +41,10 @@ export class AdjustmentControls {
 	) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		Object.assign(this.host.adjustments, { [control]: value });
+		const edit = this.host.selectedPhoto.edit;
 		this.develop.schedule(
-			withAdjustment(this.host.selectedPhoto.edit.adjustments, group, control, value)
+			withAdjustment(edit.adjustments, group, control, value),
+			edit.geometry.crop
 		);
 	}
 
@@ -48,6 +55,21 @@ export class AdjustmentControls {
 	) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		if (!this.host.dispatchEditorCommand(adjustmentCommand(group, control, value))) {
+			this.releaseUnchangedPreview();
+		}
+	}
+
+	previewCurve(channel: CurveChannelName, points: CurvePoints) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		const edit = this.host.selectedPhoto.edit;
+		const adjustments = withCurve(edit.adjustments, channel, points);
+		this.host.curve[channel] = adjustments.curve[channel];
+		this.develop.schedule(adjustments, edit.geometry.crop);
+	}
+
+	commitCurve(channel: CurveChannelName, points: CurvePoints) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		if (!this.host.dispatchEditorCommand(curveCommand(channel, points))) {
 			this.releaseUnchangedPreview();
 		}
 	}
@@ -70,8 +92,8 @@ export class AdjustmentControls {
 
 	private releaseUnchangedPreview() {
 		this.develop.release();
-		const adjustments = this.host.selectedPhoto?.edit.adjustments;
-		if (adjustments) this.develop.refreshScope(adjustments);
+		const edit = this.host.selectedPhoto?.edit;
+		if (edit) this.develop.refreshScope(edit.adjustments, edit.geometry.crop);
 	}
 
 	previewMaskLight(control: LightControlName, value: number) {

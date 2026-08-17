@@ -219,6 +219,91 @@ test('renders and persists every color control for a display photo', async ({ pa
 	await expect.poll(() => tileFailures).toEqual([]);
 });
 
+test('renders and persists the vignette and grain for a display photo', async ({ page }) => {
+	const tileFailures: string[] = [];
+	page.on('console', (message) => {
+		if (/tile .*failed|could not be cloned/i.test(message.text()))
+			tileFailures.push(message.text());
+	});
+	await page.goto('/');
+	const dataUrl = await page.evaluate(() => {
+		const canvas = document.createElement('canvas');
+		canvas.width = 64;
+		canvas.height = 48;
+		const context = canvas.getContext('2d')!;
+		context.fillStyle = '#7f7f7f';
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		return canvas.toDataURL('image/png');
+	});
+	await page
+		.locator('main input[type="file"]')
+		.first()
+		.setInputFiles({
+			name: 'vignette.png',
+			mimeType: 'image/png',
+			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
+		});
+	await page.getByRole('tab', { name: 'edit', exact: true }).click();
+	await expect(page.getByRole('textbox', { name: 'Exposure value' })).toBeEnabled({
+		timeout: 20_000
+	});
+	await page.getByRole('radio', { name: 'Histogram scope' }).click();
+	await expect(page.locator('.lc-path')).toHaveCount(4);
+	const histogramSignature = () =>
+		page
+			.locator('.lc-path')
+			.evaluateAll((paths) => paths.map((path) => path.getAttribute('d')).join('|'));
+
+	await page.getByRole('button', { name: 'Effects', exact: true }).click();
+	// Grain size only clumps pixels of a full-resolution photograph, so it
+	// cannot be expected to move the histogram of a thumbnail this small.
+	const grainSize = page.getByRole('textbox', { name: 'Grain size value' });
+	await grainSize.fill('40');
+	await grainSize.press('Enter');
+	await expect(grainSize).toHaveValue('40');
+
+	const edits = [
+		['Vignette', '-60', '-60'],
+		['Midpoint', '35', '35'],
+		['Roundness', '80', '+80'],
+		['Feather', '70', '70'],
+		['Grain', '55', '55']
+	] as const;
+	for (const [label, draft, formatted] of edits) {
+		const before = await histogramSignature();
+		const value = page.getByRole('textbox', { name: `${label} value` });
+		await value.fill(draft);
+		await value.press('Enter');
+		await expect(value).toHaveValue(formatted);
+		await expect.poll(histogramSignature).not.toBe(before);
+	}
+	await expect(page.getByText(/refining tiles|applying light/)).toHaveCount(0, {
+		timeout: 20_000
+	});
+	await expect(page.locator('[data-photo-pyramid] canvas')).toBeVisible();
+
+	await expect
+		.poll(() => storedEdit(page))
+		.toMatchObject({
+			version: EDIT_DOCUMENT_VERSION,
+			adjustments: {
+				effects: {
+					vignetteAmount: -60,
+					vignetteMidpoint: 35,
+					vignetteRoundness: 80,
+					vignetteFeather: 70,
+					grainAmount: 55,
+					grainSize: 40
+				}
+			},
+			geometry: { crop: null }
+		});
+
+	await page.getByRole('slider', { name: 'Midpoint' }).dblclick();
+	await expect(page.getByRole('textbox', { name: 'Midpoint value' })).toHaveValue('50');
+	await expect.poll(() => tileFailures).toEqual([]);
+});
+
 test('renders and persists every detail control for a display photo', async ({ page }) => {
 	const tileFailures: string[] = [];
 	page.on('console', (message) => {

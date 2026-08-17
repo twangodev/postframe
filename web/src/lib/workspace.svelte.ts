@@ -12,9 +12,13 @@ import type { RenderTileRequest } from './worker';
 import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
+	defaultCurveSettings,
 	defaultDevelopSettings,
 	scalarAdjustments,
+	type DevelopSettings,
 	type ColorControlName,
+	type CurveChannelName,
+	type CurvePoints,
 	type LightControlName,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -26,6 +30,7 @@ import {
 	type EditMask,
 	type MaskKind,
 	type MaskOperation,
+	type NormalizedCrop,
 	type NormalizedPoint
 } from './edit-document';
 import type { MaskBrushStroke } from './mask-rasterizer';
@@ -128,7 +133,12 @@ export class WorkspaceState {
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
-	renderSettings = $state({ adjustments: defaultDevelopSettings(), revision: 0 });
+	curve = $state(defaultCurveSettings());
+	renderSettings = $state<{
+		adjustments: DevelopSettings;
+		crop: NormalizedCrop | null;
+		revision: number;
+	}>({ adjustments: defaultDevelopSettings(), crop: null, revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);
@@ -200,6 +210,7 @@ export class WorkspaceState {
 				'selectedPhoto',
 				'canAdjustLight',
 				'adjustments',
+				'curve',
 				'masks',
 				'selectedMaskId',
 				'documentStatus',
@@ -388,6 +399,12 @@ export class WorkspaceState {
 		control: ScalarControlName<Group>,
 		value: number
 	) => this.controls.commitAdjustment(group, control, value);
+
+	previewCurve = (channel: CurveChannelName, points: CurvePoints) =>
+		this.controls.previewCurve(channel, points);
+
+	commitCurve = (channel: CurveChannelName, points: CurvePoints) =>
+		this.controls.commitCurve(channel, points);
 
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);

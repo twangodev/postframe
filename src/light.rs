@@ -94,6 +94,16 @@ impl LightTransform {
         self.luminance.as_slice()
     }
 
+    /// The same response with its luminance table rewritten, so a tone curve
+    /// composes into the table every render path already samples.
+    pub(crate) fn remapping_luminance(mut self, remap: impl Fn(f32) -> f32) -> Self {
+        for sample in self.luminance.iter_mut() {
+            *sample = remap(*sample);
+        }
+        self.identity_tone = false;
+        self
+    }
+
     pub fn apply_display_rgb8(&self, rgb8: &[u8]) -> Result<Vec<u8>> {
         if !rgb8.len().is_multiple_of(3) {
             return Err(Error::Unsupported("RGB buffer size mismatch"));
@@ -126,7 +136,7 @@ impl LightTransform {
     }
 
     pub(crate) fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        if self.settings == LightSettings::NEUTRAL {
+        if self.identity_tone && self.settings.exposure == 0.0 {
             return pixel;
         }
         let gain = 2.0f32.powf(self.settings.exposure);
@@ -283,11 +293,11 @@ fn logistic(value: f64) -> f64 {
 }
 
 pub(crate) fn srgb_to_linear(channel: u8) -> f32 {
-    SRGB_TO_LINEAR.get_or_init(|| std::array::from_fn(decode_srgb))[channel as usize]
+    SRGB_TO_LINEAR.get_or_init(|| std::array::from_fn(|index| decode_srgb(index as f32 / 255.0)))
+        [channel as usize]
 }
 
-fn decode_srgb(index: usize) -> f32 {
-    let encoded = index as f32 / 255.0;
+pub(crate) fn decode_srgb(encoded: f32) -> f32 {
     if encoded <= 0.04045 {
         encoded / 12.92
     } else {
@@ -297,16 +307,19 @@ fn decode_srgb(index: usize) -> f32 {
 
 pub(crate) fn linear_to_srgb(channel: f32) -> u8 {
     let position = channel.clamp(0.0, 1.0) * (CURVE_SAMPLES - 1) as f32;
-    LINEAR_TO_SRGB.get_or_init(|| std::array::from_fn(encode_linear))[position.round() as usize]
+    LINEAR_TO_SRGB.get_or_init(|| std::array::from_fn(quantize_linear))[position.round() as usize]
 }
 
-fn encode_linear(index: usize) -> u8 {
-    let linear = index as f32 / (CURVE_SAMPLES - 1) as f32;
-    let encoded = if linear <= 0.003_130_8 {
+pub(crate) fn encode_srgb(linear: f32) -> f32 {
+    if linear <= 0.003_130_8 {
         12.92 * linear
     } else {
         1.055 * linear.powf(1.0 / 2.4) - 0.055
-    };
+    }
+}
+
+fn quantize_linear(index: usize) -> u8 {
+    let encoded = encode_srgb(index as f32 / (CURVE_SAMPLES - 1) as f32);
     (encoded * 255.0).round().clamp(0.0, 255.0) as u8
 }
 

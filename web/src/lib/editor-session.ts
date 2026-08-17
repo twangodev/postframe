@@ -1,16 +1,20 @@
 import {
+	cloneCurveSettings,
 	cloneDevelopSettings,
 	defaultDevelopSettings,
 	sameDevelopSettings,
 	scalarAdjustments,
 	type AdjustmentRecord,
+	type CurveSettings,
 	type DevelopSettings
 } from './develop-settings';
 import {
+	cloneCrop,
 	cloneEditDocument,
 	cloneEditMask,
 	type EditDocument,
-	type EditMask
+	type EditMask,
+	type NormalizedCrop
 } from './edit-document';
 import { applyEditorCommand, type EditorCommand, type EditorInvalidation } from './editor-command';
 import { EditorHistory } from './editor-history';
@@ -29,7 +33,8 @@ export interface EditorSessionHost {
 	imageScope: ImageScopeData | null;
 	smartMaskStatus: SmartMaskStatus;
 	adjustments: AdjustmentRecord;
-	renderSettings: { adjustments: DevelopSettings; revision: number };
+	curve: CurveSettings;
+	renderSettings: { adjustments: DevelopSettings; crop: NormalizedCrop | null; revision: number };
 	history: string[];
 	canUndo: boolean;
 	canRedo: boolean;
@@ -86,8 +91,10 @@ export class EditorSession {
 		this.host.selectedMaskRaster = null;
 		this.host.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
 		this.host.adjustments = scalarAdjustments(adjustments);
+		this.host.curve = cloneCurveSettings(adjustments.curve);
 		this.host.renderSettings = {
 			adjustments: cloneDevelopSettings(adjustments),
+			crop: cloneCrop(document?.geometry.crop ?? null),
 			revision: this.host.renderSettings.revision + 1
 		};
 		this.syncHistory();
@@ -109,9 +116,12 @@ export class EditorSession {
 			this.host.selectedMaskId = this.host.masks.at(-1)?.id ?? null;
 		}
 		Object.assign(this.host.adjustments, scalarAdjustments(next.adjustments));
+		Object.assign(this.host.curve, cloneCurveSettings(next.adjustments.curve));
 
 		if (invalidation === 'render') {
-			if (globalAdjustmentsChanged) this.develop.request(next.adjustments, 'refining');
+			if (globalAdjustmentsChanged) {
+				this.develop.request(next.adjustments, next.geometry.crop, 'refining');
+			}
 			this.pipeline.renderEditDocument(next);
 		}
 		void this.pipeline.refreshSelectedMaskRaster();

@@ -1,3 +1,4 @@
+use crate::develop::PixelContext;
 use crate::{ColorSettings, DevelopSettings, DevelopTransform, Error, LightSettings, Result};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,6 +46,8 @@ impl MaskPlane {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct DevelopedTileRegion {
     pub image_width: usize,
     pub image_height: usize,
@@ -55,6 +58,25 @@ pub struct DevelopedTileRegion {
 }
 
 impl DevelopedTileRegion {
+    /// Where one output pixel of a tile covering this region sits in the whole
+    /// image — the single convention every position-aware stage reads.
+    pub fn pixel_context(self, output: (usize, usize), tile: (usize, usize)) -> PixelContext {
+        let (x, y) = self.image_position(output, tile);
+        PixelContext {
+            x: x as usize,
+            y: y as usize,
+            image_width: self.image_width,
+            image_height: self.image_height,
+        }
+    }
+
+    fn image_position(self, output: (usize, usize), tile: (usize, usize)) -> (f32, f32) {
+        (
+            self.x as f32 + (output.0 as f32 + 0.5) * self.width as f32 / tile.0.max(1) as f32,
+            self.y as f32 + (output.1 as f32 + 0.5) * self.height as f32 / tile.1.max(1) as f32,
+        )
+    }
+
     fn validate(self, tile_width: usize, tile_height: usize) -> Result<Self> {
         let valid_region = self.image_width > 0
             && self.image_height > 0
@@ -115,11 +137,9 @@ impl DevelopedTileCompositor {
         let mut composited = rgba.to_vec();
         for adjustment in adjustments {
             for output_y in 0..tile_height {
-                let image_y = region.y as f32
-                    + (output_y as f32 + 0.5) * region.height as f32 / tile_height as f32;
                 for output_x in 0..tile_width {
-                    let image_x = region.x as f32
-                        + (output_x as f32 + 0.5) * region.width as f32 / tile_width as f32;
+                    let (image_x, image_y) =
+                        region.image_position((output_x, output_y), (tile_width, tile_height));
                     let alpha = adjustment.mask.sample(
                         image_x / region.image_width as f32,
                         image_y / region.image_height as f32,
@@ -291,6 +311,59 @@ mod tests {
             .apply_display_rgba8(&rgba)
             .unwrap();
         assert_eq!(masked, light_only);
+    }
+
+    #[test]
+    fn masks_ignore_where_in_the_image_their_tile_sits() {
+        let rgba = [96, 96, 96, 255, 32, 200, 128, 137];
+        let adjustment = LocalAdjustment::new(
+            MaskPlane::new(1, 1, vec![255]).unwrap(),
+            LightSettings {
+                exposure: 0.5,
+                ..LightSettings::NEUTRAL
+            },
+            ColorSettings {
+                saturation: -40.0,
+                ..ColorSettings::NEUTRAL
+            },
+        )
+        .unwrap();
+        let composited = |x: usize, y: usize| {
+            DevelopedTileCompositor
+                .composite(
+                    &rgba,
+                    2,
+                    1,
+                    DevelopedTileRegion {
+                        image_width: 512,
+                        image_height: 512,
+                        x,
+                        y,
+                        width: 2,
+                        height: 1,
+                    },
+                    std::slice::from_ref(&adjustment),
+                )
+                .unwrap()
+        };
+        assert_eq!(composited(0, 0), composited(500, 500));
+    }
+
+    #[test]
+    fn every_output_pixel_reports_its_absolute_image_position() {
+        let region = DevelopedTileRegion {
+            image_width: 64,
+            image_height: 32,
+            x: 16,
+            y: 8,
+            width: 16,
+            height: 8,
+        };
+        let context = region.pixel_context((0, 0), (8, 4));
+        assert_eq!((context.x, context.y), (17, 9));
+        assert_eq!((context.image_width, context.image_height), (64, 32));
+        let last = region.pixel_context((7, 3), (8, 4));
+        assert_eq!((last.x, last.y), (31, 15));
     }
 
     #[test]

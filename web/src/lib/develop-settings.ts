@@ -125,6 +125,15 @@ export type ScalarControlName<Group extends ScalarGroupName = ScalarGroupName> =
 
 export type AdjustmentRecord = Record<ScalarControlName, number>;
 
+export const CURVE_CHANNEL_NAMES = [
+	'luminance',
+	'red',
+	'green',
+	'blue'
+] as const satisfies readonly (keyof CurveSettings)[];
+
+export type CurveChannelName = (typeof CURVE_CHANNEL_NAMES)[number];
+
 export const LIGHT_CONTROL_NAMES = [
 	'exposure',
 	'contrast',
@@ -206,6 +215,12 @@ export function identityCurve(): CurvePoints {
 	];
 }
 
+export function isIdentityCurve(points: CurvePoints) {
+	if (points.length !== 2) return false;
+	const [first, last] = points;
+	return first.x === 0 && first.y === 0 && last.x === 1 && last.y === 1;
+}
+
 export function defaultCurveSettings(): CurveSettings {
 	return {
 		luminance: identityCurve(),
@@ -282,6 +297,10 @@ export function cloneDevelopSettings(settings: DevelopSettings): DevelopSettings
 	return developSettingsSchema.parse(settings);
 }
 
+export function cloneCurveSettings(curve: CurveSettings): CurveSettings {
+	return curveSettingsSchema.parse(curve);
+}
+
 export function scalarAdjustments(settings: DevelopSettings): AdjustmentRecord {
 	return { ...settings.light, ...settings.color, ...settings.detail, ...settings.effects };
 }
@@ -294,6 +313,16 @@ export function withAdjustment<Group extends ScalarGroupName>(
 ): DevelopSettings {
 	const next = cloneDevelopSettings(settings);
 	Object.assign(next[group], { [control]: value });
+	return next;
+}
+
+export function withCurve(
+	settings: DevelopSettings,
+	channel: CurveChannelName,
+	points: CurvePoints
+): DevelopSettings {
+	const next = cloneDevelopSettings(settings);
+	next.curve[channel] = curvePointsSchema.parse(points);
 	return next;
 }
 

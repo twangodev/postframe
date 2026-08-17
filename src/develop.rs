@@ -1,7 +1,12 @@
+use crate::composite::DevelopedTileRegion;
+use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 use crate::detail::{DetailPlanes, DetailTransform};
+use crate::effects::{self, VignetteFrame};
 use crate::grade::{ColorSettings, ColorTransform};
-use crate::light::{LightSettings, LightTransform};
-use crate::{Error, Result};
+use crate::light::{
+    LightSettings, LightTransform, decode_srgb, encode_srgb, linear_to_srgb, srgb_to_linear,
+};
+use crate::{Error, Result, parallel};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -272,15 +277,6 @@ impl Default for DetailSettings {
 pub const FINE_BLUR_FRACTION: f32 = 0.005;
 pub const COARSE_BLUR_FRACTION: f32 = 0.03;
 
-/// Where a pixel sits in the image, for stages that are not purely tonal.
-#[derive(Clone, Copy, Debug)]
-pub struct PixelContext {
-    pub x: usize,
-    pub y: usize,
-    pub image_width: usize,
-    pub image_height: usize,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
@@ -414,22 +410,57 @@ impl Default for DevelopSettings {
     }
 }
 
+/// Where a pixel sits in the image, for stages that are not purely tonal.
+#[derive(Clone, Copy, Debug)]
+pub struct PixelContext {
+    pub x: usize,
+    pub y: usize,
+    pub image_width: usize,
+    pub image_height: usize,
+}
+
+impl PixelContext {
+    fn normalized(self) -> (f32, f32) {
+        (
+            (self.x as f32 + 0.5) / self.image_width.max(1) as f32,
+            (self.y as f32 + 0.5) / self.image_height.max(1) as f32,
+        )
+    }
+
+    fn aspect(self) -> f32 {
+        self.image_width.max(1) as f32 / self.image_height.max(1) as f32
+    }
+}
+
 /// The develop pipeline compiled into the form each render path consumes.
 #[derive(Clone)]
 pub struct DevelopTransform {
     settings: DevelopSettings,
+    frame: VignetteFrame,
     light: LightTransform,
     color: ColorTransform,
     detail: DetailTransform,
+    channels: Option<[ToneCurve; 3]>,
 }
 
 impl DevelopTransform {
     pub fn new(settings: DevelopSettings) -> Result<Self> {
+        Self::framed(settings, VignetteFrame::FULL)
+    }
+
+    /// The same pipeline with its position-dependent stages centred on a
+    /// rectangle of the image — the crop, when the document carries one.
+    pub fn framed(settings: DevelopSettings, frame: VignetteFrame) -> Result<Self> {
         let settings = settings.validated()?;
         Ok(Self {
-            light: LightTransform::new(settings.light)?,
+            frame: frame.validated()?,
+            light: with_luminance_curve(
+                LightTransform::new(settings.light)?,
+                &settings.curve.luminance,
+            ),
             color: ColorTransform::new(settings.color)?,
             detail: DetailTransform::new(settings.detail),
+            channels: channel_curves(&settings.curve),
             settings,
         })
     }
@@ -438,8 +469,21 @@ impl DevelopTransform {
         &self.settings
     }
 
+    pub fn frame(&self) -> VignetteFrame {
+        self.frame
+    }
+
+    /// The luminance response with the luminance curve already composed in.
     pub fn luminance_lut(&self) -> &[f32] {
         self.light.luminance_lut()
+    }
+
+    /// Dense tables for the per-channel curves, absent while all three are the
+    /// identity.
+    pub fn channel_luts(&self) -> Option<[&[f32]; 3]> {
+        self.channels
+            .as_ref()
+            .map(|curves| curves.each_ref().map(ToneCurve::samples))
     }
 
     pub fn apply_display_rgba8(&self, rgba: &[u8]) -> Result<Vec<u8>> {
@@ -454,33 +498,140 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
-    /// The plane-free chain the masks and the display path share. Its callers
-    /// composite unhaloed tiles, so the spatial stages stay out of it: showing
-    /// them in a preview a tiled export could not reproduce is worse than
-    /// leaving them absent from both.
+    /// Develop a tile in place over the region of the image it covers, so the
+    /// position-dependent stages know where each pixel came from.
+    pub fn apply_display_rgba8_at(
+        &self,
+        rgba: &[u8],
+        tile: (usize, usize),
+        region: DevelopedTileRegion,
+    ) -> Result<Vec<u8>> {
+        if rgba.len() != tile.0.saturating_mul(tile.1).saturating_mul(4) {
+            return Err(Error::Unsupported("RGBA buffer size mismatch"));
+        }
+        let mut adjusted = rgba.to_vec();
+        parallel::fill_rows(&mut adjusted, tile.0 * 4, |output_y, row| {
+            for (output_x, pixel) in row.chunks_exact_mut(4).enumerate() {
+                let developed = self.apply_display_pixel_at(
+                    [pixel[0], pixel[1], pixel[2]],
+                    region.pixel_context((output_x, output_y), tile),
+                );
+                pixel[..3].copy_from_slice(&developed);
+            }
+        });
+        Ok(adjusted)
+    }
+
+    /// The plane-free chain the masks share, which skips every stage that needs
+    /// to know where a pixel is.
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        self.light
-            .apply_display_pixel(self.color.apply_display_pixel(pixel))
+        self.apply_channel_curves(
+            self.light
+                .apply_display_pixel(self.color.apply_display_pixel(pixel)),
+        )
+    }
+
+    /// The display path, which knows where a pixel is but has no blur planes:
+    /// it composites unhaloed tiles, so the spatial stages stay out of it.
+    /// Showing them in a preview its tiled export could not reproduce is worse
+    /// than leaving them absent from both.
+    pub fn apply_display_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let shaded = self.vignetted(self.color.apply_display_pixel(pixel), at);
+        let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
+        self.grained(toned, at)
     }
 
     pub fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
-        self.light
-            .apply_encoded_pixel(self.color.apply_display_pixel(pixel))
+        self.apply_channel_curves(
+            self.light
+                .apply_encoded_pixel(self.color.apply_display_pixel(pixel)),
+        )
     }
 
-    /// The tile chain, where the spatial stages have the planes they need.
+    /// The tile chain, the only one where the spatial stages have the planes
+    /// they need. Every stage in the order this type documents runs here.
     pub fn apply_encoded_pixel_at(
         &self,
         pixel: [u8; 3],
         at: PixelContext,
         planes: Option<&DetailPlanes>,
     ) -> [u8; 3] {
-        let colored = self.color.apply_display_pixel(pixel);
-        let presented = self
-            .detail
-            .apply(colored, planes.map(|planes| planes.sample(at)));
-        self.light.apply_encoded_pixel(presented)
+        let presented = self.presented(self.color.apply_display_pixel(pixel), at, planes);
+        let shaded = self.vignetted(presented, at);
+        let toned = self.apply_channel_curves(self.light.apply_encoded_pixel(shaded));
+        self.grained(toned, at)
     }
+
+    fn presented(
+        &self,
+        pixel: [u8; 3],
+        at: PixelContext,
+        planes: Option<&DetailPlanes>,
+    ) -> [u8; 3] {
+        self.detail
+            .apply(pixel, planes.map(|planes| planes.sample(at)))
+    }
+
+    fn apply_channel_curves(&self, encoded: [u8; 3]) -> [u8; 3] {
+        match &self.channels {
+            None => encoded,
+            Some(curves) => std::array::from_fn(|channel| {
+                let curved = curves[channel].eval(f32::from(encoded[channel]) / 255.0);
+                (curved * 255.0).round() as u8
+            }),
+        }
+    }
+
+    fn vignetted(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let gain = effects::vignette_gain(
+            self.settings.effects,
+            self.frame,
+            at.aspect(),
+            at.normalized(),
+        );
+        if gain == 1.0 {
+            return pixel;
+        }
+        pixel.map(|channel| linear_to_srgb(srgb_to_linear(channel) * gain))
+    }
+
+    fn grained(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let effects = self.settings.effects;
+        if effects.grain_amount == 0.0 {
+            return pixel;
+        }
+        let luminance =
+            (0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32)
+                / 255.0;
+        let offset = effects::grain_offset(
+            effects,
+            luminance,
+            at.x as u32,
+            at.y as u32,
+            effects::grain_cell(at.image_width, at.image_height, effects.grain_size),
+        );
+        pixel.map(|channel| (channel as f32 + offset).round().clamp(0.0, 255.0) as u8)
+    }
+}
+
+/// Folds the luminance curve into the light response, which every render path
+/// already samples, so the curve reaches them all without a new stage. The
+/// curve shapes encoded values, so the response is decoded around it.
+fn with_luminance_curve(light: LightTransform, points: &CurvePoints) -> LightTransform {
+    let curve = ToneCurve::new(points, light.luminance_lut().len());
+    if curve.is_identity() {
+        return light;
+    }
+    light.remapping_luminance(|linear| decode_srgb(curve.eval(encode_srgb(linear))))
+}
+
+fn channel_curves(settings: &CurveSettings) -> Option<[ToneCurve; 3]> {
+    let curves = [&settings.red, &settings.green, &settings.blue]
+        .map(|points| ToneCurve::new(points, CHANNEL_CURVE_SAMPLES));
+    curves
+        .iter()
+        .any(|curve| !curve.is_identity())
+        .then_some(curves)
 }
 
 fn within(values: &[f32], minimum: f32, maximum: f32) -> bool {
@@ -553,7 +704,6 @@ mod wire {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::detail::TilePlacement;
 
     fn vivid() -> DevelopSettings {
         DevelopSettings::tonal(
@@ -571,11 +721,197 @@ mod tests {
         )
     }
 
+    fn effected(effects: EffectsSettings) -> DevelopTransform {
+        DevelopTransform::new(DevelopSettings {
+            effects,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap()
+    }
+
+    fn whole(width: usize, height: usize) -> DevelopedTileRegion {
+        DevelopedTileRegion {
+            image_width: width,
+            image_height: height,
+            x: 0,
+            y: 0,
+            width,
+            height,
+        }
+    }
+
+    fn at(x: usize, y: usize) -> PixelContext {
+        PixelContext {
+            x,
+            y,
+            image_width: 63,
+            image_height: 47,
+        }
+    }
+
     #[test]
     fn neutral_settings_leave_every_byte_untouched() {
         let transform = DevelopTransform::new(DevelopSettings::neutral()).unwrap();
         let source = [0, 31, 127, 9, 201, 240, 255, 73];
         assert_eq!(transform.apply_display_rgba8(&source).unwrap(), source);
+        assert_eq!(
+            transform
+                .apply_display_rgba8_at(&source, (2, 1), whole(2, 1))
+                .unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn position_changes_nothing_until_an_effect_asks_for_it() {
+        let settings = DevelopSettings {
+            effects: EffectsSettings {
+                vignette_midpoint: 20.0,
+                vignette_roundness: 100.0,
+                vignette_feather: 0.0,
+                grain_size: 80.0,
+                ..EffectsSettings::NEUTRAL
+            },
+            ..vivid()
+        };
+        let transform = DevelopTransform::new(settings).unwrap();
+        for pixel in [[0, 0, 0], [12, 200, 96], [128, 128, 128], [255, 255, 255]] {
+            for position in [(0, 0), (31, 23), (62, 46)] {
+                let placed = transform.apply_display_pixel_at(pixel, at(position.0, position.1));
+                assert_eq!(placed, transform.apply_display_pixel(pixel));
+            }
+        }
+    }
+
+    #[test]
+    fn the_vignette_darkens_the_corners_and_leaves_the_frame_centre_exact() {
+        let transform = effected(EffectsSettings {
+            vignette_amount: -100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let gray = [128, 128, 128];
+        assert_eq!(transform.apply_display_pixel_at(gray, at(31, 23)), gray);
+        let corner = transform.apply_display_pixel_at(gray, at(0, 0));
+        assert!(corner[0] < gray[0], "corner {corner:?}");
+        let brightened = effected(EffectsSettings {
+            vignette_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        })
+        .apply_display_pixel_at(gray, at(0, 0));
+        assert!(brightened[0] > gray[0], "corner {brightened:?}");
+    }
+
+    #[test]
+    fn the_vignette_scales_the_channels_alike() {
+        let transform = effected(EffectsSettings {
+            vignette_amount: -75.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let source = [64, 128, 192];
+        let corner = transform.apply_display_pixel_at(source, at(0, 46));
+        let scale = |channel: usize| {
+            crate::light::srgb_to_linear(corner[channel])
+                / crate::light::srgb_to_linear(source[channel])
+        };
+        assert!(
+            (scale(0) - scale(1)).abs() < 0.01,
+            "{} {}",
+            scale(0),
+            scale(1)
+        );
+        assert!(
+            (scale(1) - scale(2)).abs() < 0.01,
+            "{} {}",
+            scale(1),
+            scale(2)
+        );
+    }
+
+    #[test]
+    fn the_vignette_centres_on_the_frame_rather_than_the_image() {
+        let settings = DevelopSettings {
+            effects: EffectsSettings {
+                vignette_amount: -100.0,
+                vignette_midpoint: 30.0,
+                ..EffectsSettings::NEUTRAL
+            },
+            ..DevelopSettings::neutral()
+        };
+        let corner = VignetteFrame {
+            x: 0.0,
+            y: 0.0,
+            width: 0.25,
+            height: 0.25,
+        };
+        let transform = DevelopTransform::framed(settings, corner).unwrap();
+        let gray = [128, 128, 128];
+        let brightest = (0..47)
+            .flat_map(|y| (0..63).map(move |x| (x, y)))
+            .max_by_key(|&(x, y)| transform.apply_display_pixel_at(gray, at(x, y))[0])
+            .unwrap();
+        assert!(
+            brightest.0 < 16 && brightest.1 < 12,
+            "the gain peaks at {brightest:?}, outside the frame"
+        );
+        assert!(
+            transform.apply_display_pixel_at(gray, at(31, 23))[0] < gray[0],
+            "the image centre escaped the falloff"
+        );
+    }
+
+    #[test]
+    fn grain_ignores_which_tile_carried_the_pixel() {
+        let transform = effected(EffectsSettings {
+            grain_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let strip: Vec<u8> = std::iter::repeat_n([128, 128, 128, 255], 4)
+            .flatten()
+            .collect();
+        let region = |x: usize, width: usize| DevelopedTileRegion {
+            image_width: 4,
+            image_height: 1,
+            x,
+            y: 0,
+            width,
+            height: 1,
+        };
+        let whole_strip = transform
+            .apply_display_rgba8_at(&strip, (4, 1), region(0, 4))
+            .unwrap();
+        let left = transform
+            .apply_display_rgba8_at(&strip[..8], (2, 1), region(0, 2))
+            .unwrap();
+        let right = transform
+            .apply_display_rgba8_at(&strip[8..], (2, 1), region(2, 2))
+            .unwrap();
+        assert_eq!(whole_strip[..8], left[..]);
+        assert_eq!(whole_strip[8..], right[..]);
+        assert_ne!(whole_strip, strip);
+    }
+
+    #[test]
+    fn grain_spares_the_darkest_and_brightest_pixels() {
+        let transform = effected(EffectsSettings {
+            grain_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let moved = |pixel: [u8; 3]| {
+            (0..16)
+                .map(|x| {
+                    let developed = transform.apply_display_pixel_at(pixel, at(x, 3));
+                    (developed[0] as i16 - pixel[0] as i16).abs()
+                })
+                .max()
+                .unwrap()
+        };
+        assert_eq!(moved([0, 0, 0]), 0);
+        assert_eq!(moved([255, 255, 255]), 0);
+        assert!(moved([128, 128, 128]) > 0);
+        assert_eq!(
+            effected(EffectsSettings::NEUTRAL).apply_display_pixel_at([128, 128, 128], at(3, 3)),
+            [128, 128, 128]
+        );
     }
 
     #[test]
@@ -613,12 +949,16 @@ mod tests {
             .collect();
         DetailPlanes::build(
             &tile,
-            TilePlacement {
-                origin: (0, 0),
-                size: (4, 4),
-                bin: 1,
-                image: (4, 4),
+            DevelopedTileRegion {
+                image_width: 4,
+                image_height: 4,
+                x: 0,
+                y: 0,
+                width: 4,
+                height: 4,
             },
+            (4, 4),
+            1,
             settings,
         )
         .unwrap()
@@ -690,6 +1030,72 @@ mod tests {
                 transform.apply_encoded_pixel(pixel)
             );
         }
+    }
+
+    /// A dropped stage compiles and passes most tests, so every one of them is
+    /// pinned by a control that must move the tile it renders.
+    #[test]
+    fn every_stage_reaches_the_tile_chain() {
+        let planes = single_pixel_planes(&DetailSettings {
+            clarity: 60.0,
+            ..DetailSettings::NEUTRAL
+        });
+        let region = DevelopedTileRegion {
+            image_width: 4,
+            image_height: 4,
+            x: 0,
+            y: 0,
+            width: 4,
+            height: 4,
+        };
+        let tile = |settings: DevelopSettings| {
+            let transform = DevelopTransform::new(settings).unwrap();
+            (0..16)
+                .flat_map(|index| {
+                    let output = (index % 4, index / 4);
+                    let shade = 40 + index as u8 * 12;
+                    transform.apply_encoded_pixel_at(
+                        [shade, 255 - shade, 128],
+                        region.pixel_context(output, (4, 4)),
+                        Some(&planes),
+                    )
+                })
+                .collect::<Vec<u8>>()
+        };
+        let neutral = tile(DevelopSettings::neutral());
+        let bent = CurvePoints(vec![
+            CurvePoint { x: 0.0, y: 0.0 },
+            CurvePoint { x: 0.5, y: 0.62 },
+            CurvePoint { x: 1.0, y: 1.0 },
+        ]);
+
+        let stages: [(&str, DevelopSettings); 9] = [
+            ("1 white balance", tweak(|s| s.color.temperature = 70.0)),
+            ("4 saturation", tweak(|s| s.color.saturation = -80.0)),
+            ("5 dehaze", tweak(|s| s.detail.dehaze = 70.0)),
+            ("6 clarity", tweak(|s| s.detail.clarity = 90.0)),
+            ("7 vignette", tweak(|s| s.effects.vignette_amount = -90.0)),
+            ("8 light", tweak(|s| s.light.contrast = 60.0)),
+            (
+                "8 luminance curve",
+                tweak(|s| s.curve.luminance = bent.clone()),
+            ),
+            ("9 channel curves", tweak(|s| s.curve.red = bent.clone())),
+            ("10 grain", tweak(|s| s.effects.grain_amount = 100.0)),
+        ];
+        for (stage, settings) in stages {
+            assert_ne!(
+                tile(settings),
+                neutral,
+                "stage {stage} never reached the tile"
+            );
+        }
+    }
+
+    fn tweak(change: impl FnOnce(&mut DevelopSettings)) -> DevelopSettings {
+        let mut settings = DevelopSettings::neutral();
+        change(&mut settings);
+        settings
     }
 
     #[test]
@@ -769,6 +1175,131 @@ mod tests {
             ..DevelopSettings::neutral()
         }));
         assert!(DevelopSettings::neutral().validated().is_ok());
+    }
+
+    fn shaped(points: &[(f32, f32)]) -> CurvePoints {
+        CurvePoints(
+            points
+                .iter()
+                .map(|&(x, y)| CurvePoint { x, y })
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn curved(curve: CurveSettings) -> DevelopTransform {
+        DevelopTransform::new(DevelopSettings {
+            curve,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap()
+    }
+
+    fn gray(transform: &DevelopTransform, value: u8) -> [u8; 3] {
+        transform.apply_display_pixel([value; 3])
+    }
+
+    #[test]
+    fn an_identity_curve_leaves_the_light_response_untouched() {
+        let settings = LightSettings {
+            contrast: 35.0,
+            shadows: -20.0,
+            ..LightSettings::NEUTRAL
+        };
+        let transform = DevelopTransform::new(DevelopSettings {
+            light: settings,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        assert_eq!(
+            transform.luminance_lut(),
+            LightTransform::new(settings).unwrap().luminance_lut()
+        );
+        assert!(transform.channel_luts().is_none());
+    }
+
+    #[test]
+    fn the_luminance_curve_reaches_every_path_through_the_light_response() {
+        let transform = curved(CurveSettings {
+            luminance: shaped(&[(0.0, 0.0), (0.25, 0.45), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        });
+        assert_ne!(
+            transform.luminance_lut(),
+            LightTransform::new(LightSettings::NEUTRAL)
+                .unwrap()
+                .luminance_lut()
+        );
+        assert!(gray(&transform, 128)[1] > 128);
+        for (index, pair) in transform.luminance_lut().windows(2).enumerate() {
+            assert!(
+                pair[0] <= pair[1],
+                "composed response reverses at sample {index}: {} then {}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    #[test]
+    fn a_channel_curve_moves_only_its_own_channel() {
+        let transform = curved(CurveSettings {
+            red: shaped(&[(0.0, 0.0), (0.5, 0.7), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        });
+        let adjusted = gray(&transform, 128);
+        assert!(adjusted[0] > 128, "red stayed at {}", adjusted[0]);
+        assert_eq!([adjusted[1], adjusted[2]], [128, 128]);
+        assert_eq!(
+            transform.channel_luts().map(|luts| luts.map(<[f32]>::len)),
+            Some([CHANNEL_CURVE_SAMPLES; 3])
+        );
+    }
+
+    #[test]
+    fn channel_curves_run_on_encoded_values_after_the_light_stage() {
+        let curve = CurveSettings {
+            blue: shaped(&[(0.0, 0.0), (0.5, 0.3), (1.0, 1.0)]),
+            ..CurveSettings::neutral()
+        };
+        let transform = DevelopTransform::new(DevelopSettings {
+            light: LightSettings {
+                contrast: 30.0,
+                ..LightSettings::NEUTRAL
+            },
+            curve: curve.clone(),
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let lit = DevelopTransform::new(DevelopSettings {
+            light: transform.settings().light,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let blue = ToneCurve::new(&curve.blue, CHANNEL_CURVE_SAMPLES);
+        let source = [90, 140, 200];
+        let expected = lit.apply_display_pixel(source);
+        assert_eq!(
+            transform.apply_display_pixel(source),
+            [
+                expected[0],
+                expected[1],
+                (blue.eval(f32::from(expected[2]) / 255.0) * 255.0).round() as u8
+            ]
+        );
+    }
+
+    #[test]
+    fn a_malformed_curve_never_reaches_the_curve_stage() {
+        assert!(
+            DevelopTransform::new(DevelopSettings {
+                curve: CurveSettings {
+                    red: shaped(&[(0.0, 0.0), (0.5, 1.5), (1.0, 1.0)]),
+                    ..CurveSettings::neutral()
+                },
+                ..DevelopSettings::neutral()
+            })
+            .is_err()
+        );
     }
 
     #[test]

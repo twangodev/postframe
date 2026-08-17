@@ -1,14 +1,20 @@
 import {
 	developSettingsKey,
+	isIdentityCurve,
 	type ColorSettings,
+	type CurveSettings,
 	type DetailSettings,
 	type DevelopSettings,
+	type EffectsSettings,
 	type LightSettings
 } from './develop-settings.ts';
+import type { NormalizedCrop } from './edit-document.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
+const CHANNEL_LUT_LENGTH = 3 * 1024;
 const UNIFORM_BYTES = 128;
+const EFFECTS_UNIFORM_BYTES = 64;
 const DETAIL_PLANE_FORMAT: GPUTextureFormat = 'r32float';
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
@@ -32,6 +38,26 @@ export interface LinearTileSource {
 	height: number;
 }
 
+/**
+ * Tables Rust resolved for the tone stages: the light response with the
+ * luminance curve already composed in, and the three channel curves back to
+ * back — empty while all three are the identity.
+ */
+export interface ToneTables {
+	luminance: Float32Array;
+	channels: Float32Array;
+}
+
+/** Where a tile sits in its image, which the position-dependent stages read. */
+export interface RawTilePlacement {
+	x: number;
+	y: number;
+	bin: number;
+	imageWidth: number;
+	imageHeight: number;
+	crop: NormalizedCrop | null;
+}
+
 interface CachedSource {
 	texture: GPUTexture;
 	detail: GPUTexture | null;
@@ -45,7 +71,9 @@ export class RawWebGpuRenderer {
 	private readonly transferBuffer: GPUBuffer;
 	private readonly mixBuffer: GPUBuffer;
 	private readonly lightBuffer: GPUBuffer;
+	private readonly channelBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
+	private readonly effectsBuffer: GPUBuffer;
 	private readonly detailFallback: GPUTexture;
 	private sourceBytes = 0;
 	private lutKey = '';
@@ -63,8 +91,16 @@ export class RawWebGpuRenderer {
 			size: LIGHT_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
 		});
+		this.channelBuffer = device.createBuffer({
+			size: CHANNEL_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
+			usage: BUFFER_STORAGE | BUFFER_COPY_DST
+		});
 		this.uniformBuffer = device.createBuffer({
 			size: UNIFORM_BYTES,
+			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
+		});
+		this.effectsBuffer = device.createBuffer({
+			size: EFFECTS_UNIFORM_BYTES,
 			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
 		});
 		this.detailFallback = device.createTexture({
@@ -107,15 +143,17 @@ export class RawWebGpuRenderer {
 	async render(
 		key: string,
 		source: LinearTileSource | null,
+		placement: RawTilePlacement,
 		adjustments: DevelopSettings,
 		tone: boolean,
-		luminanceLut: Float32Array
+		tables: ToneTables
 	) {
 		if (this.lost) throw new Error('WebGPU device is unavailable');
 		const cached = source ? this.uploadSource(key, source) : this.touchSource(key);
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
-		this.updateLuminanceLut(adjustments, luminanceLut);
+		this.updateToneTables(adjustments, tables);
 		this.updateUniforms(cached, adjustments, tone);
+		this.updateEffects(placement, adjustments.effects);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
 		const context = canvas.getContext('webgpu') as unknown as GPUCanvasContext | null;
@@ -129,7 +167,9 @@ export class RawWebGpuRenderer {
 				{ binding: 2, resource: { buffer: this.mixBuffer } },
 				{ binding: 3, resource: { buffer: this.lightBuffer } },
 				{ binding: 4, resource: { buffer: this.uniformBuffer } },
-				{ binding: 7, resource: (cached.detail ?? this.detailFallback).createView() }
+				{ binding: 5, resource: { buffer: this.channelBuffer } },
+				{ binding: 7, resource: (cached.detail ?? this.detailFallback).createView() },
+				{ binding: 8, resource: { buffer: this.effectsBuffer } }
 			]
 		});
 		const encoder = this.device.createCommandEncoder();
@@ -159,7 +199,9 @@ export class RawWebGpuRenderer {
 		this.transferBuffer.destroy();
 		this.mixBuffer.destroy();
 		this.lightBuffer.destroy();
+		this.channelBuffer.destroy();
 		this.uniformBuffer.destroy();
+		this.effectsBuffer.destroy();
 		this.device.destroy();
 	}
 
@@ -240,18 +282,24 @@ export class RawWebGpuRenderer {
 		this.sourceBytes = 0;
 	}
 
-	private updateLuminanceLut(adjustments: DevelopSettings, luminanceLut: Float32Array) {
+	private updateToneTables(adjustments: DevelopSettings, tables: ToneTables) {
 		const key = developSettingsKey(adjustments);
 		if (this.lutKey === key) return;
-		if (luminanceLut.length !== LIGHT_LUT_LENGTH) {
+		if (tables.luminance.length !== LIGHT_LUT_LENGTH) {
 			throw new Error('Light LUT has an unexpected size');
 		}
-		this.device.queue.writeBuffer(this.lightBuffer, 0, luminanceLut);
+		this.device.queue.writeBuffer(this.lightBuffer, 0, tables.luminance);
+		if (tables.channels.length > 0) {
+			if (tables.channels.length !== CHANNEL_LUT_LENGTH) {
+				throw new Error('Channel curve LUTs have an unexpected size');
+			}
+			this.device.queue.writeBuffer(this.channelBuffer, 0, tables.channels);
+		}
 		this.lutKey = key;
 	}
 
 	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
-		const { light, color, detail } = adjustments;
+		const { color, detail } = adjustments;
 		const bytes = new ArrayBuffer(UNIFORM_BYTES);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
@@ -261,20 +309,46 @@ export class RawWebGpuRenderer {
 		integers[3] = this.profile.lookupShift;
 		integers[4] = this.profile.transferLutLength;
 		integers[5] = tone ? 1 : 0;
-		integers[6] = lightIdentity(light) ? 1 : 0;
+		integers[6] = luminanceIdentity(adjustments) ? 1 : 0;
 		integers[7] = colorIdentity(color) ? 1 : 0;
-		floats[8] = 2 ** light.exposure;
+		floats[8] = 2 ** adjustments.light.exposure;
 		floats[9] = Math.max(1, this.profile.radianceMax * floats[8]);
 		floats[10] = 1 + color.saturation / 100;
 		floats[11] = color.vibrance / 100;
 		floats.set(balanceGains(color), 12);
 		integers[15] = adjustmentsIdentity(adjustments) ? 1 : 0;
-		integers[16] = detailIdentity(detail) ? 1 : 0;
-		floats[17] = (detail.texture / 100) * MAX_TEXTURE_STOPS;
-		floats[18] = (detail.clarity / 100) * MAX_CLARITY_STOPS;
-		floats[19] = (detail.sharpenAmount / SHARPEN_RANGE) * MAX_SHARPEN_STOPS;
-		floats[20] = detail.dehaze / 100;
+		integers[16] = channelCurvesIdentity(adjustments.curve) ? 1 : 0;
+		integers[17] = detailIdentity(detail) ? 1 : 0;
+		floats[18] = (detail.texture / 100) * MAX_TEXTURE_STOPS;
+		floats[19] = (detail.clarity / 100) * MAX_CLARITY_STOPS;
+		floats[20] = (detail.sharpenAmount / SHARPEN_RANGE) * MAX_SHARPEN_STOPS;
+		floats[21] = detail.dehaze / 100;
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
+	}
+
+	private updateEffects(placement: RawTilePlacement, effects: EffectsSettings) {
+		const bytes = new ArrayBuffer(EFFECTS_UNIFORM_BYTES);
+		const integers = new Uint32Array(bytes);
+		const floats = new Float32Array(bytes);
+		integers[0] = placement.x;
+		integers[1] = placement.y;
+		integers[2] = placement.imageWidth;
+		integers[3] = placement.imageHeight;
+		const crop = placement.crop ?? { x: 0, y: 0, width: 1, height: 1 };
+		floats.set([crop.x, crop.y, crop.width, crop.height], 4);
+		floats.set(
+			[
+				effects.vignetteAmount,
+				effects.vignetteMidpoint,
+				effects.vignetteRoundness,
+				effects.vignetteFeather
+			],
+			8
+		);
+		floats.set([effects.grainAmount, effects.grainSize], 12);
+		integers[14] = placement.bin;
+		integers[15] = effectsIdentity(effects) ? 1 : 0;
+		this.device.queue.writeBuffer(this.effectsBuffer, 0, bytes);
 	}
 }
 
@@ -295,6 +369,16 @@ function lightIdentity(settings: LightSettings) {
 	);
 }
 
+// The luminance curve is composed into the light LUT, so it decides with the
+// light controls whether the tone stage has anything to do.
+function luminanceIdentity({ light, curve }: DevelopSettings) {
+	return lightIdentity(light) && isIdentityCurve(curve.luminance);
+}
+
+function channelCurvesIdentity(curve: CurveSettings) {
+	return [curve.red, curve.green, curve.blue].every(isIdentityCurve);
+}
+
 function colorIdentity(color: ColorSettings) {
 	return (
 		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
@@ -310,11 +394,17 @@ function detailIdentity(detail: DetailSettings) {
 	);
 }
 
+function effectsIdentity(effects: EffectsSettings) {
+	return effects.vignetteAmount === 0 && effects.grainAmount === 0;
+}
+
 function adjustmentsIdentity(adjustments: DevelopSettings) {
 	return (
-		lightIdentity(adjustments.light) &&
+		luminanceIdentity(adjustments) &&
 		colorIdentity(adjustments.color) &&
-		detailIdentity(adjustments.detail)
+		channelCurvesIdentity(adjustments.curve) &&
+		detailIdentity(adjustments.detail) &&
+		effectsIdentity(adjustments.effects)
 	);
 }
 
@@ -354,11 +444,24 @@ struct Params {
   vibrance_amount: f32,
   balance: vec3<f32>,
   adjustments_identity: u32,
+  curve_identity: u32,
   detail_identity: u32,
   texture_stops: f32,
   clarity_stops: f32,
   sharpen_stops: f32,
   haze: f32,
+}
+
+// Vignette and grain in the shape src/effects.rs computes them, whose tests
+// pin the grain values this must reproduce.
+struct Effects {
+  origin: vec2<u32>,
+  image: vec2<u32>,
+  crop: vec4<f32>,
+  vignette: vec4<f32>,
+  grain: vec2<f32>,
+  bin: u32,
+  identity: u32,
 }
 
 const LUMINANCE_WEIGHTS = vec3<f32>(0.2126, 0.7152, 0.0722);
@@ -373,7 +476,19 @@ const MIN_TRANSMISSION = 0.1;
 @group(0) @binding(2) var<storage, read> mix: array<f32>;
 @group(0) @binding(3) var<storage, read> light_lut: array<f32>;
 @group(0) @binding(4) var<uniform> params: Params;
+@group(0) @binding(5) var<storage, read> channel_lut: array<f32>;
 @group(0) @binding(7) var detail_planes: texture_2d<f32>;
+@group(0) @binding(8) var<uniform> effects: Effects;
+
+const MAX_VIGNETTE_STOPS: f32 = 2.0;
+const MAX_ROUNDNESS_EXPONENT: f32 = 6.0;
+const ELLIPSE_EXPONENT: f32 = 2.0;
+const MIN_FEATHER_SPAN: f32 = 0.08;
+const MIN_ASPECT: f32 = 1.1920929e-7;
+const MIN_GRAIN_FRACTION: f32 = 0.00025;
+const MAX_GRAIN_FRACTION: f32 = 0.002;
+const MAX_GRAIN_AMPLITUDE: f32 = 24.0;
+const GRAIN_SEED: u32 = 0x9E3779B9u;
 
 fn camera_lookup(channel: u32, value: f32) -> f32 {
   let low = bitcast<f32>(params.lookup_low_bits);
@@ -472,8 +587,85 @@ fn apply_light(linear: vec3<f32>) -> vec3<f32> {
   return linear * scale;
 }
 
+fn channel_curve(channel: u32, value: f32) -> f32 {
+  let samples = arrayLength(&channel_lut) / 3u;
+  let position = clamp(value, 0.0, 1.0) * f32(samples - 1u);
+  let index = min(u32(position), samples - 2u);
+  let base = channel * samples + index;
+  let below = channel_lut[base];
+  return below + (position - f32(index)) * (channel_lut[base + 1u] - below);
+}
+
+fn apply_channel_curves(encoded: vec3<f32>) -> vec3<f32> {
+  return vec3<f32>(
+    channel_curve(0u, encoded.r),
+    channel_curve(1u, encoded.g),
+    channel_curve(2u, encoded.b)
+  );
+}
+
+fn image_pixel(position: vec2<f32>) -> vec2<u32> {
+  return effects.origin + vec2<u32>(position) * effects.bin + vec2<u32>(effects.bin / 2u);
+}
+
+fn superellipse(point: vec2<f32>, exponent: f32) -> f32 {
+  let raised = pow(abs(point), vec2<f32>(exponent));
+  return pow(raised.x + raised.y, 1.0 / exponent);
+}
+
+fn apply_vignette(linear: vec3<f32>, pixel: vec2<u32>) -> vec3<f32> {
+  let amount = effects.vignette.x;
+  if (amount == 0.0) {
+    return linear;
+  }
+  let image = max(vec2<f32>(effects.image), vec2<f32>(1.0));
+  let at = (vec2<f32>(pixel) + vec2<f32>(0.5)) / image;
+  let aspect = max(image.x / image.y, MIN_ASPECT);
+  let centre = effects.crop.xy + effects.crop.zw * 0.5;
+  let reach = vec2<f32>(effects.crop.z * 0.5 * aspect, effects.crop.w * 0.5);
+  let roundness = effects.vignette.z / 100.0;
+  let exponent = ELLIPSE_EXPONENT
+    + max(roundness, 0.0) * (MAX_ROUNDNESS_EXPONENT - ELLIPSE_EXPONENT);
+  let semi_axis = pow(reach.x / reach.y, clamp(roundness + 1.0, 0.0, 1.0));
+  let offset = vec2<f32>((at.x - centre.x) * aspect / semi_axis, at.y - centre.y);
+  let corner = vec2<f32>(reach.x / semi_axis, reach.y);
+  let distance = superellipse(offset, exponent) / superellipse(corner, exponent);
+  let midpoint = effects.vignette.y / 100.0;
+  let span = MIN_FEATHER_SPAN + effects.vignette.w / 100.0 * (1.0 - MIN_FEATHER_SPAN);
+  let start = max(midpoint - span * 0.5, 0.0);
+  let end = max(midpoint + span * 0.5, start + MIN_FEATHER_SPAN);
+  let falloff = smoothstep(start, end, distance);
+  return linear * exp2(amount / 100.0 * MAX_VIGNETTE_STOPS * falloff);
+}
+
+fn grain_at(x: u32, y: u32, cell: u32) -> f32 {
+  let span = max(cell, 1u);
+  var mixed = ((x / span) * 0x8DA6B343u + (y / span) * 0xD8163841u) ^ GRAIN_SEED;
+  mixed ^= mixed >> 16u;
+  mixed = mixed * 0x7FEB352Du;
+  mixed ^= mixed >> 15u;
+  mixed = mixed * 0x846CA68Bu;
+  mixed ^= mixed >> 16u;
+  return f32(mixed >> 8u) / 8388607.5 - 1.0;
+}
+
+fn apply_grain(encoded: vec3<f32>, pixel: vec2<u32>) -> vec3<f32> {
+  let amount = effects.grain.x;
+  if (amount == 0.0) {
+    return encoded;
+  }
+  let reference = f32(max(max(effects.image.x, effects.image.y), 1u));
+  let fraction = MIN_GRAIN_FRACTION
+    + (MAX_GRAIN_FRACTION - MIN_GRAIN_FRACTION) * effects.grain.y / 100.0;
+  let cell = max(u32(floor(reference * fraction + 0.5)), 1u);
+  let luminance = clamp(dot(encoded, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+  let weight = 4.0 * luminance * (1.0 - luminance);
+  let offset = amount / 100.0 * MAX_GRAIN_AMPLITUDE * weight * grain_at(pixel.x, pixel.y, cell);
+  return clamp(encoded + vec3<f32>(offset / 255.0), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 // Stages run in the order fixed by DevelopTransform in src/develop.rs.
-fn apply_adjustments(encoded: vec3<f32>, position: vec2<i32>) -> vec3<f32> {
+fn apply_adjustments(encoded: vec3<f32>, tile: vec2<i32>, pixel: vec2<u32>) -> vec3<f32> {
   if (params.adjustments_identity == 1u) {
     return encoded;
   }
@@ -482,12 +674,22 @@ fn apply_adjustments(encoded: vec3<f32>, position: vec2<i32>) -> vec3<f32> {
     linear = apply_color(linear);
   }
   if (params.detail_identity != 1u) {
-    linear = apply_detail(apply_dehaze(linear), detail_sample(position));
+    linear = apply_detail(apply_dehaze(linear), detail_sample(tile));
+  }
+  if (effects.identity != 1u) {
+    linear = apply_vignette(linear, pixel);
   }
   if (params.light_identity != 1u) {
     linear = apply_light(linear);
   }
-  return encode_srgb(linear);
+  var display = encode_srgb(linear);
+  if (params.curve_identity != 1u) {
+    display = apply_channel_curves(display);
+  }
+  if (effects.identity != 1u) {
+    display = apply_grain(display, pixel);
+  }
+  return display;
 }
 
 @vertex
@@ -519,6 +721,6 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     camera_lookup(1u, mixed.g),
     camera_lookup(2u, mixed.b)
   ) / 255.0, vec3<f32>(0.0), vec3<f32>(1.0));
-  return vec4<f32>(apply_adjustments(encoded, pixel), 1.0);
+  return vec4<f32>(apply_adjustments(encoded, pixel, image_pixel(position.xy)), 1.0);
 }
 `;

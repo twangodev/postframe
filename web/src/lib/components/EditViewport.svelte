@@ -141,6 +141,7 @@
 						renderTile={workspace.renderTile}
 						renderRevision={workspace.renderSettings.revision}
 						adjustments={workspace.renderSettings.adjustments}
+						crop={workspace.renderSettings.crop}
 						onRenderSettled={workspace.settleDevelopRender}
 					/>
 					{#if workspace.developPreview?.photoId === active.id}

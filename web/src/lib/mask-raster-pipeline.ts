@@ -7,10 +7,12 @@ import {
 	type LightSettings
 } from './develop-settings';
 import {
+	cloneCrop,
 	cloneEditMask,
 	type EditDocument,
 	type EditMask,
-	type MaskComponent
+	type MaskComponent,
+	type NormalizedCrop
 } from './edit-document';
 import type { LibraryService } from './library-service';
 import { isNeutralMaskEdge } from './mask-edge-settings';
@@ -33,7 +35,7 @@ export interface MaskRasterPipelineHost {
 	readonly selectedMaskId: string | null;
 	masks: EditMask[];
 	selectedMaskRaster: SelectedMaskRaster | null;
-	renderSettings: { adjustments: DevelopSettings; revision: number };
+	renderSettings: { adjustments: DevelopSettings; crop: NormalizedCrop | null; revision: number };
 	markRefining(revision: number): void;
 	failSmartMask(error: unknown): void;
 }
@@ -94,6 +96,7 @@ export class MaskRasterPipeline {
 	private publishRenderSettings(document: EditDocument) {
 		this.host.renderSettings = {
 			adjustments: cloneDevelopSettings(document.adjustments),
+			crop: cloneCrop(document.geometry.crop),
 			revision: this.host.renderSettings.revision + 1
 		};
 		this.host.markRefining(this.host.renderSettings.revision);

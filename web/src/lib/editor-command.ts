@@ -11,11 +11,15 @@ import {
 } from './edit-document.ts';
 import {
 	colorSettingsSchema,
+	curvePointsSchema,
 	developSettingsSchema,
 	lightSettingsSchema,
 	sameDevelopSettings,
 	withAdjustment,
+	withCurve,
 	type ColorControlName,
+	type CurveChannelName,
+	type CurvePoints,
 	type DevelopSettings,
 	type LightControlName,
 	type ScalarControlName,
@@ -25,14 +29,21 @@ import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-se
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
-export type AdjustmentCommand = {
-	[Group in ScalarGroupName]: {
-		type: 'adjustment.set';
-		group: Group;
-		control: ScalarControlName<Group>;
-		value: number;
-	};
-}[ScalarGroupName];
+export type AdjustmentCommand =
+	| {
+			[Group in ScalarGroupName]: {
+				type: 'adjustment.set';
+				group: Group;
+				control: ScalarControlName<Group>;
+				value: number;
+			};
+	  }[ScalarGroupName]
+	| {
+			type: 'adjustment.set';
+			group: 'curve';
+			control: CurveChannelName;
+			value: CurvePoints;
+	  };
 
 export function adjustmentCommand<Group extends ScalarGroupName>(
 	group: Group,
@@ -40,6 +51,10 @@ export function adjustmentCommand<Group extends ScalarGroupName>(
 	value: number
 ): AdjustmentCommand {
 	return { type: 'adjustment.set', group, control, value } as AdjustmentCommand;
+}
+
+export function curveCommand(channel: CurveChannelName, points: CurvePoints): AdjustmentCommand {
+	return { type: 'adjustment.set', group: 'curve', control: channel, value: points };
 }
 
 export type EditorCommand =
@@ -64,6 +79,10 @@ export interface EditorTransition {
 
 export function cloneEditorCommand(command: EditorCommand): EditorCommand {
 	switch (command.type) {
+		case 'adjustment.set':
+			return command.group === 'curve'
+				? { ...command, value: curvePointsSchema.parse(command.value) }
+				: { ...command };
 		case 'mask.create':
 			return { ...command, mask: editMaskSchema.parse(command.mask) };
 		case 'mask.component.set':
@@ -86,12 +105,18 @@ export function applyEditorCommand(
 
 	switch (command.type) {
 		case 'adjustment.set': {
-			const adjustments: DevelopSettings = developSettingsSchema.parse(
-				withAdjustment(next.adjustments, command.group, command.control, command.value)
-			);
+			const shaped =
+				command.group === 'curve'
+					? withCurve(next.adjustments, command.control, command.value)
+					: withAdjustment(next.adjustments, command.group, command.control, command.value);
+			const adjustments: DevelopSettings = developSettingsSchema.parse(shaped);
 			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
 			next.adjustments = adjustments;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
+			const label =
+				command.group === 'curve'
+					? `${command.control} curve`
+					: controlLabel(command.control, command.value);
+			return transition(command, label, 'render', next);
 		}
 		case 'mask.light.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);

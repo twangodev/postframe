@@ -1,4 +1,5 @@
 import type { ColorSettings, DevelopSettings, LightSettings } from './develop-settings';
+import type { NormalizedCrop } from './edit-document.ts';
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
@@ -62,6 +63,7 @@ export interface RenderTileRequest {
 	height: number;
 	bin: number;
 	adjustments: DevelopSettings;
+	crop: NormalizedCrop | null;
 	tone: boolean;
 }
 
@@ -97,6 +99,7 @@ export type Request =
 			cache: FileSystemFileHandle;
 			maxDimension: number;
 			adjustments: DevelopSettings;
+			crop: NormalizedCrop | null;
 	  }
 	| {
 			id: number;
@@ -104,15 +107,23 @@ export type Request =
 			source: FileSystemFileHandle;
 			maxDimension: number;
 			adjustments: DevelopSettings;
+			crop: NormalizedCrop | null;
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
-	| { id: number; type: 'preview'; adjustments: DevelopSettings; tone: boolean }
+	| {
+			id: number;
+			type: 'preview';
+			adjustments: DevelopSettings;
+			crop: NormalizedCrop | null;
+			tone: boolean;
+	  }
 	| {
 			id: number;
 			type: 'scope';
 			adjustments: DevelopSettings;
+			crop: NormalizedCrop | null;
 			tone: boolean;
 			sampleTarget: number;
 	  }

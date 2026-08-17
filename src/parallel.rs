@@ -35,28 +35,6 @@ where
     mapped
 }
 
-pub(crate) fn map_indexed_pixels<T, U, const N: usize>(
-    pixels: &[T],
-    map: impl Fn(usize, &T) -> [U; N] + Send + Sync,
-) -> Vec<U>
-where
-    T: Sync,
-    U: Send + Copy + Default,
-{
-    let mut mapped = vec![U::default(); pixels.len() * N];
-    #[cfg(feature = "parallel")]
-    mapped
-        .par_chunks_exact_mut(N)
-        .zip(pixels)
-        .enumerate()
-        .for_each(|(index, (slot, pixel))| slot.copy_from_slice(&map(index, pixel)));
-    #[cfg(not(feature = "parallel"))]
-    for (index, (slot, pixel)) in mapped.chunks_exact_mut(N).zip(pixels).enumerate() {
-        slot.copy_from_slice(&map(index, pixel));
-    }
-    mapped
-}
-
 pub(crate) fn fill_rows<T: Send>(
     buffer: &mut [T],
     width: usize,
@@ -138,12 +116,6 @@ mod tests {
     fn maps_pixels_into_flattened_runs() {
         let mapped = map_pixels(&[1u8, 2, 3], |&value| [value, value + 10]);
         assert_eq!(mapped, [1, 11, 2, 12, 3, 13]);
-    }
-
-    #[test]
-    fn maps_pixels_alongside_their_index() {
-        let mapped = map_indexed_pixels(&[7u8, 8, 9], |index, &value| [index as u8, value]);
-        assert_eq!(mapped, [0, 7, 1, 8, 2, 9]);
     }
 
     #[test]

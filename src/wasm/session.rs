@@ -3,8 +3,9 @@ use std::sync::Arc;
 use lru::LruCache;
 use wasm_bindgen::prelude::*;
 
-use super::shared::{develop_settings, encode_jpeg, err};
+use super::shared::{develop_settings, encode_jpeg, err, vignette_frame};
 use crate::bracket::{self, Frame, FrameData};
+use crate::effects::VignetteFrame;
 use crate::preview::{MipPyramid, PreparedRegion};
 use crate::{DetailSettings, DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
 
@@ -156,6 +157,7 @@ impl ScopeFrame {
 
 struct CachedPreview {
     settings: DevelopSettings,
+    frame: VignetteFrame,
     tone: bool,
     rgb8: Vec<u8>,
 }
@@ -413,8 +415,13 @@ impl Session {
     }
 
     /// Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
-    pub fn preview_jpeg(&mut self, settings: JsValue, tone: bool) -> Result<Vec<u8>, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+    pub fn preview_jpeg(
+        &mut self,
+        settings: JsValue,
+        crop: JsValue,
+        tone: bool,
+    ) -> Result<Vec<u8>, JsError> {
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -426,9 +433,10 @@ impl Session {
     pub fn preview_frame(
         &mut self,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
     ) -> Result<PreviewFrame, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -449,10 +457,11 @@ impl Session {
     pub fn preview_scope(
         &mut self,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
         sample_target: u32,
     ) -> Result<ScopeFrame, JsError> {
-        self.prepare_preview(develop_settings(settings)?, tone)?;
+        self.prepare_preview(develop_settings(settings)?, vignette_frame(crop)?, tone)?;
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let preview = self
             .preview
@@ -483,9 +492,10 @@ impl Session {
         height: u32,
         bin: u32,
         settings: JsValue,
+        crop: JsValue,
         tone: bool,
     ) -> Result<RenderedTile, JsError> {
-        self.prepare_develop(develop_settings(settings)?)?;
+        self.prepare_develop(develop_settings(settings)?, vignette_frame(crop)?)?;
         let detail = self.detail_settings()?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
@@ -511,7 +521,7 @@ impl Session {
                 .as_ref()
                 .ok_or(JsError::new("merge first"))?
                 .prepare(merged, (x, y), (width, height), bin)
-                .detailed(&detail);
+                .detailed(&detail, bin);
             self.tiles.insert(region, prepared);
         }
         let prepared = self
@@ -568,7 +578,7 @@ impl Session {
                 .as_ref()
                 .ok_or(JsError::new("merge first"))?
                 .prepare(merged, (x, y), (width, height), bin)
-                .detailed(&detail);
+                .detailed(&detail, bin);
             self.tiles.insert(region, prepared);
         }
         let prepared = self
@@ -596,9 +606,16 @@ impl Session {
         Ok(crate::hdr::encode(merged).map_err(err)?.bytes)
     }
 
-    fn prepare_develop(&mut self, settings: DevelopSettings) -> Result<(), JsError> {
-        if self.develop.as_ref().map(DevelopTransform::settings) != Some(&settings) {
-            self.develop = Some(DevelopTransform::new(settings).map_err(err)?);
+    fn prepare_develop(
+        &mut self,
+        settings: DevelopSettings,
+        frame: VignetteFrame,
+    ) -> Result<(), JsError> {
+        let compiled = self.develop.as_ref();
+        if compiled.map(DevelopTransform::settings) != Some(&settings)
+            || compiled.map(DevelopTransform::frame) != Some(frame)
+        {
+            self.develop = Some(DevelopTransform::framed(settings, frame).map_err(err)?);
         }
         Ok(())
     }
@@ -612,15 +629,18 @@ impl Session {
             .detail)
     }
 
-    fn prepare_preview(&mut self, settings: DevelopSettings, tone: bool) -> Result<(), JsError> {
-        if self
-            .preview
-            .as_ref()
-            .is_some_and(|preview| preview.settings == settings && preview.tone == tone)
-        {
+    fn prepare_preview(
+        &mut self,
+        settings: DevelopSettings,
+        frame: VignetteFrame,
+        tone: bool,
+    ) -> Result<(), JsError> {
+        if self.preview.as_ref().is_some_and(|preview| {
+            preview.settings == settings && preview.frame == frame && preview.tone == tone
+        }) {
             return Ok(());
         }
-        self.prepare_develop(settings.clone())?;
+        self.prepare_develop(settings.clone(), frame)?;
         if !settings.detail.is_neutral() {
             self.prepare_preview_source(settings.detail)?;
         }
@@ -638,6 +658,7 @@ impl Session {
         };
         self.preview = Some(CachedPreview {
             settings,
+            frame,
             tone,
             rgb8,
         });
@@ -653,7 +674,7 @@ impl Session {
         let size = (thumb.radiance.width, thumb.radiance.height);
         self.preview_source = Some(PreviewSource {
             detail: key,
-            region: PreparedRegion::new(thumb, (0, 0), size, 1).detailed(&detail),
+            region: PreparedRegion::new(thumb, (0, 0), size, 1).detailed(&detail, 1),
         });
         Ok(())
     }
@@ -668,7 +689,6 @@ impl Default for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::detail::TilePlacement;
 
     fn detail(name: &str, value: f32) -> DetailSettings {
         let mut settings = DetailSettings::NEUTRAL;
@@ -712,28 +732,17 @@ mod tests {
 
     #[test]
     fn the_cache_budget_counts_the_blur_planes() {
-        let placement = TilePlacement {
-            origin: (0, 0),
-            size: (16, 16),
-            bin: 1,
-            image: (1024, 768),
-        };
+        let tile = (16, 16);
         let quiet = DetailSettings::NEUTRAL;
         let sharp = detail("clarity", 60.0);
-        let plain = PreparedRegion::fabricated(placement, &quiet);
-        let detailed = PreparedRegion::fabricated(placement, &sharp);
+        let plain = PreparedRegion::fabricated(tile, &quiet);
+        let detailed = PreparedRegion::fabricated(tile, &sharp);
         let planes = 16 * 16 * 2 * std::mem::size_of::<f32>();
         assert_eq!(detailed.byte_len(), plain.byte_len() + planes);
 
         let mut cache = TileCache::new(plain.byte_len() + planes);
-        cache.insert(
-            region(&quiet),
-            PreparedRegion::fabricated(placement, &quiet),
-        );
-        cache.insert(
-            region(&sharp),
-            PreparedRegion::fabricated(placement, &sharp),
-        );
+        cache.insert(region(&quiet), PreparedRegion::fabricated(tile, &quiet));
+        cache.insert(region(&sharp), PreparedRegion::fabricated(tile, &sharp));
         assert!(
             !cache.contains(&region(&quiet)),
             "the planes must count toward the budget"

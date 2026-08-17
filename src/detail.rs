@@ -3,6 +3,7 @@
 //! the per-pixel develop chain, so the chain itself stays a pure function of a
 //! pixel and its two precomputed detail signals.
 
+use crate::composite::DevelopedTileRegion;
 use crate::develop::{DetailSettings, PixelContext};
 use crate::grade::luminance;
 use crate::light::{linear_to_srgb, srgb_to_linear};
@@ -29,15 +30,6 @@ const NOISE_RANGE_STOPS: f32 = 0.35;
 /// Gaussian that broad carries no detail the finer grid would preserve.
 const MAX_DIRECT_BLUR_RADIUS: usize = 24;
 
-/// Where a rendered tile sits in its image, measured in the tile's own grid.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TilePlacement {
-    pub origin: (usize, usize),
-    pub size: (usize, usize),
-    pub bin: usize,
-    pub image: (usize, usize),
-}
-
 /// One pixel's local contrast against each blur plane, in stops.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct DetailSample {
@@ -48,7 +40,8 @@ pub struct DetailSample {
 /// The two local-contrast planes of a cleaned tile, addressed by where a pixel
 /// sits in the image so every render path shares one convention.
 pub struct DetailPlanes {
-    placement: TilePlacement,
+    region: DevelopedTileRegion,
+    tile: (usize, usize),
     fine: Vec<f32>,
     coarse: Vec<f32>,
 }
@@ -56,27 +49,35 @@ pub struct DetailPlanes {
 impl DetailPlanes {
     pub fn build(
         rgb: &[[f32; 3]],
-        placement: TilePlacement,
+        region: DevelopedTileRegion,
+        tile: (usize, usize),
+        bin: usize,
         settings: &DetailSettings,
     ) -> Option<Self> {
         let [fine, coarse]: [f32; 2] = settings.blur_radii().try_into().ok()?;
         let base = log_luminance(rgb);
-        let radius = |fraction| blur_radius(fraction, placement.image, placement.bin);
+        let image = (region.image_width, region.image_height);
+        let radius = |fraction| blur_radius(fraction, image, bin);
         Some(Self {
-            fine: local_contrast(&base, placement.size, radius(fine)),
-            coarse: local_contrast(&base, placement.size, radius(coarse)),
-            placement,
+            fine: local_contrast(&base, tile, radius(fine)),
+            coarse: local_contrast(&base, tile, radius(coarse)),
+            region,
+            tile,
         })
     }
 
+    /// Inverts `DevelopedTileRegion::pixel_context`, which every render path
+    /// uses to place a pixel, so a plane is read through the same convention.
     pub fn sample(&self, at: PixelContext) -> DetailSample {
-        let (width, height) = self.placement.size;
-        let local = |position: usize, origin: usize, limit: usize| {
-            (position.saturating_sub(origin) / self.placement.bin).min(limit - 1)
+        let local = |position: usize, origin: usize, span: usize, extent: usize| {
+            if span == 0 {
+                return 0;
+            }
+            (position.saturating_sub(origin) * extent / span).min(extent - 1)
         };
-        let x = local(at.x, self.placement.origin.0, width);
-        let y = local(at.y, self.placement.origin.1, height);
-        let index = y * width + x;
+        let x = local(at.x, self.region.x, self.region.width, self.tile.0);
+        let y = local(at.y, self.region.y, self.region.height, self.tile.1);
+        let index = y * self.tile.0 + x;
         DetailSample {
             fine: self.fine[index],
             coarse: self.coarse[index],
@@ -787,38 +788,57 @@ mod tests {
     #[test]
     fn planes_are_addressed_by_where_a_pixel_sits_in_the_image() {
         let size = (8, 6);
-        let placement = TilePlacement {
-            origin: (32, 24),
-            size,
-            bin: 4,
-            image: (2000, 1500),
+        let region = DevelopedTileRegion {
+            image_width: 2000,
+            image_height: 1500,
+            x: 32,
+            y: 24,
+            width: size.0 * 4,
+            height: size.1 * 4,
         };
-        let tile: Vec<[f32; 3]> = (0..size.0 * size.1)
+        let rgb: Vec<[f32; 3]> = (0..size.0 * size.1)
             .map(|index| [0.1 + index as f32 * 0.05; 3])
             .collect();
         let planes = DetailPlanes::build(
-            &tile,
-            placement,
+            &rgb,
+            region,
+            size,
+            4,
             &DetailSettings {
                 clarity: 40.0,
                 ..DetailSettings::NEUTRAL
             },
         )
         .unwrap();
+
+        // Every output pixel reads back the plane entry that produced it.
+        for output_y in 0..size.1 {
+            for output_x in 0..size.0 {
+                let index = output_y * size.0 + output_x;
+                let sampled = planes.sample(region.pixel_context((output_x, output_y), size));
+                assert_eq!(
+                    sampled,
+                    DetailSample {
+                        fine: planes.fine[index],
+                        coarse: planes.coarse[index]
+                    },
+                    "output ({output_x}, {output_y}) sampled the wrong plane entry"
+                );
+            }
+        }
+
         let at = |x, y| PixelContext {
             x,
             y,
             image_width: 2000,
             image_height: 1500,
         };
-        assert_eq!(planes.sample(at(32, 24)), planes.sample(at(35, 27)));
-        assert_ne!(planes.sample(at(32, 24)), planes.sample(at(36, 24)));
         assert_eq!(planes.sample(at(0, 0)), planes.sample(at(32, 24)));
         assert_eq!(planes.sample(at(9000, 9000)), planes.sample(at(60, 44)));
         assert_eq!(planes.stacked().len(), size.0 * size.1 * 2);
         assert_eq!(planes.byte_len(), size.0 * size.1 * 2 * 4);
         assert!(
-            DetailPlanes::build(&tile, placement, &DetailSettings::NEUTRAL).is_none(),
+            DetailPlanes::build(&rgb, region, size, 4, &DetailSettings::NEUTRAL).is_none(),
             "neutral detail should not pay for planes"
         );
     }
