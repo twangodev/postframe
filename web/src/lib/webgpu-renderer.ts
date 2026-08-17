@@ -7,6 +7,7 @@ import {
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
+const UNIFORM_BYTES = 128;
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
 const BUFFER_STORAGE = 0x0080;
@@ -58,7 +59,7 @@ export class RawWebGpuRenderer {
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
 		});
 		this.uniformBuffer = device.createBuffer({
-			size: 64,
+			size: UNIFORM_BYTES,
 			usage: BUFFER_UNIFORM | BUFFER_COPY_DST
 		});
 		void device.lost.then(() => {
@@ -215,7 +216,7 @@ export class RawWebGpuRenderer {
 
 	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
 		const { light, color } = adjustments;
-		const bytes = new ArrayBuffer(64);
+		const bytes = new ArrayBuffer(UNIFORM_BYTES);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
 		integers[0] = source.width;
@@ -231,6 +232,7 @@ export class RawWebGpuRenderer {
 		floats[10] = 1 + color.saturation / 100;
 		floats[11] = color.vibrance / 100;
 		floats.set(balanceGains(color), 12);
+		integers[15] = adjustmentsIdentity(adjustments) ? 1 : 0;
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
 }
@@ -256,6 +258,10 @@ function colorIdentity(color: ColorSettings) {
 	return (
 		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
 	);
+}
+
+function adjustmentsIdentity(adjustments: DevelopSettings) {
+	return lightIdentity(adjustments.light) && colorIdentity(adjustments.color);
 }
 
 const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
@@ -287,6 +293,7 @@ struct Params {
   saturation_scale: f32,
   vibrance_amount: f32,
   balance: vec3<f32>,
+  adjustments_identity: u32,
 }
 
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -340,29 +347,34 @@ fn apply_color(linear: vec3<f32>) -> vec3<f32> {
   return max(vec3<f32>(luminance) + (balanced - vec3<f32>(luminance)) * scale, vec3<f32>(0.0));
 }
 
-fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
-  if (params.light_identity == 1u && params.color_identity == 1u) {
-    return encoded;
-  }
-  var linear = decode_srgb(encoded);
-  if (params.color_identity != 1u) {
-    linear = apply_color(linear);
-  }
-  if (params.light_identity == 1u) {
-    return encode_srgb(linear);
-  }
+fn apply_light(linear: vec3<f32>) -> vec3<f32> {
   let luminance = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722));
   let position = clamp(luminance, 0.0, 1.0) * f32(arrayLength(&light_lut) - 1u);
   let index = min(u32(position), arrayLength(&light_lut) - 2u);
   let fraction = position - f32(index);
   let target_luminance = light_lut[index] + fraction * (light_lut[index + 1u] - light_lut[index]);
   if (luminance <= 0.0000001192092896) {
-    return encode_srgb(vec3<f32>(target_luminance));
+    return vec3<f32>(target_luminance);
   }
   let maximum = max(linear.r, max(linear.g, linear.b));
   let gamut_scale = select(3.402823466e+38, 1.0 / maximum, maximum > 0.0);
   let scale = min(target_luminance / luminance, gamut_scale);
-  return encode_srgb(linear * scale);
+  return linear * scale;
+}
+
+// Stages run in the order fixed by DevelopTransform in src/develop.rs.
+fn apply_adjustments(encoded: vec3<f32>) -> vec3<f32> {
+  if (params.adjustments_identity == 1u) {
+    return encoded;
+  }
+  var linear = decode_srgb(encoded);
+  if (params.color_identity != 1u) {
+    linear = apply_color(linear);
+  }
+  if (params.light_identity != 1u) {
+    linear = apply_light(linear);
+  }
+  return encode_srgb(linear);
 }
 
 @vertex
