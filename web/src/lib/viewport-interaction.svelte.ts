@@ -1,6 +1,5 @@
-import type { EditMask, MaskComponent, NormalizedPoint } from './edit-document.ts';
-import { linearLayout } from './mask-gizmo-linear.ts';
-import { pixelToNormalized } from './mask-gizmo.ts';
+import type { EditMask, NormalizedPoint } from './edit-document.ts';
+import { linearGeometryFromSpan, MIN_GRADIENT_EXTENT, pixelToNormalized } from './mask-gizmo.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
@@ -97,81 +96,90 @@ export class ViewportInteraction {
 	);
 	maskBrushSize = $derived(Math.min(1, this.refineBrushRadius * 2));
 
-	private radialComponent = $derived.by(
-		() =>
-			this.context
-				.selectedMask()
-				?.components.find(
-					(component): component is Extract<MaskComponent, { type: 'radial' }> =>
-						component.type === 'radial'
-				) ?? null
-	);
-
-	linearGuide = $derived.by(() => {
-		if (this.context.tool() !== 'mask-linear' || this.context.selectedMask()?.kind !== 'linear')
-			return null;
-		if (this.gradientDrag)
-			return { start: this.gradientDrag.start, end: this.gradientDrag.current };
-		const component = this.context
-			.selectedMask()
-			?.components.find(
-				(component): component is Extract<MaskComponent, { type: 'linear' }> =>
-					component.type === 'linear'
-			);
-		if (!component) return null;
-		const layout = linearLayout(component, this.image);
-		return {
-			start: pixelToNormalized(layout.negative, this.image),
-			end: pixelToNormalized(layout.positive, this.image)
-		};
+	private selectedGradientComponent = $derived.by(() => {
+		const mask = this.context.selectedMask();
+		if (!mask?.visible || (mask.kind !== 'linear' && mask.kind !== 'radial')) return null;
+		return (
+			mask.components.find(
+				(component): component is GradientComponent => component.type === mask.kind
+			) ?? null
+		);
 	});
 
-	radialGuide = $derived.by(() =>
-		this.context.tool() === 'mask-radial' && this.context.selectedMask()?.kind === 'radial'
-			? this.gradientDrag
-				? {
-						center: this.gradientDrag.start,
-						radius: Math.min(
-							1,
-							Math.max(
-								0.002,
-								this.normalizedDistance(this.gradientDrag.start, this.gradientDrag.current)
-							)
-						),
-						feather: this.radialComponent?.feather ?? 0.5
-					}
-				: this.radialComponent
-					? {
-							center: this.radialComponent.center,
-							radius: this.radialComponent.radiusX,
-							feather: this.radialComponent.feather
-						}
-					: null
-			: null
-	);
+	gizmoComponent = $derived.by((): GradientComponent | null => {
+		if (!this.context.enabled()) return null;
+		const drag = this.gradientDrag;
+		if (drag) return this.dragGradientComponent(drag);
+		return this.selectedGradientComponent;
+	});
 
-	livePaint: LivePaint | null = $derived.by(() =>
-		this.gradientDrag && this.context.tool() === 'mask-linear'
-			? { kind: 'linear', start: this.gradientDrag.start, end: this.gradientDrag.current }
-			: this.gradientDrag && this.context.tool() === 'mask-radial' && this.radialGuide
-				? {
-						kind: 'radial',
-						center: this.radialGuide.center,
-						radius: this.radialGuide.radius,
-						feather: this.radialGuide.feather
-					}
-				: this.maskStroke &&
-					  this.context.tool() === 'mask' &&
-					  this.context.maskBrushOperation() === 'add'
-					? {
-							kind: 'brush',
-							points: this.maskStroke.points,
-							size: this.maskBrushSize,
-							feather: MASK_BRUSH_FEATHER,
-							flow: MASK_BRUSH_FLOW
-						}
-					: null
-	);
+	private dragGradientComponent(drag: {
+		start: NormalizedPoint;
+		current: NormalizedPoint;
+	}): GradientComponent | null {
+		const mask = this.context.selectedMask();
+		if (!mask) return null;
+		const existing = this.selectedGradientComponent;
+		const base = {
+			id: existing?.id ?? 'pending',
+			operation: existing?.operation ?? ('add' as const),
+			raster: null
+		};
+		if (mask.kind === 'linear') {
+			return {
+				...base,
+				type: 'linear',
+				...linearGeometryFromSpan(drag.start, drag.current, this.image)
+			};
+		}
+		if (mask.kind !== 'radial') return null;
+		const radius = Math.max(
+			MIN_GRADIENT_EXTENT,
+			Math.min(1, this.normalizedDistance(drag.start, drag.current))
+		);
+		return {
+			...base,
+			type: 'radial',
+			center: drag.start,
+			radiusX: radius,
+			radiusY: radius,
+			rotation: 0,
+			feather: existing?.type === 'radial' ? existing.feather : 0.5
+		};
+	}
+
+	livePaint: LivePaint | null = $derived.by(() => {
+		const component = this.gradientDrag ? this.gizmoComponent : null;
+		if (component?.type === 'linear') {
+			return {
+				kind: 'linear',
+				anchor: component.anchor,
+				rotation: component.rotation,
+				compression: component.compression
+			};
+		}
+		if (component?.type === 'radial') {
+			return {
+				kind: 'radial',
+				center: component.center,
+				radiusX: component.radiusX,
+				radiusY: component.radiusY,
+				rotation: component.rotation,
+				feather: component.feather
+			};
+		}
+		return this.maskStroke &&
+			this.context.tool() === 'mask' &&
+			this.context.maskBrushOperation() === 'add'
+			? {
+					kind: 'brush',
+					points: this.maskStroke.points,
+					size: this.maskBrushSize,
+					feather: MASK_BRUSH_FEATHER,
+					flow: MASK_BRUSH_FLOW
+				}
+			: null;
+	});
 
 	resize = (next: Size) => {
 		this.size = next;

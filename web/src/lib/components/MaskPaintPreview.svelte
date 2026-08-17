@@ -2,8 +2,15 @@
 	import type { NormalizedPoint } from '$lib/edit-document';
 
 	export type LivePaint =
-		| { kind: 'linear'; start: NormalizedPoint; end: NormalizedPoint }
-		| { kind: 'radial'; center: NormalizedPoint; radius: number; feather: number }
+		| { kind: 'linear'; anchor: NormalizedPoint; rotation: number; compression: number }
+		| {
+				kind: 'radial';
+				center: NormalizedPoint;
+				radiusX: number;
+				radiusY: number;
+				rotation: number;
+				feather: number;
+		  }
 		| { kind: 'brush'; points: NormalizedPoint[]; size: number; feather: number; flow: number };
 </script>
 
@@ -74,11 +81,16 @@
 	function paintShape(context: CanvasRenderingContext2D, width: number, height: number) {
 		if (paint.kind === 'linear') {
 			context.clearRect(0, 0, width, height);
+			const maxDim = Math.max(width, height);
+			const originX = paint.anchor.x * width;
+			const originY = paint.anchor.y * height;
+			const reachX = Math.cos(paint.rotation) * paint.compression * maxDim;
+			const reachY = Math.sin(paint.rotation) * paint.compression * maxDim;
 			const gradient = context.createLinearGradient(
-				paint.start.x * width,
-				paint.start.y * height,
-				paint.end.x * width,
-				paint.end.y * height
+				originX - reachX,
+				originY - reachY,
+				originX + reachX,
+				originY + reachY
 			);
 			gradient.addColorStop(0, 'rgba(255,255,255,0)');
 			gradient.addColorStop(1, 'rgba(255,255,255,1)');
@@ -86,15 +98,19 @@
 			context.fillRect(0, 0, width, height);
 		} else if (paint.kind === 'radial') {
 			context.clearRect(0, 0, width, height);
-			const edge = paint.radius * Math.max(width, height);
+			const maxDim = Math.max(width, height);
+			const edge = paint.radiusX * maxDim;
 			const core = Math.max(0, Math.min(edge * (1 - paint.feather), edge - 0.01));
-			const x = paint.center.x * width;
-			const y = paint.center.y * height;
-			const gradient = context.createRadialGradient(x, y, core, x, y, edge);
+			context.save();
+			context.translate(paint.center.x * width, paint.center.y * height);
+			context.rotate(paint.rotation);
+			context.scale(1, paint.radiusY / paint.radiusX);
+			const gradient = context.createRadialGradient(0, 0, core, 0, 0, edge);
 			gradient.addColorStop(0, 'rgba(255,255,255,1)');
 			gradient.addColorStop(1, 'rgba(255,255,255,0)');
 			context.fillStyle = gradient;
-			context.fillRect(0, 0, width, height);
+			context.fillRect(-maxDim * 4, -maxDim * 4, maxDim * 8, maxDim * 8);
+			context.restore();
 		} else {
 			stampNewPoints(context, paint, width, height);
 		}

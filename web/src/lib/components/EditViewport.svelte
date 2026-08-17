@@ -231,10 +231,11 @@
 								viewportScale={viewport.transform.scale}
 							/>
 						{/if}
-						{#if viewport.linearGuide || viewport.radialGuide}
+						{#if viewport.gizmoComponent}
 							<MaskGradientGuides
-								linear={viewport.linearGuide}
-								radial={viewport.radialGuide}
+								component={viewport.gizmoComponent}
+								hover={null}
+								active={null}
 								imageWidth={imageSize.width}
 								imageHeight={imageSize.height}
 								viewportScale={viewport.transform.scale}
