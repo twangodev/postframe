@@ -1,8 +1,13 @@
 use crate::color;
+use crate::detail::{DetailPlanes, TilePlacement};
+use crate::develop::PixelContext;
 use crate::{
     ColorSettings, DevelopSettings, DevelopTransform, LightSettings, Merged, Rendered, Result,
     parallel,
 };
+
+#[cfg(any(test, feature = "wasm"))]
+use crate::{DetailSettings, detail::reduce_noise};
 
 #[cfg(feature = "wasm")]
 use crate::decode::linear::Linear;
@@ -20,9 +25,9 @@ pub struct Preview {
 }
 
 pub(crate) struct PreparedRegion {
-    width: usize,
-    height: usize,
+    placement: TilePlacement,
     rgb: Vec<[f32; 3]>,
+    planes: Option<DetailPlanes>,
 }
 
 #[cfg(feature = "wasm")]
@@ -75,15 +80,50 @@ impl PreparedRegion {
             }
         }
 
-        Self {
-            width: out_width,
-            height: out_height,
+        Self::around(
+            TilePlacement {
+                origin: (x, y),
+                size: (out_width, out_height),
+                bin,
+                image: (merged.radiance.width, merged.radiance.height),
+            },
             rgb,
+        )
+    }
+
+    fn around(placement: TilePlacement, rgb: Vec<[f32; 3]>) -> Self {
+        Self {
+            placement,
+            rgb,
+            planes: None,
         }
     }
 
+    /// Runs the spatial stages: the tile is cleaned first, then its blur planes
+    /// come off the cleaned luminance, so both depend only on the source and the
+    /// noise controls and so cache alongside the tile.
+    #[cfg(any(test, feature = "wasm"))]
+    pub(crate) fn detailed(mut self, settings: &DetailSettings) -> Self {
+        if let Some(cleaned) = reduce_noise(&self.rgb, self.placement.size, settings) {
+            self.rgb = cleaned;
+        }
+        self.planes = DetailPlanes::build(&self.rgb, self.placement, settings);
+        self
+    }
+
+    #[cfg(all(test, feature = "wasm"))]
+    pub(crate) fn fabricated(placement: TilePlacement, settings: &DetailSettings) -> Self {
+        let rgb = vec![[0.25, 0.5, 0.75]; placement.size.0 * placement.size.1];
+        Self::around(placement, rgb).detailed(settings)
+    }
+
     #[cfg(feature = "wasm")]
-    fn from_level(level: &MipLevel, origin: (usize, usize), size: (usize, usize)) -> Self {
+    fn from_level(
+        level: &MipLevel,
+        origin: (usize, usize),
+        size: (usize, usize),
+        image: (usize, usize),
+    ) -> Self {
         let x = origin.0 / level.bin;
         let y = origin.1 / level.bin;
         let width = size.0.div_ceil(level.bin).min(level.image.width - x);
@@ -93,22 +133,39 @@ impl PreparedRegion {
             let start = row * level.image.width + x;
             rgb.extend_from_slice(&level.image.rgb[start..start + width]);
         }
-        Self { width, height, rgb }
+        Self::around(
+            TilePlacement {
+                origin: (x * level.bin, y * level.bin),
+                size: (width, height),
+                bin: level.bin,
+                image,
+            },
+            rgb,
+        )
     }
 
-    #[cfg(feature = "wasm")]
+    #[cfg(any(test, feature = "wasm"))]
     pub(crate) fn byte_len(&self) -> usize {
         self.rgb.len() * std::mem::size_of::<[f32; 3]>()
+            + self.planes.as_ref().map_or(0, DetailPlanes::byte_len)
     }
 
     #[cfg(feature = "wasm")]
     pub(crate) fn dimensions(&self) -> (usize, usize) {
-        (self.width, self.height)
+        self.placement.size
     }
 
     #[cfg(feature = "wasm")]
     pub(crate) fn rgba32(&self) -> Vec<f32> {
         parallel::map_pixels(&self.rgb, |pixel| [pixel[0], pixel[1], pixel[2], 1.0])
+    }
+
+    #[cfg(feature = "wasm")]
+    pub(crate) fn stacked_planes(&self) -> Vec<f32> {
+        self.planes
+            .as_ref()
+            .map(DetailPlanes::stacked)
+            .unwrap_or_default()
     }
 }
 
@@ -146,7 +203,14 @@ impl MipPyramid {
         self.levels
             .iter()
             .find(|level| level.bin == bin)
-            .map(|level| PreparedRegion::from_level(level, origin, size))
+            .map(|level| {
+                PreparedRegion::from_level(
+                    level,
+                    origin,
+                    size,
+                    (merged.radiance.width, merged.radiance.height),
+                )
+            })
             .unwrap_or_else(|| PreparedRegion::new(merged, origin, size, bin))
     }
 
@@ -315,10 +379,15 @@ impl Preview {
         develop: &DevelopTransform,
         tone: bool,
     ) -> Vec<u8> {
-        let gain = (2.0f32).powf(develop.settings().light.exposure);
-        let white = (merged.report.radiance_max * gain).max(1.0);
-        parallel::map_pixels(&merged.radiance.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, develop)
+        let whole = TilePlacement {
+            origin: (0, 0),
+            size: (merged.radiance.width, merged.radiance.height),
+            bin: 1,
+            image: (merged.radiance.width, merged.radiance.height),
+        };
+        let tile = TileRender::new(merged, develop, tone, whole, None);
+        parallel::map_indexed_pixels(&merged.radiance.rgb, |index, &pixel| {
+            self.render_pixel(pixel, index, &tile)
         })
     }
 
@@ -342,33 +411,31 @@ impl Preview {
         develop: &DevelopTransform,
         tone: bool,
     ) -> Rendered {
-        let gain = (2.0f32).powf(develop.settings().light.exposure);
-        let white = (merged.report.radiance_max * gain).max(1.0);
-        let rgb8 = parallel::map_pixels(&region.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, develop)
+        let tile = TileRender::new(
+            merged,
+            develop,
+            tone,
+            region.placement,
+            region.planes.as_ref(),
+        );
+        let rgb8 = parallel::map_indexed_pixels(&region.rgb, |index, &pixel| {
+            self.render_pixel(pixel, index, &tile)
         });
 
         Rendered {
-            width: region.width,
-            height: region.height,
+            width: region.placement.size.0,
+            height: region.placement.size.1,
             rgb8,
         }
     }
 
-    fn render_pixel(
-        &self,
-        pixel: [f32; 3],
-        gain: f32,
-        white: f32,
-        tone: bool,
-        develop: &DevelopTransform,
-    ) -> [u8; 3] {
-        let exposed = pixel.map(|channel| channel * gain);
-        let compress = if tone {
+    fn render_pixel(&self, pixel: [f32; 3], index: usize, tile: &TileRender) -> [u8; 3] {
+        let exposed = pixel.map(|channel| channel * tile.gain);
+        let compress = if tile.tone {
             let brightest = exposed
                 .iter()
                 .fold(0.0f32, |maximum, &channel| maximum.max(channel));
-            (1.0 + brightest / (white * white)) / (1.0 + brightest)
+            (1.0 + brightest / (tile.white * tile.white)) / (1.0 + brightest)
         } else {
             1.0
         };
@@ -378,7 +445,48 @@ impl Preview {
                 .round()
                 .clamp(0.0, 255.0) as u8
         });
-        develop.apply_encoded_pixel(coded)
+        tile.develop
+            .apply_encoded_pixel_at(coded, tile.at(index), tile.planes)
+    }
+}
+
+/// Everything the per-pixel chain needs that does not vary within a tile.
+struct TileRender<'a> {
+    develop: &'a DevelopTransform,
+    planes: Option<&'a DetailPlanes>,
+    placement: TilePlacement,
+    gain: f32,
+    white: f32,
+    tone: bool,
+}
+
+impl<'a> TileRender<'a> {
+    fn new(
+        merged: &Merged,
+        develop: &'a DevelopTransform,
+        tone: bool,
+        placement: TilePlacement,
+        planes: Option<&'a DetailPlanes>,
+    ) -> Self {
+        let gain = (2.0f32).powf(develop.settings().light.exposure);
+        Self {
+            develop,
+            planes,
+            placement,
+            gain,
+            white: (merged.report.radiance_max * gain).max(1.0),
+            tone,
+        }
+    }
+
+    fn at(&self, index: usize) -> PixelContext {
+        let width = self.placement.size.0.max(1);
+        PixelContext {
+            x: self.placement.origin.0 + (index % width) * self.placement.bin,
+            y: self.placement.origin.1 + (index / width) * self.placement.bin,
+            image_width: self.placement.image.0,
+            image_height: self.placement.image.1,
+        }
     }
 }
 
@@ -554,7 +662,7 @@ mod tests {
             for bin in [2, 4, 8] {
                 let direct = PreparedRegion::new(&odd, (0, 0), (7, 5), bin);
                 let cached = pyramid.prepare(&odd, (0, 0), (7, 5), bin);
-                assert_eq!((cached.width, cached.height), (direct.width, direct.height));
+                assert_eq!(cached.placement.size, direct.placement.size);
                 for (actual, expected) in cached.rgb.iter().zip(direct.rgb) {
                     for (actual, expected) in actual.iter().zip(expected) {
                         assert!((actual - expected).abs() < 1e-6);
@@ -562,6 +670,91 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn textured_fixture() -> Merged {
+        let mut merged = merged_fixture();
+        merged.radiance.rgb = (0..64)
+            .map(|index| {
+                let (x, y) = (index % 8, index / 8);
+                let base = if x < 4 { 0.08 } else { 0.32 };
+                let grain = ((x * 5 + y * 3) % 4) as f32 / 3.0 - 0.5;
+                let value = base * (1.0 + 0.4 * grain);
+                [value * 1.1, value, value * 0.85]
+            })
+            .collect();
+        merged
+    }
+
+    #[test]
+    fn a_neutral_detail_group_leaves_a_prepared_tile_untouched() {
+        let merged = textured_fixture();
+        let region = PreparedRegion::new(&merged, (0, 0), (8, 8), 1);
+        let detailed =
+            PreparedRegion::new(&merged, (0, 0), (8, 8), 1).detailed(&DetailSettings::NEUTRAL);
+        assert_eq!(detailed.rgb, region.rgb);
+        assert!(detailed.planes.is_none());
+        assert_eq!(detailed.byte_len(), region.byte_len());
+    }
+
+    #[test]
+    fn presence_reaches_a_prepared_tile_and_grows_its_cache_footprint() {
+        let merged = textured_fixture();
+        let preview = Preview::new(&merged);
+        let settings = DetailSettings {
+            clarity: 80.0,
+            texture: 60.0,
+            ..DetailSettings::NEUTRAL
+        };
+        let plain = PreparedRegion::new(&merged, (0, 0), (8, 8), 1);
+        let detailed = PreparedRegion::new(&merged, (0, 0), (8, 8), 1).detailed(&settings);
+        assert!(detailed.planes.is_some());
+        assert_eq!(
+            detailed.byte_len(),
+            plain.byte_len() + 8 * 8 * 2 * std::mem::size_of::<f32>()
+        );
+
+        let develop = |detail| {
+            DevelopTransform::new(DevelopSettings {
+                detail,
+                ..DevelopSettings::neutral()
+            })
+            .unwrap()
+        };
+        let presence =
+            preview.render_prepared_adjusted(&merged, &detailed, &develop(settings), true);
+        let flat = preview.render_prepared_adjusted(
+            &merged,
+            &plain,
+            &develop(DetailSettings::NEUTRAL),
+            true,
+        );
+        assert_ne!(presence.rgb8, flat.rgb8);
+
+        let unused = preview.render_prepared_adjusted(
+            &merged,
+            &detailed,
+            &develop(DetailSettings::NEUTRAL),
+            true,
+        );
+        assert_eq!(unused.rgb8, flat.rgb8);
+    }
+
+    #[test]
+    fn noise_reduction_reaches_a_prepared_tile_before_the_chain() {
+        let merged = textured_fixture();
+        let settings = DetailSettings {
+            noise_luminance: 100.0,
+            ..DetailSettings::NEUTRAL
+        };
+        let cleaned = PreparedRegion::new(&merged, (0, 0), (8, 8), 1).detailed(&settings);
+        let plain = PreparedRegion::new(&merged, (0, 0), (8, 8), 1);
+        assert!(cleaned.planes.is_none(), "noise alone needs no blur plane");
+        assert_ne!(cleaned.rgb, plain.rgb);
+        let mean = |region: &PreparedRegion| {
+            region.rgb.iter().map(|pixel| pixel[1]).sum::<f32>() / region.rgb.len() as f32
+        };
+        assert!((mean(&cleaned) - mean(&plain)).abs() < mean(&plain) * 0.05);
     }
 
     #[test]

@@ -28,9 +28,10 @@ mod wasm;
 pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
+pub use detail::{DetailPlanes, DetailSample, DetailTransform, TilePlacement};
 pub use develop::{
     CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
-    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings,
+    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings, PixelContext,
 };
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};

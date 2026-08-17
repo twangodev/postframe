@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 use super::shared::{develop_settings, encode_jpeg, err};
 use crate::bracket::{self, Frame, FrameData};
 use crate::preview::{MipPyramid, PreparedRegion};
-use crate::{DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
+use crate::{DetailSettings, DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const MAX_PYRAMID_BIN: usize = 64;
@@ -19,6 +19,26 @@ struct TileRegion {
     width: usize,
     height: usize,
     bin: usize,
+    detail: DetailKey,
+}
+
+/// The tile-side work a cached region already carries: cleaning it and building
+/// its blur planes depend on nothing else in the develop chain.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DetailKey {
+    noise_luminance: u32,
+    noise_color: u32,
+    planes: bool,
+}
+
+impl From<&DetailSettings> for DetailKey {
+    fn from(settings: &DetailSettings) -> Self {
+        Self {
+            noise_luminance: settings.noise_luminance.to_bits(),
+            noise_color: settings.noise_color.to_bits(),
+            planes: !settings.blur_radii().is_empty(),
+        }
+    }
 }
 
 struct TileCache {
@@ -182,6 +202,14 @@ pub struct Session {
     tiles: TileCache,
     develop: Option<DevelopTransform>,
     preview: Option<CachedPreview>,
+    preview_source: Option<PreviewSource>,
+}
+
+/// The thumbnail put through the tile-side stages, kept while those controls
+/// hold still so dragging clarity never rebuilds a blur plane.
+struct PreviewSource {
+    detail: DetailKey,
+    region: PreparedRegion,
 }
 
 #[wasm_bindgen]
@@ -194,6 +222,7 @@ pub struct RenderedTile {
 #[wasm_bindgen]
 pub struct LinearTile {
     rgba: Vec<f32>,
+    detail: Vec<f32>,
     width: u32,
     height: u32,
 }
@@ -203,6 +232,12 @@ impl LinearTile {
     #[wasm_bindgen(getter)]
     pub fn rgba(&self) -> Vec<f32> {
         self.rgba.clone()
+    }
+
+    /// The fine plane followed by the coarse one, empty when no stage reads them.
+    #[wasm_bindgen(getter)]
+    pub fn detail(&self) -> Vec<f32> {
+        self.detail.clone()
     }
 
     #[wasm_bindgen(getter)]
@@ -289,6 +324,7 @@ impl Session {
             tiles: TileCache::new(TILE_CACHE_BUDGET),
             develop: None,
             preview: None,
+            preview_source: None,
         }
     }
 
@@ -335,6 +371,7 @@ impl Session {
         let lut = Preview::new(&thumb);
         self.tiles.clear();
         self.preview = None;
+        self.preview_source = None;
         self.thumb = Some((thumb, lut));
         self.pyramid = Some(pyramid);
         self.merged = Some(merged);
@@ -449,6 +486,7 @@ impl Session {
         tone: bool,
     ) -> Result<RenderedTile, JsError> {
         self.prepare_develop(develop_settings(settings)?)?;
+        let detail = self.detail_settings()?;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (_, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
@@ -465,13 +503,15 @@ impl Session {
             width,
             height,
             bin,
+            detail: DetailKey::from(&detail),
         };
         if !self.tiles.contains(&region) {
             let prepared = self
                 .pyramid
                 .as_ref()
                 .ok_or(JsError::new("merge first"))?
-                .prepare(merged, (x, y), (width, height), bin);
+                .prepare(merged, (x, y), (width, height), bin)
+                .detailed(&detail);
             self.tiles.insert(region, prepared);
         }
         let prepared = self
@@ -494,6 +534,7 @@ impl Session {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn render_tile_linear(
         &mut self,
         x: u32,
@@ -501,7 +542,9 @@ impl Session {
         width: u32,
         height: u32,
         bin: u32,
+        settings: JsValue,
     ) -> Result<LinearTile, JsError> {
+        let detail = develop_settings(settings)?.detail;
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
         let (x, y, width, height, bin) = (
             x as usize,
@@ -517,13 +560,15 @@ impl Session {
             width,
             height,
             bin,
+            detail: DetailKey::from(&detail),
         };
         if !self.tiles.contains(&region) {
             let prepared = self
                 .pyramid
                 .as_ref()
                 .ok_or(JsError::new("merge first"))?
-                .prepare(merged, (x, y), (width, height), bin);
+                .prepare(merged, (x, y), (width, height), bin)
+                .detailed(&detail);
             self.tiles.insert(region, prepared);
         }
         let prepared = self
@@ -533,6 +578,7 @@ impl Session {
         let (tile_width, tile_height) = prepared.dimensions();
         Ok(LinearTile {
             rgba: prepared.rgba32(),
+            detail: prepared.stacked_planes(),
             width: tile_width as u32,
             height: tile_height as u32,
         })
@@ -557,6 +603,15 @@ impl Session {
         Ok(())
     }
 
+    fn detail_settings(&self) -> Result<DetailSettings, JsError> {
+        Ok(self
+            .develop
+            .as_ref()
+            .ok_or(JsError::new("missing develop transform"))?
+            .settings()
+            .detail)
+    }
+
     fn prepare_preview(&mut self, settings: DevelopSettings, tone: bool) -> Result<(), JsError> {
         if self
             .preview
@@ -566,15 +621,39 @@ impl Session {
             return Ok(());
         }
         self.prepare_develop(settings.clone())?;
+        if !settings.detail.is_neutral() {
+            self.prepare_preview_source(settings.detail)?;
+        }
         let develop = self
             .develop
             .as_ref()
             .ok_or(JsError::new("missing develop transform"))?;
         let (thumb, lut) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let rgb8 = match self.preview_source.as_ref() {
+            Some(source) if !settings.detail.is_neutral() => {
+                lut.render_prepared_adjusted(thumb, &source.region, develop, tone)
+                    .rgb8
+            }
+            _ => lut.render_adjusted(thumb, develop, tone),
+        };
         self.preview = Some(CachedPreview {
             settings,
             tone,
-            rgb8: lut.render_adjusted(thumb, develop, tone),
+            rgb8,
+        });
+        Ok(())
+    }
+
+    fn prepare_preview_source(&mut self, detail: DetailSettings) -> Result<(), JsError> {
+        let key = DetailKey::from(&detail);
+        if self.preview_source.as_ref().map(|source| source.detail) == Some(key) {
+            return Ok(());
+        }
+        let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
+        let size = (thumb.radiance.width, thumb.radiance.height);
+        self.preview_source = Some(PreviewSource {
+            detail: key,
+            region: PreparedRegion::new(thumb, (0, 0), size, 1).detailed(&detail),
         });
         Ok(())
     }
@@ -583,5 +662,82 @@ impl Session {
 impl Default for Session {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::detail::TilePlacement;
+
+    fn detail(name: &str, value: f32) -> DetailSettings {
+        let mut settings = DetailSettings::NEUTRAL;
+        match name {
+            "clarity" => settings.clarity = value,
+            "noiseLuminance" => settings.noise_luminance = value,
+            "noiseColor" => settings.noise_color = value,
+            "dehaze" => settings.dehaze = value,
+            _ => panic!("unknown control"),
+        }
+        settings
+    }
+
+    fn region(detail: &DetailSettings) -> TileRegion {
+        TileRegion {
+            x: 0,
+            y: 0,
+            width: 16,
+            height: 16,
+            bin: 1,
+            detail: DetailKey::from(detail),
+        }
+    }
+
+    #[test]
+    fn the_tile_cache_keys_on_the_tile_side_work_alone() {
+        let neutral = DetailSettings::NEUTRAL;
+        for changed in [
+            detail("noiseLuminance", 40.0),
+            detail("noiseColor", 15.0),
+            detail("clarity", 20.0),
+        ] {
+            assert_ne!(region(&changed), region(&neutral));
+        }
+        assert_eq!(region(&detail("dehaze", 80.0)), region(&neutral));
+        assert_eq!(
+            region(&detail("clarity", 20.0)),
+            region(&detail("clarity", 90.0))
+        );
+    }
+
+    #[test]
+    fn the_cache_budget_counts_the_blur_planes() {
+        let placement = TilePlacement {
+            origin: (0, 0),
+            size: (16, 16),
+            bin: 1,
+            image: (1024, 768),
+        };
+        let quiet = DetailSettings::NEUTRAL;
+        let sharp = detail("clarity", 60.0);
+        let plain = PreparedRegion::fabricated(placement, &quiet);
+        let detailed = PreparedRegion::fabricated(placement, &sharp);
+        let planes = 16 * 16 * 2 * std::mem::size_of::<f32>();
+        assert_eq!(detailed.byte_len(), plain.byte_len() + planes);
+
+        let mut cache = TileCache::new(plain.byte_len() + planes);
+        cache.insert(
+            region(&quiet),
+            PreparedRegion::fabricated(placement, &quiet),
+        );
+        cache.insert(
+            region(&sharp),
+            PreparedRegion::fabricated(placement, &sharp),
+        );
+        assert!(
+            !cache.contains(&region(&quiet)),
+            "the planes must count toward the budget"
+        );
+        assert_eq!(cache.bytes, detailed.byte_len());
     }
 }

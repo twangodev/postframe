@@ -1,3 +1,4 @@
+use crate::detail::{DetailPlanes, DetailTransform};
 use crate::grade::{ColorSettings, ColorTransform};
 use crate::light::{LightSettings, LightTransform};
 use crate::{Error, Result};
@@ -419,6 +420,7 @@ pub struct DevelopTransform {
     settings: DevelopSettings,
     light: LightTransform,
     color: ColorTransform,
+    detail: DetailTransform,
 }
 
 impl DevelopTransform {
@@ -427,6 +429,7 @@ impl DevelopTransform {
         Ok(Self {
             light: LightTransform::new(settings.light)?,
             color: ColorTransform::new(settings.color)?,
+            detail: DetailTransform::new(settings.detail),
             settings,
         })
     }
@@ -459,6 +462,20 @@ impl DevelopTransform {
     pub fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.light
             .apply_encoded_pixel(self.color.apply_display_pixel(pixel))
+    }
+
+    /// The tile chain, where the spatial stages have the planes they need.
+    pub fn apply_encoded_pixel_at(
+        &self,
+        pixel: [u8; 3],
+        at: PixelContext,
+        planes: Option<&DetailPlanes>,
+    ) -> [u8; 3] {
+        let colored = self.color.apply_display_pixel(pixel);
+        let presented = self
+            .detail
+            .apply(colored, planes.map(|planes| planes.sample(at)));
+        self.light.apply_encoded_pixel(presented)
     }
 }
 
@@ -532,6 +549,7 @@ mod wire {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::detail::TilePlacement;
 
     fn vivid() -> DevelopSettings {
         DevelopSettings::tonal(
@@ -570,6 +588,104 @@ mod tests {
             .apply_display_rgba8(&staged)
             .unwrap();
         assert_eq!(transform.apply_display_rgba8(&source).unwrap(), expected);
+    }
+
+    fn presence() -> DevelopSettings {
+        DevelopSettings {
+            detail: DetailSettings {
+                clarity: 70.0,
+                texture: -40.0,
+                dehaze: 55.0,
+                sharpen_amount: 90.0,
+                ..DetailSettings::NEUTRAL
+            },
+            ..vivid()
+        }
+    }
+
+    fn single_pixel_planes(settings: &DetailSettings) -> DetailPlanes {
+        let tile: Vec<[f32; 3]> = (0..16)
+            .map(|index| [0.05 + index as f32 * 0.06; 3])
+            .collect();
+        DetailPlanes::build(
+            &tile,
+            TilePlacement {
+                origin: (0, 0),
+                size: (4, 4),
+                bin: 1,
+                image: (4, 4),
+            },
+            settings,
+        )
+        .unwrap()
+    }
+
+    fn origin(image: (usize, usize)) -> PixelContext {
+        PixelContext {
+            x: 0,
+            y: 0,
+            image_width: image.0,
+            image_height: image.1,
+        }
+    }
+
+    #[test]
+    fn the_plane_free_entry_points_leave_the_detail_group_inactive() {
+        let settings = presence();
+        let detailed = DevelopTransform::new(settings.clone()).unwrap();
+        let tonal = DevelopTransform::new(DevelopSettings {
+            detail: DetailSettings::NEUTRAL,
+            ..settings
+        })
+        .unwrap();
+        for code in [0u8, 17, 96, 128, 200, 255] {
+            let pixel = [code, 255 - code, code / 3];
+            assert_eq!(
+                detailed.apply_display_pixel(pixel),
+                tonal.apply_display_pixel(pixel)
+            );
+            assert_eq!(
+                detailed.apply_encoded_pixel(pixel),
+                tonal.apply_encoded_pixel(pixel)
+            );
+        }
+    }
+
+    #[test]
+    fn the_detail_stages_run_between_color_and_light() {
+        let settings = presence();
+        let transform = DevelopTransform::new(settings.clone()).unwrap();
+        let planes = single_pixel_planes(&settings.detail);
+        let color = ColorTransform::new(settings.color).unwrap();
+        let light = LightTransform::new(settings.light).unwrap();
+        let detail = DetailTransform::new(settings.detail);
+        for code in [12u8, 77, 143, 219] {
+            let pixel = [code, code / 2, 255 - code];
+            let at = origin((4, 4));
+            let staged = light.apply_encoded_pixel(
+                detail.apply(color.apply_display_pixel(pixel), Some(planes.sample(at))),
+            );
+            assert_eq!(
+                transform.apply_encoded_pixel_at(pixel, at, Some(&planes)),
+                staged
+            );
+        }
+    }
+
+    #[test]
+    fn a_neutral_detail_group_renders_a_tile_exactly_as_before() {
+        let transform = DevelopTransform::new(vivid()).unwrap();
+        let planes = single_pixel_planes(&DetailSettings {
+            clarity: 40.0,
+            ..DetailSettings::NEUTRAL
+        });
+        for code in 0..=255u8 {
+            let pixel = [code, 255 - code, 128];
+            assert_eq!(
+                transform.apply_encoded_pixel_at(pixel, origin((4, 4)), Some(&planes)),
+                transform.apply_encoded_pixel(pixel)
+            );
+        }
     }
 
     #[test]
