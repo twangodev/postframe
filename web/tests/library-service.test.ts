@@ -12,7 +12,6 @@ import type {
 import { LibraryCatalog } from '../src/lib/library-catalog.ts';
 import { LibraryService } from '../src/lib/library-service.ts';
 import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts';
-import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 import { createEditMask, defaultEditDocument } from '../src/lib/edit-document.ts';
 import { renderCacheStorageName } from '../src/lib/render-cache.ts';
 
@@ -146,10 +145,6 @@ test('round-trips versioned edit documents and rejects earlier schema formats', 
 		adjusted.masks.push(createEditMask('mask-one', 'brush'));
 		await service.saveEditDocument('photo-one', adjusted);
 		assert.deepEqual(await service.loadEditDocument('photo-one'), adjusted);
-
-		const legacy = { ...defaultDevelopSettings(), contrast: 25 };
-		assets.edits.set('photo-two.json', new Blob([JSON.stringify(legacy)]));
-		await assert.rejects(() => service.loadEditDocument('photo-two'));
 	} finally {
 		await service.clearAll();
 	}

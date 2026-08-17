@@ -10,7 +10,6 @@ import {
 	editMaskSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
-import { defaultColorSettings } from '../src/lib/develop-settings.ts';
 
 test('creates an independent versioned non-destructive document', () => {
 	const first = defaultEditDocument('photo-one');
