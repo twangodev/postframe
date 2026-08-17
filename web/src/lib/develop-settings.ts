@@ -279,7 +279,7 @@ export function tonalDevelopSettings(light: LightSettings, color: ColorSettings)
 }
 
 export function cloneDevelopSettings(settings: DevelopSettings): DevelopSettings {
-	return structuredClone(settings);
+	return developSettingsSchema.parse(settings);
 }
 
 export function scalarAdjustments(settings: DevelopSettings): AdjustmentRecord {

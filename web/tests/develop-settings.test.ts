@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
 	curvePointsSchema,
 	defaultDevelopSettings,
+	cloneDevelopSettings,
 	developSettingsSchema,
 	identityCurve,
 	tonalDevelopSettings
@@ -80,4 +81,16 @@ test('widening tonal settings detaches the supplied groups', () => {
 	});
 	settings.light.exposure = 2;
 	assert.equal(light.exposure, 0);
+});
+
+test('clones settings held behind a reactive proxy', () => {
+	const settings = defaultDevelopSettings();
+	const reactive = new Proxy(settings, {});
+	const cloned = cloneDevelopSettings(reactive);
+
+	assert.deepEqual(cloned, settings);
+	cloned.light.exposure = 2;
+	cloned.curve.luminance[0].y = 0.5;
+	assert.equal(settings.light.exposure, 0);
+	assert.equal(settings.curve.luminance[0].y, 0);
 });
