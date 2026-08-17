@@ -1,7 +1,8 @@
 use crate::color;
+use crate::develop::PixelContext;
 use crate::{
-    ColorSettings, DevelopSettings, DevelopTransform, LightSettings, Merged, Rendered, Result,
-    parallel,
+    ColorSettings, DevelopSettings, DevelopTransform, DevelopedTileRegion, LightSettings, Merged,
+    Rendered, Result, parallel,
 };
 
 #[cfg(feature = "wasm")]
@@ -22,6 +23,7 @@ pub struct Preview {
 pub(crate) struct PreparedRegion {
     width: usize,
     height: usize,
+    placement: DevelopedTileRegion,
     rgb: Vec<[f32; 3]>,
 }
 
@@ -78,12 +80,23 @@ impl PreparedRegion {
         Self {
             width: out_width,
             height: out_height,
+            placement: placement(
+                (x, y),
+                (out_width, out_height),
+                bin,
+                (merged.radiance.width, merged.radiance.height),
+            ),
             rgb,
         }
     }
 
     #[cfg(feature = "wasm")]
-    fn from_level(level: &MipLevel, origin: (usize, usize), size: (usize, usize)) -> Self {
+    fn from_level(
+        level: &MipLevel,
+        origin: (usize, usize),
+        size: (usize, usize),
+        image: (usize, usize),
+    ) -> Self {
         let x = origin.0 / level.bin;
         let y = origin.1 / level.bin;
         let width = size.0.div_ceil(level.bin).min(level.image.width - x);
@@ -93,7 +106,17 @@ impl PreparedRegion {
             let start = row * level.image.width + x;
             rgb.extend_from_slice(&level.image.rgb[start..start + width]);
         }
-        Self { width, height, rgb }
+        Self {
+            width,
+            height,
+            placement: placement(
+                (x * level.bin, y * level.bin),
+                (width, height),
+                level.bin,
+                image,
+            ),
+            rgb,
+        }
     }
 
     #[cfg(feature = "wasm")]
@@ -109,6 +132,23 @@ impl PreparedRegion {
     #[cfg(feature = "wasm")]
     pub(crate) fn rgba32(&self) -> Vec<f32> {
         parallel::map_pixels(&self.rgb, |pixel| [pixel[0], pixel[1], pixel[2], 1.0])
+    }
+}
+
+/// Where a binned tile's output pixels sit in the whole image.
+fn placement(
+    origin: (usize, usize),
+    output: (usize, usize),
+    bin: usize,
+    image: (usize, usize),
+) -> DevelopedTileRegion {
+    DevelopedTileRegion {
+        image_width: image.0,
+        image_height: image.1,
+        x: origin.0,
+        y: origin.1,
+        width: (output.0 * bin).min(image.0.saturating_sub(origin.0)),
+        height: (output.1 * bin).min(image.1.saturating_sub(origin.1)),
     }
 }
 
@@ -143,10 +183,11 @@ impl MipPyramid {
         size: (usize, usize),
         bin: usize,
     ) -> PreparedRegion {
+        let image = (self.source_width, self.source_height);
         self.levels
             .iter()
             .find(|level| level.bin == bin)
-            .map(|level| PreparedRegion::from_level(level, origin, size))
+            .map(|level| PreparedRegion::from_level(level, origin, size, image))
             .unwrap_or_else(|| PreparedRegion::new(merged, origin, size, bin))
     }
 
@@ -315,11 +356,15 @@ impl Preview {
         develop: &DevelopTransform,
         tone: bool,
     ) -> Vec<u8> {
-        let gain = (2.0f32).powf(develop.settings().light.exposure);
-        let white = (merged.report.radiance_max * gain).max(1.0);
-        parallel::map_pixels(&merged.radiance.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, develop)
-        })
+        let size = (merged.radiance.width, merged.radiance.height);
+        self.render_placed(
+            merged,
+            &merged.radiance.rgb,
+            size,
+            placement((0, 0), size, 1, size),
+            develop,
+            tone,
+        )
     }
 
     pub fn render_region(
@@ -342,17 +387,40 @@ impl Preview {
         develop: &DevelopTransform,
         tone: bool,
     ) -> Rendered {
-        let gain = (2.0f32).powf(develop.settings().light.exposure);
-        let white = (merged.report.radiance_max * gain).max(1.0);
-        let rgb8 = parallel::map_pixels(&region.rgb, |&pixel| {
-            self.render_pixel(pixel, gain, white, tone, develop)
-        });
-
         Rendered {
             width: region.width,
             height: region.height,
-            rgb8,
+            rgb8: self.render_placed(
+                merged,
+                &region.rgb,
+                (region.width, region.height),
+                region.placement,
+                develop,
+                tone,
+            ),
         }
+    }
+
+    fn render_placed(
+        &self,
+        merged: &Merged,
+        rgb: &[[f32; 3]],
+        tile: (usize, usize),
+        placement: DevelopedTileRegion,
+        develop: &DevelopTransform,
+        tone: bool,
+    ) -> Vec<u8> {
+        let gain = (2.0f32).powf(develop.settings().light.exposure);
+        let white = (merged.report.radiance_max * gain).max(1.0);
+        let mut rgb8 = vec![0u8; rgb.len() * 3];
+        parallel::fill_rows(&mut rgb8, tile.0 * 3, |output_y, row| {
+            for (output_x, coded) in row.chunks_exact_mut(3).enumerate() {
+                let pixel = rgb[output_y * tile.0 + output_x];
+                let at = placement.pixel_context((output_x, output_y), tile);
+                coded.copy_from_slice(&self.render_pixel(pixel, gain, white, tone, develop, at));
+            }
+        });
+        rgb8
     }
 
     fn render_pixel(
@@ -362,6 +430,7 @@ impl Preview {
         white: f32,
         tone: bool,
         develop: &DevelopTransform,
+        at: PixelContext,
     ) -> [u8; 3] {
         let exposed = pixel.map(|channel| channel * gain);
         let compress = if tone {
@@ -378,7 +447,7 @@ impl Preview {
                 .round()
                 .clamp(0.0, 255.0) as u8
         });
-        develop.apply_encoded_pixel(coded)
+        develop.apply_encoded_pixel_at(coded, at)
     }
 }
 
@@ -562,6 +631,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn effects_follow_a_tile_to_where_it_belongs_in_the_image() {
+        let merged = merged_fixture();
+        let preview = Preview::new(&merged);
+        let develop = DevelopTransform::new(DevelopSettings {
+            effects: crate::EffectsSettings {
+                vignette_amount: -100.0,
+                grain_amount: 100.0,
+                ..crate::EffectsSettings::NEUTRAL
+            },
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let render = |origin, size| {
+            preview.render_prepared_adjusted(
+                &merged,
+                &PreparedRegion::new(&merged, origin, size, 1),
+                &develop,
+                false,
+            )
+        };
+        let whole = render((0, 0), (8, 8));
+        let corner = render((4, 4), (4, 4));
+        for row in 0..4 {
+            let start = ((row + 4) * 8 + 4) * 3;
+            assert_eq!(
+                corner.rgb8[row * 12..(row + 1) * 12],
+                whole.rgb8[start..start + 12],
+                "tile row {row} drifted from its place in the image"
+            );
+        }
+        let plain = preview.render_prepared_adjusted(
+            &merged,
+            &PreparedRegion::new(&merged, (0, 0), (8, 8), 1),
+            &DevelopTransform::new(DevelopSettings::neutral()).unwrap(),
+            false,
+        );
+        assert_ne!(whole.rgb8, plain.rgb8);
     }
 
     #[test]
