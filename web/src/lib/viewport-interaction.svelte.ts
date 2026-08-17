@@ -301,6 +301,7 @@ export class ViewportInteraction {
 	private tryBeginGizmoDrag(event: PointerEvent) {
 		if (event.button !== 0) return false;
 		if (this.gizmoDrag) return true; // one gesture at a time; swallow extra pointers
+		if (this.spaceHeld) return false;
 		const point = this.pointFor(event);
 		const imagePoint = this.imagePixel(point);
 		const existing = this.selectedGradientComponent;
@@ -367,7 +368,7 @@ export class ViewportInteraction {
 					rotation: 0,
 					compression: MIN_GRADIENT_EXTENT
 				},
-				grip: { kind: 'handle', handle: 'positive' }
+				grip: { kind: 'handle', handle: 'span' }
 			};
 		}
 		return {
@@ -413,6 +414,7 @@ export class ViewportInteraction {
 				: null;
 		this.gizmoHover =
 			!this.gizmoDrag &&
+			!this.panning &&
 			!this.objectStroke &&
 			!this.edgeRefinementStroke &&
 			!this.maskStroke &&

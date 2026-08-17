@@ -69,6 +69,20 @@ export function reduceLinearDrag(
 			)
 		};
 	}
+	if (grip.handle === 'span') {
+		const span = { x: point.x - origin.x, y: point.y - origin.y };
+		const length = Math.hypot(span.x, span.y);
+		if (length === 0) return start;
+		return {
+			...start,
+			anchor: pixelToNormalized(
+				{ x: (origin.x + point.x) / 2, y: (origin.y + point.y) / 2 },
+				image
+			),
+			rotation: snapRotation(Math.atan2(span.y, span.x), modifiers.shift),
+			compression: clampExtent(length / (2 * maxDimension(image)))
+		};
+	}
 	const anchor = normalizedToPixel(start.anchor, image);
 	if (grip.handle === 'positive' || grip.handle === 'negative') {
 		const sign = grip.handle === 'positive' ? 1 : -1;

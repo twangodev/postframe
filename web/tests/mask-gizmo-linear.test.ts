@@ -125,6 +125,41 @@ test('degenerate drags floor compression and never collapse the gizmo', () => {
 	assert.deepEqual(zero, geometry);
 });
 
+test('span drags centre the gradient between press and release', () => {
+	const grip = { kind: 'handle', handle: 'span' } as const;
+	const dragged = reduceLinearDrag(geometry, grip, { x: 60, y: 50 }, { x: 140, y: 50 }, image, {
+		shift: false
+	});
+	assert.deepEqual(dragged.anchor, { x: 0.5, y: 0.5 });
+	assert.equal(dragged.rotation, 0);
+	assertClose(dragged.compression, 0.2);
+	const snapped = reduceLinearDrag(geometry, grip, { x: 60, y: 50 }, { x: 140, y: 55 }, image, {
+		shift: true
+	});
+	assertClose(snapped.rotation, 0);
+	const steep = reduceLinearDrag(geometry, grip, { x: 100, y: 90 }, { x: 130, y: 10 }, image, {
+		shift: true
+	});
+	assertClose(steep.rotation, -5 * ROTATION_SNAP);
+	assert.deepEqual(steep.anchor, { x: 0.575, y: 0.5 });
+	const collapsed = reduceLinearDrag(geometry, grip, { x: 60, y: 50 }, { x: 60, y: 50 }, image, {
+		shift: false
+	});
+	assert.deepEqual(collapsed, geometry);
+});
+
+test('hit-testing never offers the create-only span grip', () => {
+	for (const point of [
+		{ x: 140, y: 50 },
+		{ x: 60, y: 50 },
+		{ x: 140, y: 90 },
+		{ x: 100, y: 90 }
+	]) {
+		const hit = hitTestLinear(geometry, point, image, 5);
+		assert.ok(hit?.kind !== 'handle' || hit.handle !== 'span');
+	}
+});
+
 test('converts an endpoint span into transform parameters aspect-correctly', () => {
 	const horizontal = linearGeometryFromSpan(
 		{ x: 0.25, y: 0.5 },
