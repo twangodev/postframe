@@ -37,7 +37,7 @@ import type { EditorCommand } from './editor-command';
 import type { ImageScopeData } from './image-scope';
 import type { MaskEdgeStroke } from './smart-mask';
 import type { MaskEdgeControlName } from './mask-edge-settings';
-import { AdjustmentControls } from './adjustment-controls';
+import { AdjustmentControls, type AdjustmentChange } from './adjustment-controls';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
@@ -401,6 +401,12 @@ export class WorkspaceState {
 
 	commitAdjustmentAt = (target: AdjustmentTarget, value: number) =>
 		this.controls.commitAdjustmentAt(target, value);
+
+	previewAdjustmentsAt = (changes: readonly AdjustmentChange[]) =>
+		this.controls.previewAdjustmentsAt(changes);
+
+	commitAdjustmentsAt = (changes: readonly AdjustmentChange[]) =>
+		this.controls.commitAdjustmentsAt(changes);
 
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);

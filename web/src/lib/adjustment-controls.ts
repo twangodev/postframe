@@ -15,6 +15,11 @@ import type { MaskEdgeControlName } from './mask-edge-settings';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
 import type { Photo } from './photo-record';
 
+export interface AdjustmentChange {
+	target: AdjustmentTarget;
+	value: number;
+}
+
 export interface AdjustmentControlsHost extends AdjustmentMirror {
 	readonly selectedPhoto: Photo | null;
 	readonly canAdjustLight: boolean;
@@ -47,17 +52,31 @@ export class AdjustmentControls {
 	}
 
 	previewAdjustmentAt(target: AdjustmentTarget, value: number) {
+		this.previewAdjustmentsAt([{ target, value }]);
+	}
+
+	commitAdjustmentAt(target: AdjustmentTarget, value: number) {
+		this.commitAdjustmentsAt([{ target, value }]);
+	}
+
+	/// A grading puck moves a hue and a saturation with one gesture, so previews
+	/// and commits take a whole set of changes rather than a single control.
+	previewAdjustmentsAt(changes: readonly AdjustmentChange[]) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		const adjustments = withAdjustmentAt(this.host.selectedPhoto.edit.adjustments, target, value);
+		const adjustments = changes.reduce(
+			(settings, { target, value }) => withAdjustmentAt(settings, target, value),
+			this.host.selectedPhoto.edit.adjustments
+		);
 		mirrorAdjustments(this.host, adjustments);
 		this.develop.schedule(adjustments);
 	}
 
-	commitAdjustmentAt(target: AdjustmentTarget, value: number) {
+	commitAdjustmentsAt(changes: readonly AdjustmentChange[]) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		if (!this.host.dispatchEditorCommand(adjustmentCommand(target, value))) {
-			this.releaseUnchangedPreview();
-		}
+		const applied = changes
+			.map(({ target, value }) => this.host.dispatchEditorCommand(adjustmentCommand(target, value)))
+			.some(Boolean);
+		if (!applied) this.releaseUnchangedPreview();
 	}
 
 	previewLight(control: LightControlName, value: number) {

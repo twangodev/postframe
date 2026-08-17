@@ -7,9 +7,10 @@
 
 	interface Props {
 		workspace: WorkspaceState;
+		onOpenMixer: () => void;
 	}
 
-	let { workspace }: Props = $props();
+	let { workspace, onOpenMixer }: Props = $props();
 
 	const preview = (control: ColorControlName) => (value: number) =>
 		workspace.previewAdjustment('color', control, value);
@@ -56,6 +57,7 @@
 	/>
 	<button
 		type="button"
+		onclick={onOpenMixer}
 		class="mt-2 flex w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 py-2 text-[11px] text-muted hover:text-text"
 	>
 		color mixer <SlidersHorizontal size={12} />
