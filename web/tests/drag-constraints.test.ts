@@ -5,6 +5,7 @@ import {
 	ROTATION_SNAP,
 	axisLockedDelta,
 	normalizeRotation,
+	rotationLabel,
 	snapRotation
 } from '../src/lib/drag-constraints.ts';
 
@@ -37,4 +38,17 @@ test('normalizes rotations into the half-open interval around zero', () => {
 test('snaps rotations to fifteen-degree increments only while active', () => {
 	assert.equal(snapRotation(0.3, false), 0.3);
 	assertClose(snapRotation(0.3, true), ROTATION_SNAP);
+});
+
+test('labels free rotations with one decimal and locked ones as whole degrees', () => {
+	assert.equal(rotationLabel(Math.PI / 4, false), '45.0°');
+	assert.equal(rotationLabel(0.653, false), '37.4°');
+	assert.equal(rotationLabel(Math.PI / 4, true), '45°');
+	assert.equal(rotationLabel(-Math.PI / 2, true), '-90°');
+});
+
+test('labels normalize wrapped rotations and never show negative zero', () => {
+	assert.equal(rotationLabel(Math.PI * 2.5, true), '90°');
+	assert.equal(rotationLabel(-0.0004, false), '0.0°');
+	assert.equal(rotationLabel(-0.001, true), '0°');
 });

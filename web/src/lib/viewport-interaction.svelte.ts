@@ -1,3 +1,4 @@
+import { rotationLabel } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import { entityId } from './entity-id.ts';
 import {
@@ -33,6 +34,8 @@ import type { LivePaint } from './components/MaskPaintPreview.svelte';
 
 export const MASK_BRUSH_FEATHER = 0.45;
 export const MASK_BRUSH_FLOW = 1;
+
+const rotationalHandles = new Set(['positive', 'negative', 'span', 'rotate']);
 
 export interface ViewportContext {
 	image: () => Size;
@@ -81,6 +84,7 @@ export class ViewportInteraction {
 		screen: Point;
 		component: GradientComponent;
 		moved: boolean;
+		snapped: boolean;
 	} | null>(null);
 	gizmoHover = $state<GizmoHit | null>(null);
 	settlingPaint = $state<LivePaint | null>(null);
@@ -133,6 +137,13 @@ export class ViewportInteraction {
 		if (!this.context.enabled()) return null;
 		if (this.gizmoDrag?.moved) return this.gizmoDrag.component;
 		return this.selectedGradientComponent;
+	});
+
+	gizmoAngle = $derived.by(() => {
+		const drag = this.gizmoDrag;
+		if (!drag?.moved || drag.grip.kind !== 'handle') return null;
+		if (!rotationalHandles.has(drag.grip.handle)) return null;
+		return { label: rotationLabel(drag.component.rotation, drag.snapped), locked: drag.snapped };
 	});
 
 	livePaint: LivePaint | null = $derived.by(() => {
@@ -338,7 +349,8 @@ export class ViewportInteraction {
 			originScreen: point,
 			screen: point,
 			component: session.component,
-			moved: false
+			moved: false,
+			snapped: false
 		};
 		this.gizmoHover = session.grip;
 		return true;
@@ -416,7 +428,8 @@ export class ViewportInteraction {
 				...drag,
 				moved: true,
 				screen: point,
-				component: { ...drag.start, ...reduced }
+				component: { ...drag.start, ...reduced },
+				snapped: modifiers.shift
 			};
 			return;
 		}

@@ -8,12 +8,13 @@
 		component: GradientComponent | null;
 		hover: GizmoHit | null;
 		active: GizmoHit | null;
+		angle: { label: string; locked: boolean } | null;
 		imageWidth: number;
 		imageHeight: number;
 		viewportScale: number;
 	}
 
-	let { component, hover, active, imageWidth, imageHeight, viewportScale }: Props = $props();
+	let { component, hover, active, angle, imageWidth, imageHeight, viewportScale }: Props = $props();
 
 	const image = $derived({ width: imageWidth, height: imageHeight });
 	const grip = $derived(active ?? hover);
@@ -32,6 +33,13 @@
 	const rotationDegrees = $derived(
 		component?.type === 'radial' ? (component.rotation * 180) / Math.PI : 0
 	);
+
+	const anglePoint = $derived.by(() => {
+		if (!angle || active?.kind !== 'handle') return null;
+		if (linear) return active.handle === 'negative' ? linear.negative : linear.positive;
+		if (radial && active.handle === 'rotate') return radial.rotate;
+		return null;
+	});
 
 	function gripped(handle: string) {
 		return grip?.kind === 'handle' && grip.handle === handle;
@@ -172,5 +180,19 @@
 			stroke="black"
 			stroke-width={innerStroke}
 		/>
+	{/if}
+	{#if angle && anglePoint}
+		<text
+			x={anglePoint.x + 14 / viewportScale}
+			y={anglePoint.y - 10 / viewportScale}
+			fill="white"
+			stroke="black"
+			stroke-width={(angle.locked ? 4 : 3) / viewportScale}
+			font-size={11 / viewportScale}
+			font-weight={angle.locked ? 700 : 400}
+			style="paint-order: stroke"
+		>
+			{angle.label}
+		</text>
 	{/if}
 </svg>

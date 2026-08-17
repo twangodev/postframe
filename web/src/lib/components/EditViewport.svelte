@@ -237,6 +237,7 @@
 								component={viewport.gizmoComponent}
 								hover={viewport.gizmoHover}
 								active={viewport.gizmoDrag?.grip ?? null}
+								angle={viewport.gizmoAngle}
 								imageWidth={imageSize.width}
 								imageHeight={imageSize.height}
 								viewportScale={viewport.transform.scale}

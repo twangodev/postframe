@@ -19,3 +19,9 @@ export function axisLockedDelta(delta: Point, active: boolean): Point {
 	if (!active) return delta;
 	return Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y };
 }
+
+export function rotationLabel(rotation: number, locked: boolean): string {
+	const degrees = (normalizeRotation(rotation) * 180) / Math.PI;
+	const text = locked ? String(Math.round(degrees)) : degrees.toFixed(1);
+	return `${text === '-0' || text === '-0.0' ? text.slice(1) : text}°`;
+}
