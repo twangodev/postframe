@@ -104,8 +104,8 @@
 			onHover={(box) => (hoveredSubjectBox = box)}
 		/>
 	{/if}
-	<div class="border-subtle border-b p-3">
-		<p class="text-muted mb-2 text-[11px] tracking-[0.03em]">new mask</p>
+	<div class="border-b border-subtle p-3">
+		<p class="mb-2 text-[11px] tracking-[0.03em] text-muted">new mask</p>
 		<div class="grid grid-cols-3 gap-1.5">
 			<button type="button" class="mask-choice" onclick={() => onAddMask('brush')}
 				><Brush size={15} /><span>brush</span></button
@@ -131,13 +131,13 @@
 		</div>
 	</div>
 
-	<div class="border-subtle border-b p-3">
+	<div class="border-b border-subtle p-3">
 		<div class="mb-2 flex items-center justify-between">
-			<p class="text-muted text-[11px] tracking-[0.03em]">layers</p>
+			<p class="text-[11px] tracking-[0.03em] text-muted">layers</p>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger
 					aria-label="Choose mask preview"
-					class="text-muted hover:bg-surface hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] lowercase outline-none"
+					class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
 				>
 					{#if maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 					<span>{maskPreviewMode ?? 'off'}</span>
@@ -146,17 +146,17 @@
 					<DropdownMenu.Content
 						align="end"
 						sideOffset={4}
-						class="motion-menu border-subtle bg-bg z-50 min-w-28 rounded border p-1 shadow-2xl"
+						class="motion-menu z-50 min-w-28 rounded border border-subtle bg-bg p-1 shadow-2xl"
 					>
 						{#each MASK_PREVIEW_MODES as mode}
 							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
-								<span class="text-accent w-3">{maskPreviewMode === mode ? '•' : ''}</span>
+								<span class="w-3 text-accent">{maskPreviewMode === mode ? '•' : ''}</span>
 								<span>{mode}</span>
 							</DropdownMenu.Item>
 						{/each}
-						<DropdownMenu.Separator class="bg-subtle my-1 h-px" />
+						<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
 						<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(null)}>
-							<span class="text-accent w-3">{maskPreviewMode === null ? '•' : ''}</span>
+							<span class="w-3 text-accent">{maskPreviewMode === null ? '•' : ''}</span>
 							<span>off</span>
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
@@ -171,18 +171,18 @@
 					class="group flex w-full cursor-pointer items-center gap-2 rounded border px-2 py-2 text-left {workspace.selectedMaskId ===
 					mask.id
 						? 'border-accent bg-surface'
-						: 'hover:bg-surface/65 border-transparent'}"
+						: 'border-transparent hover:bg-surface/65'}"
 					onclick={() => workspace.selectMask(mask.id)}
 					onkeydown={(event) => event.key === 'Enter' && workspace.selectMask(mask.id)}
 				>
-					<span class="bg-elevated text-muted flex size-7 items-center justify-center rounded-sm"
+					<span class="flex size-7 items-center justify-center rounded-sm bg-elevated text-muted"
 						><Scan size={13} /></span
 					>
 					<span class="min-w-0 flex-1 truncate text-[11px] lowercase">{mask.name}</span>
 					<button
 						type="button"
 						aria-label={mask.visible ? 'Hide mask' : 'Show mask'}
-						class="text-muted hover:text-text cursor-pointer"
+						class="cursor-pointer text-muted hover:text-text"
 						onclick={(event) => {
 							event.stopPropagation();
 							workspace.toggleMask(mask.id);
@@ -193,7 +193,7 @@
 					<button
 						type="button"
 						aria-label="Delete mask"
-						class="text-muted hover:text-negative cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+						class="cursor-pointer text-muted opacity-0 group-hover:opacity-100 hover:text-negative focus:opacity-100"
 						onclick={(event) => {
 							event.stopPropagation();
 							workspace.deleteMask(mask.id);
@@ -204,9 +204,9 @@
 				</div>
 			{/each}
 			{#if workspace.masks.length === 0}
-				<div class="border-subtle rounded border border-dashed px-3 py-5 text-center">
-					<CircleDashed size={18} strokeWidth={1} class="text-muted mx-auto mb-2" />
-					<p class="text-muted text-[11px]">choose a tool to create a mask.</p>
+				<div class="rounded border border-dashed border-subtle px-3 py-5 text-center">
+					<CircleDashed size={18} strokeWidth={1} class="mx-auto mb-2 text-muted" />
+					<p class="text-[11px] text-muted">choose a tool to create a mask.</p>
 				</div>
 			{/if}
 		</div>
@@ -215,19 +215,19 @@
 	{#if selectedMask}
 		<Panel title="Mask adjustments" meta={selectedMask.name}>
 			{#if candidateComponent?.alternatives && candidateComponent.alternatives.count > 1}
-				<div class="border-subtle mb-2 flex h-8 items-center justify-between rounded border px-1">
+				<div class="mb-2 flex h-8 items-center justify-between rounded border border-subtle px-1">
 					<button
 						type="button"
 						aria-label="Previous mask candidate"
 						disabled={smartMaskWorking}
-						class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
+						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(-1)}
 					>
 						<ChevronLeft size={12} />
 					</button>
-					<span class="text-muted text-[10px] lowercase">
+					<span class="text-[10px] text-muted lowercase">
 						candidate
-						<span class="text-text font-mono"
+						<span class="font-mono text-text"
 							>{candidateComponent.alternatives.index + 1}/{candidateComponent.alternatives
 								.count}</span
 						>
@@ -236,18 +236,18 @@
 						type="button"
 						aria-label="Next mask candidate"
 						disabled={smartMaskWorking}
-						class="text-muted hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-40"
+						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(1)}
 					>
 						<ChevronRight size={12} />
 					</button>
 				</div>
 			{/if}
-			<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">brush</p>
+			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">brush</p>
 			<div class="grid grid-cols-2 gap-1.5">
 				<button
 					type="button"
-					class="border-subtle text-muted hover:border-muted hover:text-text flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border text-[11px] lowercase transition-colors {activeTool ===
+					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
 						'mask' && maskBrushOperation === 'add'
 						? 'border-accent bg-surface text-text'
 						: ''}"
@@ -257,7 +257,7 @@
 				</button>
 				<button
 					type="button"
-					class="border-subtle text-muted hover:border-muted hover:text-text flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border text-[11px] lowercase transition-colors {activeTool ===
+					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
 						'mask' && maskBrushOperation === 'subtract'
 						? 'border-accent bg-surface text-text'
 						: ''}"
@@ -279,8 +279,8 @@
 					/>
 				</div>
 			{/if}
-			<div class="bg-subtle my-2 h-px"></div>
-			<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">edge</p>
+			<div class="my-2 h-px bg-subtle"></div>
+			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">edge</p>
 			<AdjustmentSlider
 				label="Definition"
 				value={selectedMask.edge.contrast}
@@ -315,7 +315,7 @@
 			<button
 				type="button"
 				disabled={!canRefineSelectedMask || smartMaskWorking}
-				class="border-subtle text-muted hover:border-muted hover:text-text mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border px-2 text-[11px] lowercase transition-colors disabled:cursor-default disabled:opacity-40 {activeTool ===
+				class="mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text disabled:cursor-default disabled:opacity-40 {activeTool ===
 				'mask-refine'
 					? 'border-accent bg-surface text-text'
 					: ''}"
@@ -337,8 +337,8 @@
 					/>
 				</div>
 			{/if}
-			<div class="bg-subtle my-2 h-px"></div>
-			<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">light</p>
+			<div class="my-2 h-px bg-subtle"></div>
+			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">light</p>
 			<AdjustmentSlider
 				label="Exposure"
 				value={selectedMask.adjustments.light.exposure}
@@ -396,8 +396,8 @@
 				onValueChange={previewMaskLight('blacks')}
 				onValueCommit={commitMaskLight('blacks')}
 			/>
-			<div class="bg-subtle my-2 h-px"></div>
-			<p class="text-muted pb-1 text-[10px] tracking-[0.03em] lowercase">color</p>
+			<div class="my-2 h-px bg-subtle"></div>
+			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">color</p>
 			<AdjustmentSlider
 				label="Temperature"
 				value={selectedMask.adjustments.color.temperature}

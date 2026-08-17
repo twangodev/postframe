@@ -144,7 +144,7 @@
 	}
 </script>
 
-<div class="bg-canvas flex min-h-0 flex-1 flex-col">
+<div class="flex min-h-0 flex-1 flex-col bg-canvas">
 	<div class="flex min-h-0 flex-1">
 		<ToolRail
 			{activeTool}
@@ -175,7 +175,7 @@
 			/>
 
 			<footer
-				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[11px] tracking-wide"
+				class="flex h-7 shrink-0 items-center justify-between border-t border-subtle bg-bg px-3 text-[11px] tracking-wide text-muted"
 			>
 				<span>display · SDR preview</span>
 				{#if active}
@@ -201,27 +201,27 @@
 		</section>
 
 		<aside
-			class="motion-panel-right border-subtle bg-bg w-72 shrink-0 overflow-y-auto border-l max-[1080px]:w-64"
+			class="motion-panel-right w-72 shrink-0 overflow-y-auto border-l border-subtle bg-bg max-[1080px]:w-64"
 		>
 			<Tabs.Root bind:value={inspectorTab}>
-				<Tabs.List class="border-subtle bg-bg grid h-10 grid-cols-3 border-b px-2 pt-1">
+				<Tabs.List class="grid h-10 grid-cols-3 border-b border-subtle bg-bg px-2 pt-1">
 					<Tabs.Trigger
 						value="adjust"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
+						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
 					>
 						adjust
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="mask"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
+						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
 					>
-						mask {#if workspace.masks.length > 0}<span class="text-accent ml-1"
+						mask {#if workspace.masks.length > 0}<span class="ml-1 text-accent"
 								>{workspace.masks.length}</span
 							>{/if}
 					</Tabs.Trigger>
 					<Tabs.Trigger
 						value="layers"
-						class="text-muted data-[state=active]:border-text data-[state=active]:text-text cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em]"
+						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
 					>
 						layers
 					</Tabs.Trigger>

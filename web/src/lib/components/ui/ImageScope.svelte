@@ -101,25 +101,25 @@
 
 <div>
 	<div class="mb-2 flex h-5 items-center justify-between">
-		<span class="text-text/75 text-[10px] tracking-[0.04em] lowercase">scope</span>
+		<span class="text-[10px] tracking-[0.04em] text-text/75 lowercase">scope</span>
 		<ToggleGroup.Root
 			type="single"
 			value={mode}
 			onValueChange={selectMode}
 			aria-label="Image scope mode"
-			class="border-subtle bg-canvas flex h-5 rounded border p-px"
+			class="flex h-5 rounded border border-subtle bg-canvas p-px"
 		>
 			<ToggleGroup.Item
 				value="waveform"
 				aria-label="Waveform scope"
-				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[9px] lowercase transition-colors"
+				class="cursor-pointer rounded-sm px-1.5 text-[9px] text-muted lowercase transition-colors data-[state=on]:bg-elevated data-[state=on]:text-text"
 			>
 				waveform
 			</ToggleGroup.Item>
 			<ToggleGroup.Item
 				value="histogram"
 				aria-label="Histogram scope"
-				class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text cursor-pointer rounded-sm px-1.5 text-[9px] lowercase transition-colors"
+				class="cursor-pointer rounded-sm px-1.5 text-[9px] text-muted lowercase transition-colors data-[state=on]:bg-elevated data-[state=on]:text-text"
 			>
 				histogram
 			</ToggleGroup.Item>
@@ -129,7 +129,7 @@
 		role="img"
 		aria-label={label}
 		title={data ? `${data.sampleCount.toLocaleString()} preview samples` : label}
-		class="bg-canvas border-subtle relative h-28 overflow-hidden rounded-sm border"
+		class="relative h-28 overflow-hidden rounded-sm border border-subtle bg-canvas"
 	>
 		<canvas
 			bind:this={canvas}
@@ -144,13 +144,13 @@
 		{/if}
 		{#if !data}
 			<div
-				class="text-muted/55 pointer-events-none absolute inset-0 flex items-center justify-center text-[9px] tracking-[0.04em] lowercase"
+				class="pointer-events-none absolute inset-0 flex items-center justify-center text-[9px] tracking-[0.04em] text-muted/55 lowercase"
 			>
 				{loading ? 'building scope' : 'scope unavailable'}
 			</div>
 		{/if}
 	</div>
-	<div class="text-muted mt-1.5 flex items-baseline justify-between text-[9px]">
+	<div class="mt-1.5 flex items-baseline justify-between text-[9px] text-muted">
 		<span class="font-mono tabular-nums">{footer.start}</span>
 		<span>{footer.center}</span>
 		<span class="font-mono tabular-nums">{footer.end}</span>

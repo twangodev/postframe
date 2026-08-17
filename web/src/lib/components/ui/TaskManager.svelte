@@ -25,11 +25,11 @@
 	>
 		{#if expanded}
 			<div
-				class="border-subtle bg-bg/95 pointer-events-auto flex w-72 flex-col gap-2 rounded border p-2 shadow-xl backdrop-blur"
+				class="pointer-events-auto flex w-72 flex-col gap-2 rounded border border-subtle bg-bg/95 p-2 shadow-xl backdrop-blur"
 			>
 				{#each tasks as entry (entry.key)}
 					<div>
-						<p class="text-muted mb-1 text-[10px] tracking-[0.03em]">{entry.name}</p>
+						<p class="mb-1 text-[10px] tracking-[0.03em] text-muted">{entry.name}</p>
 						<ProgressCard
 							task={entry.task}
 							variant="inline"

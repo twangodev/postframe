@@ -1,5 +1,8 @@
 export type BrowserStorageErrorCode =
-	'storage-unavailable' | 'status-unavailable' | 'persistence-unavailable' | 'persistence-failed';
+	| 'storage-unavailable'
+	| 'status-unavailable'
+	| 'persistence-unavailable'
+	| 'persistence-failed';
 
 export type StorageDurability = 'persistent' | 'best-effort' | 'unavailable';
 

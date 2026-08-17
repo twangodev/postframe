@@ -20,7 +20,7 @@
 		<Tooltip.Portal>
 			<Tooltip.Content
 				sideOffset={6}
-				class="motion-tooltip border-subtle bg-bg text-muted z-50 max-w-64 rounded border px-2.5 py-1.5 text-[11px] tracking-wide lowercase shadow-xl"
+				class="motion-tooltip z-50 max-w-64 rounded border border-subtle bg-bg px-2.5 py-1.5 text-[11px] tracking-wide text-muted lowercase shadow-xl"
 			>
 				{text}
 				<Tooltip.Arrow class="fill-bg" />

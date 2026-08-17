@@ -12,8 +12,8 @@
 	let { workspace, source = $bindable(), recentCount }: Props = $props();
 </script>
 
-<aside class="motion-panel-left border-subtle bg-bg min-h-0 overflow-y-auto border-r py-3">
-	<div class="text-muted px-3 pb-2 text-[11px] tracking-[0.04em]">library</div>
+<aside class="motion-panel-left min-h-0 overflow-y-auto border-r border-subtle bg-bg py-3">
+	<div class="px-3 pb-2 text-[11px] tracking-[0.04em] text-muted">library</div>
 	<nav class="space-y-0.5 px-2" aria-label="Library">
 		<button
 			type="button"
@@ -55,16 +55,16 @@
 		</button>
 	</nav>
 
-	<div class="bg-subtle mx-3 my-3 h-px"></div>
+	<div class="mx-3 my-3 h-px bg-subtle"></div>
 	<div class="flex items-center justify-between px-3 pb-2">
-		<span class="text-muted text-[11px] tracking-[0.04em]">collections</span>
+		<span class="text-[11px] tracking-[0.04em] text-muted">collections</span>
 		<Tooltip text="Create collection">
 			{#snippet children(props)}
 				<button
 					{...props}
 					type="button"
 					aria-label="Create collection"
-					class="text-muted hover:text-text cursor-pointer rounded transition-colors"
+					class="cursor-pointer rounded text-muted transition-colors hover:text-text"
 					onclick={workspace.requestCollectionCreation}
 				>
 					<FolderPlus size={13} strokeWidth={1.5} />
@@ -88,7 +88,7 @@
 			</button>
 		{/each}
 		{#if workspace.collections.length === 0}
-			<p class="text-muted/65 px-2 py-2 text-[11px] leading-relaxed">no collections yet.</p>
+			<p class="px-2 py-2 text-[11px] leading-relaxed text-muted/65">no collections yet.</p>
 		{/if}
 	</div>
 </aside>

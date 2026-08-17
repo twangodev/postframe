@@ -14,8 +14,9 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "node --test tests/*.test.ts",
 		"test:e2e": "playwright test",
-		"lint": "prettier --check .",
-		"format": "prettier --write .",
+		"lint": "oxfmt --check .",
+		"format": "oxfmt .",
+		"format:check": "oxfmt --check .",
 		"gen": "wrangler types"
 	},
 	"devDependencies": {
@@ -30,9 +31,7 @@
 		"fake-indexeddb": "^6.2.5",
 		"fast-check": "^4.9.0",
 		"layerchart": "^2.0.4",
-		"prettier": "^3.8.3",
-		"prettier-plugin-svelte": "^4.1.0",
-		"prettier-plugin-tailwindcss": "^0.8.0",
+		"oxfmt": "^0.63.0",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",

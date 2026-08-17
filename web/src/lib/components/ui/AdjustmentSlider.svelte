@@ -143,7 +143,7 @@
 	class="grid grid-cols-[4.75rem_1fr_3.5rem] items-center gap-2 py-1 transition-opacity"
 	class:opacity-40={disabled}
 >
-	<span class="text-text/75 truncate text-[11px] lowercase">{label}</span>
+	<span class="truncate text-[11px] text-text/75 lowercase">{label}</span>
 	<Slider.Root
 		type="single"
 		bind:value
@@ -158,13 +158,13 @@
 		class="relative flex h-4 w-full touch-none items-center"
 	>
 		{#snippet children({ thumbItems })}
-			<span class="bg-control-track absolute inset-x-0 h-px"></span>
-			<Slider.Range class="bg-control-active absolute h-px" />
+			<span class="absolute inset-x-0 h-px bg-control-track"></span>
+			<Slider.Range class="absolute h-px bg-control-active" />
 			{#each thumbItems as thumb (thumb.index)}
 				<Slider.Thumb
 					index={thumb.index}
 					aria-label={label}
-					class="border-control-active bg-surface focus-visible:outline-accent block size-2.5 rounded-full border transition-transform hover:scale-125 focus-visible:outline-2"
+					class="block size-2.5 rounded-full border border-control-active bg-surface transition-transform hover:scale-125 focus-visible:outline-2 focus-visible:outline-accent"
 				/>
 			{/each}
 		{/snippet}
@@ -182,6 +182,6 @@
 		onblur={commitDraft}
 		onkeydown={handleKeydown}
 		onwheel={handleWheel}
-		class="hover:border-control-track focus:border-control-edge focus:bg-surface text-muted h-5 w-full rounded border border-transparent bg-transparent px-1 text-right font-mono text-[11px] tabular-nums transition-colors outline-none disabled:cursor-default"
+		class="h-5 w-full rounded border border-transparent bg-transparent px-1 text-right font-mono text-[11px] text-muted tabular-nums transition-colors outline-none hover:border-control-track focus:border-control-edge focus:bg-surface disabled:cursor-default"
 	/>
 </div>

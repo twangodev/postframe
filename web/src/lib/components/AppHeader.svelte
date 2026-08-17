@@ -102,7 +102,7 @@
 	);
 </script>
 
-<header class="motion-header border-subtle bg-bg shrink-0 border-b">
+<header class="motion-header shrink-0 border-b border-subtle bg-bg">
 	<div class="flex h-12 items-center px-3">
 		<div class="flex min-w-0 flex-1 items-center gap-3">
 			<Tooltip text="Show photo library">
@@ -111,7 +111,7 @@
 						{...props}
 						type="button"
 						aria-label="Show photo library"
-						class="hover:text-text flex cursor-pointer items-center gap-1.5 rounded transition-colors"
+						class="flex cursor-pointer items-center gap-1.5 rounded transition-colors hover:text-text"
 						onclick={workspace.enterLibrary}
 					>
 						<img src={postframeLogo} alt="" class="size-5" />
@@ -119,12 +119,12 @@
 					</button>
 				{/snippet}
 			</Tooltip>
-			<span class="bg-subtle h-4 w-px"></span>
+			<span class="h-4 w-px bg-subtle"></span>
 			<div class="min-w-0">
-				<p class="text-text truncate text-xs font-medium">photo library</p>
+				<p class="truncate text-xs font-medium text-text">photo library</p>
 				<p
 					class:text-negative={workspace.storageStatus === 'error' || !!workspace.ingestError}
-					class="text-muted text-[11px] tracking-wide"
+					class="text-[11px] tracking-wide text-muted"
 					title={workspace.ingestError ?? workspace.storageError ?? undefined}
 				>
 					{workspace.photos.length} photo{workspace.photos.length === 1 ? '' : 's'} ·
@@ -146,17 +146,17 @@
 			onValueChange={(value) => workspace.setMode(value as 'organize' | 'edit')}
 			class="absolute left-1/2 -translate-x-1/2"
 		>
-			<Tabs.List class="border-subtle bg-surface flex h-8 items-center rounded border p-0.5">
+			<Tabs.List class="flex h-8 items-center rounded border border-subtle bg-surface p-0.5">
 				<Tabs.Trigger
 					value="organize"
-					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] transition-colors"
+					class="h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] text-muted transition-colors data-[state=active]:bg-elevated data-[state=active]:text-text"
 				>
 					organize
 				</Tabs.Trigger>
 				<Tabs.Trigger
 					value="edit"
 					disabled={workspace.photos.length === 0}
-					class="text-muted data-[state=active]:bg-elevated data-[state=active]:text-text h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+					class="h-6 cursor-pointer rounded-sm px-4 text-[11px] tracking-[0.03em] text-muted transition-colors disabled:cursor-not-allowed disabled:opacity-30 data-[state=active]:bg-elevated data-[state=active]:text-text"
 				>
 					edit
 				</Tabs.Trigger>
@@ -170,7 +170,7 @@
 						{...props}
 						type="button"
 						aria-label="Create collection"
-						class="text-muted hover:bg-surface hover:text-text hidden size-7 cursor-pointer items-center justify-center rounded transition-colors sm:flex"
+						class="hidden size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text sm:flex"
 						onclick={workspace.requestCollectionCreation}
 					>
 						<Plus size={14} strokeWidth={1.5} />
@@ -184,7 +184,7 @@
 							{...props}
 							type="button"
 							aria-label="Manage local storage"
-							class="text-muted hover:bg-surface hover:text-text flex size-7 cursor-pointer items-center justify-center rounded transition-colors"
+							class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
 							onclick={openStorage}
 						>
 							<Database size={13} strokeWidth={1.5} />
@@ -196,7 +196,7 @@
 				{#snippet children(props)}
 					<label
 						{...props}
-						class="text-muted hover:bg-surface hover:text-text flex size-7 cursor-pointer items-center justify-center rounded transition-colors"
+						class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
 					>
 						<input
 							bind:this={importInput}
@@ -213,7 +213,7 @@
 			</Tooltip>
 			<button
 				type="button"
-				class="border-subtle text-text hover:border-muted hover:bg-surface ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 text-[11px] tracking-wide transition-colors"
+				class="ml-1 flex h-7 cursor-pointer items-center gap-1.5 rounded border border-subtle px-2.5 text-[11px] tracking-wide text-text transition-colors hover:border-muted hover:bg-surface"
 				onclick={onExport}
 			>
 				<Download size={12} strokeWidth={1.5} />

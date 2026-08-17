@@ -15,7 +15,7 @@ To recreate this project with the same configuration:
 
 ```sh
 # recreate this project
-bun x sv@0.17.0 create --template minimal --types ts --add prettier sveltekit-adapter="adapter:cloudflare+cfTarget:workers" ai-tools="ide:claude-code+delivery:plugin" --install bun web
+bun x sv@0.17.0 create --template minimal --types ts --add sveltekit-adapter="adapter:cloudflare+cfTarget:workers" ai-tools="ide:claude-code+delivery:plugin" --install bun web
 ```
 
 ## Developing

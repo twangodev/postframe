@@ -224,7 +224,7 @@
 </script>
 
 <aside
-	class="motion-panel-left border-subtle bg-bg relative z-30 flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-visible border-r py-2"
+	class="motion-panel-left relative z-30 flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-visible border-r border-subtle bg-bg py-2"
 >
 	{#each groups as group (group.id)}
 		{@const selected = currentTool(group)}
@@ -245,7 +245,7 @@
 			>
 				<SelectedIcon size={15} strokeWidth={1.4} />
 				<span
-					class="border-muted absolute right-0.5 bottom-0.5 size-0 border-t-[3px] border-l-[3px] border-t-transparent border-l-transparent"
+					class="absolute right-0.5 bottom-0.5 size-0 border-t-[3px] border-l-[3px] border-muted border-t-transparent border-l-transparent"
 				></span>
 			</button>
 
@@ -253,9 +253,9 @@
 				<div
 					role="menu"
 					aria-label={group.label}
-					class="motion-tooltip border-subtle bg-bg absolute top-0 left-[calc(100%+0.4rem)] z-50 max-h-[min(34rem,calc(100vh-6rem))] w-52 overflow-y-auto rounded border p-1.5 shadow-2xl"
+					class="motion-tooltip absolute top-0 left-[calc(100%+0.4rem)] z-50 max-h-[min(34rem,calc(100vh-6rem))] w-52 overflow-y-auto rounded border border-subtle bg-bg p-1.5 shadow-2xl"
 				>
-					<p class="text-muted px-2 pt-1 pb-1.5 text-[11px] tracking-[0.04em]">{group.label}</p>
+					<p class="px-2 pt-1 pb-1.5 text-[11px] tracking-[0.04em] text-muted">{group.label}</p>
 					{#each group.tools as tool (tool.id)}
 						{@const ToolIcon = tool.icon}
 						<button
@@ -279,12 +279,12 @@
 		</div>
 	{/each}
 
-	<div class="bg-subtle my-1 h-px w-5"></div>
+	<div class="my-1 h-px w-5 bg-subtle"></div>
 	<button
 		type="button"
 		aria-label="Undo"
 		disabled={!canUndo}
-		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
+		class="flex size-8 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface/60 hover:text-text disabled:cursor-default disabled:opacity-30"
 		onclick={onUndo}
 	>
 		<Undo2 size={14} strokeWidth={1.4} />
@@ -293,7 +293,7 @@
 		type="button"
 		aria-label="Redo"
 		disabled={!canRedo}
-		class="text-muted hover:bg-surface/60 hover:text-text flex size-8 cursor-pointer items-center justify-center rounded disabled:cursor-default disabled:opacity-30"
+		class="flex size-8 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface/60 hover:text-text disabled:cursor-default disabled:opacity-30"
 		onclick={onRedo}
 	>
 		<Redo2 size={14} strokeWidth={1.4} />

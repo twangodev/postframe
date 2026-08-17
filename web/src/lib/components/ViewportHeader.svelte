@@ -22,15 +22,15 @@
 	}
 </script>
 
-<div class="border-subtle bg-bg flex h-9 shrink-0 items-center justify-between border-b px-3">
-	<div class="text-muted flex items-center gap-1">
+<div class="flex h-9 shrink-0 items-center justify-between border-b border-subtle bg-bg px-3">
+	<div class="flex items-center gap-1 text-muted">
 		<Tooltip text="Fit image to view">
 			{#snippet children(props)}
 				<button
 					{...props}
 					type="button"
 					aria-label="Fit image to view"
-					class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded {viewport.mode ===
+					class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text {viewport.mode ===
 					'fit'
 						? 'text-accent'
 						: ''}"
@@ -43,7 +43,7 @@
 		<button
 			type="button"
 			aria-label="Zoom out"
-			class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded"
+			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
 			onclick={viewport.zoomOut}
 		>
 			<Minus size={12} />
@@ -51,7 +51,7 @@
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger
 				aria-label="Choose zoom level"
-				class="hover:bg-surface hover:text-text flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[11px] tabular-nums outline-none"
+				class="flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[11px] tabular-nums outline-none hover:bg-surface hover:text-text"
 			>
 				{formatZoom(viewport.transform.scale)}
 			</DropdownMenu.Trigger>
@@ -59,26 +59,26 @@
 				<DropdownMenu.Content
 					align="start"
 					sideOffset={4}
-					class="motion-menu border-subtle bg-bg z-50 min-w-36 rounded border p-1 shadow-2xl"
+					class="motion-menu z-50 min-w-36 rounded border border-subtle bg-bg p-1 shadow-2xl"
 				>
 					<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.fitPhoto}>
-						<span class="text-accent w-3">{viewport.mode === 'fit' ? '•' : ''}</span>
+						<span class="w-3 text-accent">{viewport.mode === 'fit' ? '•' : ''}</span>
 						<span class="flex-1">fit</span>
-						<kbd class="text-muted font-mono text-[10px]">0</kbd>
+						<kbd class="font-mono text-[10px] text-muted">0</kbd>
 					</DropdownMenu.Item>
 					<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.showActualPixels}>
-						<span class="text-accent w-3"
+						<span class="w-3 text-accent"
 							>{viewport.mode === 'manual' && Math.abs(viewport.transform.scale - 1) < 0.0001
 								? '•'
 								: ''}</span
 						>
 						<span class="flex-1">actual pixels</span>
-						<kbd class="text-muted font-mono text-[10px]">1</kbd>
+						<kbd class="font-mono text-[10px] text-muted">1</kbd>
 					</DropdownMenu.Item>
-					<DropdownMenu.Separator class="bg-subtle my-1 h-px" />
+					<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
 					{#each ZOOM_MENU_PRESETS as scale}
 						<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.chooseZoom(scale)}>
-							<span class="text-accent w-3"
+							<span class="w-3 text-accent"
 								>{viewport.mode === 'manual' && Math.abs(viewport.transform.scale - scale) < 0.0001
 									? '•'
 									: ''}</span
@@ -92,7 +92,7 @@
 		<button
 			type="button"
 			aria-label="Zoom in"
-			class="hover:bg-surface hover:text-text flex size-6 cursor-pointer items-center justify-center rounded"
+			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
 			onclick={viewport.zoomIn}
 		>
 			<Plus size={12} />
@@ -100,7 +100,7 @@
 	</div>
 
 	{#if photoName !== null}
-		<p class="text-muted max-w-64 truncate font-mono text-[11px] tracking-wide">
+		<p class="max-w-64 truncate font-mono text-[11px] tracking-wide text-muted">
 			{photoName}
 		</p>
 	{/if}
@@ -108,7 +108,7 @@
 	<!-- TODO(WASM_TODOS.previewRendering): switch between original and rendered Wasm output. -->
 	<button
 		type="button"
-		class="border-subtle text-muted hover:text-text flex h-6 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors"
+		class="flex h-6 cursor-pointer items-center gap-1.5 rounded border border-subtle px-2 text-[11px] text-muted transition-colors hover:text-text"
 		onclick={() => (before = !before)}
 	>
 		<Columns2 size={11} />

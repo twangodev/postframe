@@ -24,10 +24,10 @@
 
 <Tabs.Content value="layers" class="motion-tab">
 	<!-- TODO(WASM_TODOS.layersAndHistory): back this panel with document layers and history. -->
-	<div class="border-subtle flex items-center gap-2 border-b p-2">
+	<div class="flex items-center gap-2 border-b border-subtle p-2">
 		<select
 			aria-label="Layer blend mode"
-			class="border-subtle bg-surface text-text h-7 min-w-0 flex-1 cursor-pointer rounded border px-2 text-[11px] focus:outline-none"
+			class="h-7 min-w-0 flex-1 cursor-pointer rounded border border-subtle bg-surface px-2 text-[11px] text-text focus:outline-none"
 		>
 			<option>normal</option>
 			<option>multiply</option>
@@ -35,15 +35,15 @@
 			<option>overlay</option>
 			<option>soft light</option>
 		</select>
-		<span class="text-muted text-[11px]">opacity</span>
+		<span class="text-[11px] text-muted">opacity</span>
 		<span class="font-mono text-[11px]">100%</span>
 	</div>
 
 	<div class="space-y-1 p-2">
-		<div class="border-accent bg-surface flex h-11 items-center gap-2 rounded border px-2">
-			<Eye size={12} class="text-muted shrink-0" />
+		<div class="flex h-11 items-center gap-2 rounded border border-accent bg-surface px-2">
+			<Eye size={12} class="shrink-0 text-muted" />
 			<div
-				class="bg-elevated text-muted flex size-7 shrink-0 items-center justify-center rounded-sm"
+				class="flex size-7 shrink-0 items-center justify-center rounded-sm bg-elevated text-muted"
 			>
 				<SlidersHorizontal size={12} />
 			</div>
@@ -52,13 +52,13 @@
 		</div>
 
 		{#each workspace.masks as mask (mask.id)}
-			<div class="border-subtle flex h-10 items-center gap-2 rounded border px-2">
-				{#if mask.visible}<Eye size={12} class="text-muted shrink-0" />{:else}<EyeOff
+			<div class="flex h-10 items-center gap-2 rounded border border-subtle px-2">
+				{#if mask.visible}<Eye size={12} class="shrink-0 text-muted" />{:else}<EyeOff
 						size={12}
-						class="text-muted shrink-0"
+						class="shrink-0 text-muted"
 					/>{/if}
 				<div
-					class="bg-elevated text-muted flex size-7 shrink-0 items-center justify-center rounded-sm"
+					class="flex size-7 shrink-0 items-center justify-center rounded-sm bg-elevated text-muted"
 				>
 					<CircleDashed size={12} />
 				</div>
@@ -69,9 +69,9 @@
 			</div>
 		{/each}
 
-		<div class="border-subtle flex h-11 items-center gap-2 rounded border px-2">
-			<Eye size={12} class="text-muted shrink-0" />
-			<div class="bg-canvas size-7 shrink-0 overflow-hidden rounded-sm">
+		<div class="flex h-11 items-center gap-2 rounded border border-subtle px-2">
+			<Eye size={12} class="shrink-0 text-muted" />
+			<div class="size-7 shrink-0 overflow-hidden rounded-sm bg-canvas">
 				{#if active}<PhotoVisual photo={active} onRequest={workspace.loadThumbnail} />{/if}
 			</div>
 			<span class="min-w-0 flex-1 truncate font-mono text-[11px]">
@@ -82,26 +82,26 @@
 	</div>
 
 	<div
-		class="border-subtle bg-bg sticky bottom-0 mt-4 flex h-9 items-center justify-end gap-1 border-t px-2"
+		class="sticky bottom-0 mt-4 flex h-9 items-center justify-end gap-1 border-t border-subtle bg-bg px-2"
 	>
 		<button
 			type="button"
 			aria-label="Add layer mask"
-			class="text-muted hover:bg-surface hover:text-text flex size-6 items-center justify-center rounded"
+			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-text"
 		>
 			<CircleDashed size={12} />
 		</button>
 		<button
 			type="button"
 			aria-label="New layer"
-			class="text-muted hover:bg-surface hover:text-text flex size-6 items-center justify-center rounded"
+			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-text"
 		>
 			<Plus size={12} />
 		</button>
 		<button
 			type="button"
 			aria-label="Delete layer"
-			class="text-muted hover:bg-surface hover:text-negative flex size-6 items-center justify-center rounded"
+			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-negative"
 		>
 			<Trash2 size={12} />
 		</button>

@@ -319,7 +319,7 @@
 					</div>
 				{/if}
 			{:else}
-				<p class="text-muted absolute inset-0 flex items-center justify-center text-[11px]">
+				<p class="absolute inset-0 flex items-center justify-center text-[11px] text-muted">
 					select a photo in organize.
 				</p>
 			{/if}

@@ -26,12 +26,12 @@
 					<Dialog.Title class="text-sm font-medium tracking-tight">
 						remove {ids?.length === 1 ? 'photo' : `${ids?.length} photos`} from library
 					</Dialog.Title>
-					<Dialog.Description class="text-muted mt-1 text-xs">
+					<Dialog.Description class="mt-1 text-xs text-muted">
 						local files and edits are deleted. this cannot be undone.
 					</Dialog.Description>
 				</div>
 				<Dialog.Close
-					class="text-muted hover:text-text cursor-pointer rounded p-1"
+					class="cursor-pointer rounded p-1 text-muted hover:text-text"
 					aria-label="Close"
 				>
 					<X size={15} />
@@ -39,13 +39,13 @@
 			</div>
 			<div class="mt-5 flex justify-end gap-2">
 				<Dialog.Close
-					class="border-subtle text-muted hover:text-text cursor-pointer rounded border px-3 py-2 text-[11px]"
+					class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted hover:text-text"
 				>
 					cancel
 				</Dialog.Close>
 				<button
 					type="button"
-					class="bg-negative text-bg cursor-pointer rounded px-3 py-2 text-[11px]"
+					class="cursor-pointer rounded bg-negative px-3 py-2 text-[11px] text-bg"
 					onclick={onConfirm}
 				>
 					remove

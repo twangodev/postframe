@@ -13,7 +13,7 @@
 <div
 	class={variant === 'floating'
 		? 'motion-enter pointer-events-auto w-full max-w-72 rounded border border-white/10 bg-black/70 px-3 py-2.5 text-white shadow-xl backdrop-blur-md'
-		: 'border-subtle bg-surface overflow-hidden rounded border px-2 py-1.5'}
+		: 'overflow-hidden rounded border border-subtle bg-surface px-2 py-1.5'}
 >
 	<div class="flex min-w-0 items-center gap-2">
 		<p
@@ -42,12 +42,12 @@
 		<div
 			class={[
 				'relative overflow-hidden',
-				variant === 'floating' ? 'mt-2 h-0.5 rounded-full bg-white/10' : 'bg-subtle mt-1 h-px'
+				variant === 'floating' ? 'mt-2 h-0.5 rounded-full bg-white/10' : 'mt-1 h-px bg-subtle'
 			]}
 		>
 			{#if task.progress !== null}
 				<div
-					class="bg-accent absolute inset-y-0 left-0 rounded-full transition-[width] duration-200"
+					class="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-200"
 					style:width={`${task.progress}%`}
 				></div>
 			{/if}

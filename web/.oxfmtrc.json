@@ -1,0 +1,19 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"ignorePatterns": [
+		"static/**",
+		"worker-configuration.d.ts",
+		"src/lib/assets/favicon.svg",
+		"src/lib/pf/**",
+		"src/lib/pf-threaded/**"
+	],
+	"printWidth": 100,
+	"singleQuote": true,
+	"sortPackageJson": false,
+	"sortTailwindcss": {
+		"stylesheet": "./src/routes/app.css"
+	},
+	"svelte": true,
+	"trailingComma": "none",
+	"useTabs": true
+}

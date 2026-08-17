@@ -35,12 +35,12 @@
 					<div>
 						<Dialog.Title class="text-sm font-medium tracking-tight">create collection</Dialog.Title
 						>
-						<Dialog.Description class="text-muted mt-1 text-xs">
+						<Dialog.Description class="mt-1 text-xs text-muted">
 							selected photos will be added automatically.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
-						class="text-muted hover:text-text cursor-pointer rounded p-1"
+						class="cursor-pointer rounded p-1 text-muted hover:text-text"
 						aria-label="Close"
 					>
 						<X size={15} />
@@ -49,13 +49,13 @@
 				<input
 					bind:value={collectionName}
 					placeholder="collection name"
-					class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent mt-5 w-full rounded border px-3 py-2 text-xs focus:outline-none"
+					class="mt-5 w-full rounded border border-subtle bg-surface px-3 py-2 text-xs placeholder:text-muted/50 focus:border-accent focus:outline-none"
 				/>
 				<div class="mt-4 flex justify-end">
 					<button
 						type="submit"
 						disabled={!collectionName.trim() || collectionBusy}
-						class="bg-text text-bg cursor-pointer rounded px-3 py-2 text-[11px] disabled:opacity-35"
+						class="cursor-pointer rounded bg-text px-3 py-2 text-[11px] text-bg disabled:opacity-35"
 					>
 						create collection
 					</button>

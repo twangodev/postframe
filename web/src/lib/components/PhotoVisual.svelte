@@ -41,7 +41,7 @@
 		/>
 	{:else}
 		<div
-			class="text-muted flex size-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_30%_25%,#403c31_0%,#22211d_42%,#151512_100%)]"
+			class="flex size-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_30%_25%,#403c31_0%,#22211d_42%,#151512_100%)] text-muted"
 		>
 			<Aperture size={32} strokeWidth={1} />
 			<span class="font-mono text-[11px] tracking-[0.04em]">loading preview</span>

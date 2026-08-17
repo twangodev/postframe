@@ -22,24 +22,24 @@
 </script>
 
 <div
-	class="border-subtle bg-bg text-muted flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b px-3 text-[11px]"
+	class="flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b border-subtle bg-bg px-3 text-[11px] text-muted"
 >
-	<span class="text-text shrink-0 font-medium">{activeToolLabel}</span>
-	<span class="bg-subtle h-4 w-px shrink-0"></span>
+	<span class="shrink-0 font-medium text-text">{activeToolLabel}</span>
+	<span class="h-4 w-px shrink-0 bg-subtle"></span>
 
 	{#if activeTool === 'object-select'}
 		<span class="shrink-0">paint to include</span>
-		<span class="text-muted shrink-0">
-			<kbd class="text-text font-mono">alt</kbd> paint to exclude
+		<span class="shrink-0 text-muted">
+			<kbd class="font-mono text-text">alt</kbd> paint to exclude
 		</span>
 	{:else if selectionTools.has(activeTool)}
 		<!-- TODO(WASM_TODOS.editorTools): implement remaining pixel selection tools. -->
-		<div class="border-subtle bg-surface flex h-6 shrink-0 rounded border p-0.5">
+		<div class="flex h-6 shrink-0 rounded border border-subtle bg-surface p-0.5">
 			{#each ['new', 'add', 'subtract', 'intersect'] as mode, index}
 				<button
 					type="button"
 					title={`${mode} selection`}
-					class="hover:bg-elevated hover:text-text flex min-w-6 cursor-pointer items-center justify-center rounded-sm px-1.5 {index ===
+					class="flex min-w-6 cursor-pointer items-center justify-center rounded-sm px-1.5 hover:bg-elevated hover:text-text {index ===
 					0
 						? 'bg-elevated text-text'
 						: ''}"
@@ -49,95 +49,95 @@
 			{/each}
 		</div>
 		{#if activeTool === 'magic-wand'}
-			<span class="shrink-0">tolerance <span class="text-text font-mono">32</span></span>
+			<span class="shrink-0">tolerance <span class="font-mono text-text">32</span></span>
 		{/if}
-		<span class="shrink-0">feather <span class="text-text font-mono">0 px</span></span>
+		<span class="shrink-0">feather <span class="font-mono text-text">0 px</span></span>
 		<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-			<input type="checkbox" checked class="accent-accent size-3" /> anti-alias
+			<input type="checkbox" checked class="size-3 accent-accent" /> anti-alias
 		</label>
 		{#if activeTool === 'magic-wand'}
 			<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-				<input type="checkbox" checked class="accent-accent size-3" /> contiguous
+				<input type="checkbox" checked class="size-3 accent-accent" /> contiguous
 			</label>
 		{/if}
 	{:else if cropTools.has(activeTool)}
 		<button
 			type="button"
-			class="border-subtle bg-surface text-text h-6 shrink-0 cursor-pointer rounded border px-2"
+			class="h-6 shrink-0 cursor-pointer rounded border border-subtle bg-surface px-2 text-text"
 		>
 			original ratio
 		</button>
 		<span class="shrink-0 font-mono">— × —</span>
 		<button
 			type="button"
-			class="hover:bg-surface hover:text-text flex size-6 shrink-0 cursor-pointer items-center justify-center rounded"
+			class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
 			aria-label="Straighten"
 		>
 			<RotateCcw size={12} />
 		</button>
 		<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-			<input type="checkbox" class="accent-accent size-3" /> delete cropped pixels
+			<input type="checkbox" class="size-3 accent-accent" /> delete cropped pixels
 		</label>
 	{:else if retouchTools.has(activeTool) || paintTools.has(activeTool)}
 		<button
 			type="button"
-			class="border-subtle bg-surface text-text flex h-6 shrink-0 cursor-pointer items-center gap-2 rounded border px-2"
+			class="flex h-6 shrink-0 cursor-pointer items-center gap-2 rounded border border-subtle bg-surface px-2 text-text"
 		>
 			<span class="size-3 rounded-full border border-current"></span>
 			<span class="font-mono">42 px</span>
 		</button>
-		<span class="shrink-0">hardness <span class="text-text font-mono">65%</span></span>
-		<span class="shrink-0">opacity <span class="text-text font-mono">100%</span></span>
+		<span class="shrink-0">hardness <span class="font-mono text-text">65%</span></span>
+		<span class="shrink-0">opacity <span class="font-mono text-text">100%</span></span>
 		{#if ['brush', 'pencil', 'mixer-brush'].includes(activeTool)}
-			<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
+			<span class="shrink-0">flow <span class="font-mono text-text">100%</span></span>
 		{:else}
 			<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-				<input type="checkbox" checked class="accent-accent size-3" /> sample all layers
+				<input type="checkbox" checked class="size-3 accent-accent" /> sample all layers
 			</label>
 		{/if}
 	{:else if typeTools.has(activeTool)}
-		<button class="border-subtle bg-surface text-text h-6 shrink-0 rounded border px-2">
+		<button class="h-6 shrink-0 rounded border border-subtle bg-surface px-2 text-text">
 			Overused Grotesk
 		</button>
 		<span class="shrink-0 font-mono">32 px</span>
 		<span class="shrink-0">regular</span>
-		<div class="border-subtle bg-surface size-4 shrink-0 rounded-sm border"></div>
+		<div class="size-4 shrink-0 rounded-sm border border-subtle bg-surface"></div>
 	{:else if vectorTools.has(activeTool)}
-		<button class="border-subtle bg-surface text-text h-6 shrink-0 rounded border px-2">
+		<button class="h-6 shrink-0 rounded border border-subtle bg-surface px-2 text-text">
 			path
 		</button>
 		<span class="shrink-0">fill</span>
-		<div class="border-subtle bg-text size-4 shrink-0 rounded-sm border"></div>
-		<span class="shrink-0">stroke <span class="text-text font-mono">1 px</span></span>
+		<div class="size-4 shrink-0 rounded-sm border border-subtle bg-text"></div>
+		<span class="shrink-0">stroke <span class="font-mono text-text">1 px</span></span>
 	{:else if measureTools.has(activeTool)}
-		<span class="shrink-0">sample <span class="text-text font-mono">5 × 5</span></span>
-		<span class="shrink-0">scale <span class="text-text font-mono">1 px : 1 px</span></span>
+		<span class="shrink-0">sample <span class="font-mono text-text">5 × 5</span></span>
+		<span class="shrink-0">scale <span class="font-mono text-text">1 px : 1 px</span></span>
 	{:else if generativeTools.has(activeTool)}
 		<!-- TODO(WASM_TODOS.generative): run the provider and composite through the planned binding. -->
 		<input
 			placeholder="describe an edit"
-			class="border-subtle bg-surface placeholder:text-muted/60 focus:border-accent h-6 min-w-48 rounded border px-2 focus:outline-none"
+			class="h-6 min-w-48 rounded border border-subtle bg-surface px-2 placeholder:text-muted/60 focus:border-accent focus:outline-none"
 		/>
-		<button class="bg-text text-bg h-6 shrink-0 cursor-pointer rounded px-2">generate</button>
+		<button class="h-6 shrink-0 cursor-pointer rounded bg-text px-2 text-bg">generate</button>
 	{:else if activeTool === 'mask-linear' || activeTool === 'mask-radial'}
 		<span class="shrink-0">
 			drag on the photo to place the {activeTool === 'mask-linear' ? 'linear' : 'radial'} gradient
 		</span>
 	{:else if activeTool.startsWith('mask')}
-		<span class="shrink-0">size <span class="text-text font-mono">{refineBrushSize} px</span></span>
-		<span class="shrink-0">feather <span class="text-text font-mono">45%</span></span>
-		<span class="shrink-0">flow <span class="text-text font-mono">100%</span></span>
+		<span class="shrink-0">size <span class="font-mono text-text">{refineBrushSize} px</span></span>
+		<span class="shrink-0">feather <span class="font-mono text-text">45%</span></span>
+		<span class="shrink-0">flow <span class="font-mono text-text">100%</span></span>
 		{#if activeTool === 'mask'}
 			<span class="shrink-0"
-				>mode <span class="text-text font-mono">{maskBrushOperation}</span></span
+				>mode <span class="font-mono text-text">{maskBrushOperation}</span></span
 			>
 		{/if}
 	{:else}
 		<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-			<input type="checkbox" checked class="accent-accent size-3" /> auto-select
+			<input type="checkbox" checked class="size-3 accent-accent" /> auto-select
 		</label>
 		<label class="flex shrink-0 cursor-pointer items-center gap-1.5">
-			<input type="checkbox" class="accent-accent size-3" /> show transform controls
+			<input type="checkbox" class="size-3 accent-accent" /> show transform controls
 		</label>
 	{/if}
 </div>

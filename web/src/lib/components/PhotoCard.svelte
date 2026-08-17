@@ -34,8 +34,8 @@
 			tabindex="0"
 			aria-label={`Select ${photo.name}`}
 			class={view === 'grid'
-				? `motion-card group bg-bg min-w-0 cursor-pointer rounded border p-1.5 ${workspace.selectedIds.includes(photo.id) ? 'border-accent' : 'border-subtle hover:border-muted'}`
-				: `motion-card group bg-bg grid h-14 cursor-pointer grid-cols-[3.75rem_minmax(0,1fr)_5rem_5rem] items-center gap-3 px-2 ${workspace.selectedIds.includes(photo.id) ? 'bg-surface' : 'hover:bg-surface/65'}`}
+				? `motion-card group min-w-0 cursor-pointer rounded border bg-bg p-1.5 ${workspace.selectedIds.includes(photo.id) ? 'border-accent' : 'border-subtle hover:border-muted'}`
+				: `motion-card group grid h-14 cursor-pointer grid-cols-[3.75rem_minmax(0,1fr)_5rem_5rem] items-center gap-3 bg-bg px-2 ${workspace.selectedIds.includes(photo.id) ? 'bg-surface' : 'hover:bg-surface/65'}`}
 			style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
 			onclick={(event) => workspace.selectPhoto(photo.id, event.metaKey || event.ctrlKey)}
 			ondblclick={() => workspace.editPhoto(photo.id)}
@@ -43,8 +43,8 @@
 		>
 			<div
 				class={view === 'grid'
-					? 'bg-surface relative aspect-[4/3] overflow-hidden rounded-sm'
-					: 'bg-surface relative h-11 overflow-hidden rounded-sm'}
+					? 'relative aspect-[4/3] overflow-hidden rounded-sm bg-surface'
+					: 'relative h-11 overflow-hidden rounded-sm bg-surface'}
 			>
 				<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
 				{#if stack}
@@ -67,7 +67,7 @@
 			</div>
 
 			<div class={view === 'grid' ? 'min-w-0 px-0.5 pt-2 pb-0.5' : 'min-w-0'}>
-				<p class="text-text truncate font-mono text-[11px]">{photo.name}</p>
+				<p class="truncate font-mono text-[11px] text-text">{photo.name}</p>
 				{#if view === 'grid'}
 					<div class="mt-1.5 flex items-center justify-between">
 						<div class="flex">
@@ -75,7 +75,7 @@
 								<button
 									type="button"
 									aria-label={`Rate ${rating} stars`}
-									class="text-muted/55 hover:text-text cursor-pointer transition-colors"
+									class="cursor-pointer text-muted/55 transition-colors hover:text-text"
 									onclick={(event) => {
 										event.stopPropagation();
 										workspace.setRating(photo.id, rating);
@@ -94,8 +94,8 @@
 				{/if}
 			</div>
 			{#if view === 'list'}
-				<span class="text-muted font-mono text-[11px]">{photo.extension}</span>
-				<span class="text-muted font-mono text-[11px]">{formatBytes(photo.size)}</span>
+				<span class="font-mono text-[11px] text-muted">{photo.extension}</span>
+				<span class="font-mono text-[11px] text-muted">{formatBytes(photo.size)}</span>
 			{/if}
 		</div>
 	{/snippet}

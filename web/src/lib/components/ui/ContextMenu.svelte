@@ -27,7 +27,7 @@
 {#snippet leaves(entries: MenuLeaf<A>[], prefix: string)}
 	{#each entries as entry, index (`${prefix}-${index}`)}
 		{#if entry.kind === 'separator'}
-			<ContextMenu.Separator class="bg-subtle my-1 h-px" />
+			<ContextMenu.Separator class="my-1 h-px bg-subtle" />
 		{:else}
 			<ContextMenu.Item
 				disabled={disabled(entry)}
@@ -40,7 +40,7 @@
 				</span>
 				<span class="flex-1">{entry.label}</span>
 				{#if entry.shortcut}
-					<kbd class="text-muted ml-5 font-mono text-[10px]"
+					<kbd class="ml-5 font-mono text-[10px] text-muted"
 						><ShortcutHint shortcut={entry.shortcut} /></kbd
 					>
 				{/if}

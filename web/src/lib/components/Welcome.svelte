@@ -96,12 +96,12 @@
 	}
 </script>
 
-<main class="bg-bg text-text flex min-h-svh items-center justify-center px-6">
+<main class="flex min-h-svh items-center justify-center bg-bg px-6 text-text">
 	<button
 		type="button"
 		aria-label="Enter photo library"
 		title="Enter photo library"
-		class="motion-header text-muted hover:bg-surface hover:text-text absolute top-5 right-5 flex size-9 items-center justify-center rounded transition-colors"
+		class="motion-header absolute top-5 right-5 flex size-9 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
 		onclick={onEnterLibrary}
 		disabled={busy}
 	>
@@ -113,7 +113,7 @@
 		target="_blank"
 		rel="noreferrer"
 		aria-label="Postframe on GitHub"
-		class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute right-5 bottom-5 flex size-9 items-center justify-center rounded transition-colors"
+		class="motion-enter absolute right-5 bottom-5 flex size-9 items-center justify-center rounded text-muted/70 transition-colors hover:bg-surface hover:text-text"
 	>
 		<SiGithub size={15} aria-hidden="true" />
 	</a>
@@ -121,7 +121,7 @@
 	{#if localStorageAvailable}
 		<button
 			type="button"
-			class="motion-enter text-muted/70 hover:bg-surface hover:text-text absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] transition-colors"
+			class="motion-enter absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] text-muted/70 transition-colors hover:bg-surface hover:text-text"
 			onclick={openStorage}
 		>
 			local storage
@@ -133,7 +133,7 @@
 			<img src={postframeLogo} alt="" class="size-7" />
 			<span class="text-[14px] font-medium tracking-tight">postframe</span>
 		</div>
-		<p class="text-muted mt-3 text-[14px]">post-processing built on your JPEGs.</p>
+		<p class="mt-3 text-[14px] text-muted">post-processing built on your JPEGs.</p>
 
 		<div class="mt-8 flex flex-col gap-2 sm:flex-row">
 			<input
@@ -146,7 +146,7 @@
 			/>
 			<button
 				type="button"
-				class="motion-action bg-text text-bg flex h-9 cursor-pointer items-center justify-center rounded px-4 text-xs font-medium hover:opacity-85 sm:flex-1"
+				class="motion-action flex h-9 cursor-pointer items-center justify-center rounded bg-text px-4 text-xs font-medium text-bg hover:opacity-85 sm:flex-1"
 				style="--motion-delay: 80ms"
 				onclick={() => openPhotoInput.click()}
 				disabled={busy || !sourceReady}
@@ -156,7 +156,7 @@
 
 			<button
 				type="button"
-				class="motion-action border-subtle text-muted hover:bg-surface hover:text-text flex h-9 cursor-pointer items-center justify-center rounded border px-4 text-xs font-medium sm:flex-1"
+				class="motion-action flex h-9 cursor-pointer items-center justify-center rounded border border-subtle px-4 text-xs font-medium text-muted hover:bg-surface hover:text-text sm:flex-1"
 				style="--motion-delay: 120ms"
 				onclick={() => (newCollectionOpen = true)}
 				disabled={busy}
@@ -165,13 +165,13 @@
 			</button>
 		</div>
 		{#if ingestError}
-			<p class="text-negative mt-3 truncate text-[11px]" title={ingestError}>
+			<p class="mt-3 truncate text-[11px] text-negative" title={ingestError}>
 				unsupported RAW file
 			</p>
 		{/if}
 
 		{#if libraryError}
-			<p class="text-negative mt-5 truncate text-[11px]" title={libraryError}>
+			<p class="mt-5 truncate text-[11px] text-negative" title={libraryError}>
 				couldn't read the local library
 			</p>
 		{/if}
@@ -186,29 +186,29 @@
 				<div class="mb-5 flex items-start justify-between">
 					<div>
 						<Dialog.Title class="text-sm font-medium tracking-tight">new collection</Dialog.Title>
-						<Dialog.Description class="text-muted mt-1 text-xs">
+						<Dialog.Description class="mt-1 text-xs text-muted">
 							group photographs without moving them.
 						</Dialog.Description>
 					</div>
 					<Dialog.Close
 						aria-label="Close"
-						class="text-muted hover:text-text cursor-pointer rounded p-1 transition-colors"
+						class="cursor-pointer rounded p-1 text-muted transition-colors hover:text-text"
 					>
 						<X size={16} />
 					</Dialog.Close>
 				</div>
 
 				<label class="mb-4 block">
-					<span class="text-muted mb-1.5 block text-[11px] tracking-[0.04em]">collection name</span>
+					<span class="mb-1.5 block text-[11px] tracking-[0.04em] text-muted">collection name</span>
 					<input
 						bind:value={collectionName}
 						placeholder="untitled collection"
-						class="border-subtle bg-surface placeholder:text-muted/50 focus:border-accent w-full rounded border px-3 py-2.5 text-xs focus:outline-none"
+						class="w-full rounded border border-subtle bg-surface px-3 py-2.5 text-xs placeholder:text-muted/50 focus:border-accent focus:outline-none"
 					/>
 				</label>
 
 				<label
-					class="border-muted/45 bg-surface/45 hover:border-accent/70 hover:bg-surface flex min-h-44 cursor-pointer flex-col items-center justify-center rounded border border-dashed px-6 text-center transition-colors"
+					class="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded border border-dashed border-muted/45 bg-surface/45 px-6 text-center transition-colors hover:border-accent/70 hover:bg-surface"
 					ondragover={(event) => event.preventDefault()}
 					ondrop={dropFiles}
 				>
@@ -221,20 +221,20 @@
 						onchange={(event) => chooseFiles(event.currentTarget.files)}
 					/>
 					{#if files.length > 0}
-						<Images size={22} strokeWidth={1.25} class="text-accent mb-3" />
-						<p class="text-text text-xs">
+						<Images size={22} strokeWidth={1.25} class="mb-3 text-accent" />
+						<p class="text-xs text-text">
 							{files.length} photo{files.length === 1 ? '' : 's'} ready
 						</p>
-						<p class="text-muted mt-1 max-w-xs truncate font-mono text-[11px]">
+						<p class="mt-1 max-w-xs truncate font-mono text-[11px] text-muted">
 							{files
 								.slice(0, 3)
 								.map((file) => file.name)
 								.join(' · ')}
 						</p>
 					{:else}
-						<Upload size={22} strokeWidth={1.25} class="text-muted mb-3" />
-						<p class="text-text text-xs">choose photos or drop them here</p>
-						<p class="text-muted mt-1 text-[11px]">local files only</p>
+						<Upload size={22} strokeWidth={1.25} class="mb-3 text-muted" />
+						<p class="text-xs text-text">choose photos or drop them here</p>
+						<p class="mt-1 text-[11px] text-muted">local files only</p>
 					{/if}
 				</label>
 
@@ -242,7 +242,7 @@
 					<button
 						type="submit"
 						disabled={!collectionName.trim() || busy}
-						class="bg-text text-bg cursor-pointer rounded px-4 py-2 text-[11px] tracking-wide transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+						class="cursor-pointer rounded bg-text px-4 py-2 text-[11px] tracking-wide text-bg transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
 					>
 						create collection
 					</button>

@@ -21,29 +21,29 @@
 </script>
 
 <aside
-	class="motion-panel-right border-subtle bg-bg min-h-0 overflow-y-auto border-l {workspace.photos
+	class="motion-panel-right min-h-0 overflow-y-auto border-l border-subtle bg-bg {workspace.photos
 		.length === 0
 		? 'hidden'
 		: ''}"
 >
 	{#if active}
 		{#key active.id}
-			<div class="motion-photo border-subtle bg-canvas aspect-[4/3] overflow-hidden border-b">
+			<div class="motion-photo aspect-[4/3] overflow-hidden border-b border-subtle bg-canvas">
 				<PhotoVisual photo={active} onRequest={workspace.loadThumbnail} />
 			</div>
 		{/key}
-		<div class="border-subtle border-b p-3">
+		<div class="border-b border-subtle p-3">
 			<div class="flex items-start justify-between gap-2">
 				<div class="min-w-0">
 					<p class="truncate text-[12px] font-medium">{active.name}</p>
-					<p class="text-muted mt-1 font-mono text-[11px]">
+					<p class="mt-1 font-mono text-[11px] text-muted">
 						{active.extension} · {formatBytes(active.size)}
 					</p>
 				</div>
 				<button
 					type="button"
 					aria-label={active.flagged ? 'Remove flag' : 'Flag photo'}
-					class="text-muted hover:text-text cursor-pointer rounded p-1 transition-colors"
+					class="cursor-pointer rounded p-1 text-muted transition-colors hover:text-text"
 					onclick={() => workspace.toggleFlag(active.id)}
 				>
 					<Flag size={14} class={active.flagged ? 'fill-text text-text' : ''} />
@@ -55,7 +55,7 @@
 						<button
 							type="button"
 							aria-label={`Rate ${rating} stars`}
-							class="text-muted hover:text-text cursor-pointer transition-colors"
+							class="cursor-pointer text-muted transition-colors hover:text-text"
 							onclick={() => workspace.setRating(active.id, rating)}
 						>
 							<Star size={12} class={active.rating >= rating ? 'fill-text text-text' : ''} />
@@ -67,9 +67,9 @@
 						<button
 							type="button"
 							aria-label={`${color} label`}
-							class="ring-offset-bg size-2.5 cursor-pointer rounded-full ring-offset-1 {active.colorLabel ===
+							class="size-2.5 cursor-pointer rounded-full ring-offset-1 ring-offset-bg {active.colorLabel ===
 							color
-								? 'ring-text ring-1'
+								? 'ring-1 ring-text'
 								: 'opacity-55 hover:opacity-100'}"
 							style:background={labelColors[color]}
 							onclick={() => workspace.setColorLabel(active.id, color)}
@@ -79,34 +79,34 @@
 			</div>
 		</div>
 
-		<div class="border-subtle border-b p-3">
-			<p class="text-muted mb-3 text-[11px] tracking-[0.04em]">metadata</p>
+		<div class="border-b border-subtle p-3">
+			<p class="mb-3 text-[11px] tracking-[0.04em] text-muted">metadata</p>
 			<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[11px]">
 				<dt class="text-muted">captured</dt>
-				<dd class="text-text/80 text-right">{active.captured}</dd>
+				<dd class="text-right text-text/80">{active.captured}</dd>
 				<dt class="text-muted">dimensions</dt>
-				<dd class="text-text/80 text-right font-mono">{dimensions(active)}</dd>
+				<dd class="text-right font-mono text-text/80">{dimensions(active)}</dd>
 				<dt class="text-muted">camera</dt>
-				<dd class="text-text/80 text-right">{camera(active)}</dd>
+				<dd class="text-right text-text/80">{camera(active)}</dd>
 				<dt class="text-muted">lens</dt>
-				<dd class="text-text/80 text-right">{active.metadata?.lens ?? '—'}</dd>
+				<dd class="text-right text-text/80">{active.metadata?.lens ?? '—'}</dd>
 				<dt class="text-muted">focal length</dt>
-				<dd class="text-text/80 text-right font-mono">
+				<dd class="text-right font-mono text-text/80">
 					{active.metadata?.focalLengthMm
 						? `${formatDecimal(active.metadata.focalLengthMm)} mm`
 						: '—'}
 				</dd>
 				<dt class="text-muted">exposure</dt>
-				<dd class="text-text/80 text-right font-mono">{exposure(active)}</dd>
+				<dd class="text-right font-mono text-text/80">{exposure(active)}</dd>
 			</dl>
 		</div>
 
 		<div class="p-3">
-			<p class="text-muted mb-2 text-[11px] tracking-[0.04em]">collections</p>
+			<p class="mb-2 text-[11px] tracking-[0.04em] text-muted">collections</p>
 			<div class="space-y-1">
 				{#each workspace.collections as collection (collection.id)}
 					<label
-						class="text-muted hover:text-text flex cursor-pointer items-center gap-2 py-1 text-[12px]"
+						class="flex cursor-pointer items-center gap-2 py-1 text-[12px] text-muted hover:text-text"
 					>
 						<input
 							type="checkbox"
@@ -120,7 +120,7 @@
 				{#if workspace.collections.length === 0}
 					<button
 						type="button"
-						class="text-muted hover:text-text cursor-pointer text-[12px] transition-colors"
+						class="cursor-pointer text-[12px] text-muted transition-colors hover:text-text"
 						onclick={workspace.requestCollectionCreation}
 					>
 						+ create a collection
@@ -129,7 +129,7 @@
 			</div>
 		</div>
 	{:else}
-		<div class="text-muted flex h-full items-center justify-center px-6 text-center text-[11px]">
+		<div class="flex h-full items-center justify-center px-6 text-center text-[11px] text-muted">
 			select a photo to inspect it.
 		</div>
 	{/if}

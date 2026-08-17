@@ -331,7 +331,7 @@
 	{#if debug}
 		<div
 			data-pyramid-status
-			class="border-subtle bg-bg/85 text-muted absolute bottom-3 left-3 rounded border px-2 py-1 font-mono text-[10px] shadow-lg backdrop-blur"
+			class="absolute bottom-3 left-3 rounded border border-subtle bg-bg/85 px-2 py-1 font-mono text-[10px] text-muted shadow-lg backdrop-blur"
 		>
 			<span class={diagnostics.fullyLoaded ? 'text-accent' : 'text-text'}>
 				{diagnostics.fullyLoaded ? 'covered' : 'loading'}

@@ -131,31 +131,31 @@
 
 <div
 	class={workspace.photos.length === 0
-		? 'bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)]'
-		: 'bg-bg grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
+		? 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)]'
+		: 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
 >
 	<LibrarySidebar {workspace} bind:source {recentCount} />
 
-	<section class="motion-panel-up bg-canvas flex min-h-0 min-w-0 flex-col">
+	<section class="motion-panel-up flex min-h-0 min-w-0 flex-col bg-canvas">
 		{#if workspace.photos.length > 0}
-			<div class="border-subtle bg-bg flex h-11 shrink-0 items-center gap-2 border-b px-3">
+			<div class="flex h-11 shrink-0 items-center gap-2 border-b border-subtle bg-bg px-3">
 				<label class="relative max-w-72 min-w-32 flex-1">
 					<Search
 						size={13}
 						strokeWidth={1.5}
-						class="text-muted pointer-events-none absolute top-1/2 left-2 -translate-y-1/2"
+						class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted"
 					/>
 					<input
 						bind:value={search}
 						placeholder="search photos"
-						class="border-subtle bg-surface text-text placeholder:text-muted/60 focus:border-accent h-7 w-full rounded border pr-2 pl-7 text-[11px] focus:outline-none"
+						class="h-7 w-full rounded border border-subtle bg-surface pr-2 pl-7 text-[11px] text-text placeholder:text-muted/60 focus:border-accent focus:outline-none"
 					/>
 				</label>
 
 				<select
 					bind:value={sort}
 					aria-label="Sort photos"
-					class="border-subtle bg-surface text-muted focus:border-accent h-7 cursor-pointer rounded border px-2 text-[11px] focus:outline-none"
+					class="h-7 cursor-pointer rounded border border-subtle bg-surface px-2 text-[11px] text-muted focus:border-accent focus:outline-none"
 				>
 					<option value="capture">capture time</option>
 					<option value="name">filename</option>
@@ -166,7 +166,7 @@
 					{#if selectedStack}
 						<button
 							type="button"
-							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors"
+							class="flex h-7 cursor-pointer items-center gap-1.5 rounded border border-subtle px-2 text-[11px] text-muted transition-colors hover:text-text"
 							onclick={() => workspace.ungroupStack(selectedStack.id)}
 						>
 							<Ungroup size={12} /> ungroup
@@ -175,7 +175,7 @@
 						<button
 							type="button"
 							disabled={workspace.selectedIds.length < 2}
-							class="border-subtle text-muted hover:text-text flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+							class="flex h-7 cursor-pointer items-center gap-1.5 rounded border border-subtle px-2 text-[11px] text-muted transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-30"
 							onclick={workspace.createStack}
 						>
 							<Layers3 size={12} /> group stack
@@ -186,19 +186,19 @@
 						type="single"
 						value={view}
 						onValueChange={(value) => value && (view = value)}
-						class="border-subtle bg-surface flex h-7 rounded border p-0.5"
+						class="flex h-7 rounded border border-subtle bg-surface p-0.5"
 					>
 						<ToggleGroup.Item
 							value="grid"
 							aria-label="Grid view"
-							class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
+							class="flex size-6 cursor-pointer items-center justify-center rounded-sm text-muted data-[state=on]:bg-elevated data-[state=on]:text-text"
 						>
 							<Grid2X2 size={12} />
 						</ToggleGroup.Item>
 						<ToggleGroup.Item
 							value="list"
 							aria-label="List view"
-							class="text-muted data-[state=on]:bg-elevated data-[state=on]:text-text flex size-6 cursor-pointer items-center justify-center rounded-sm"
+							class="flex size-6 cursor-pointer items-center justify-center rounded-sm text-muted data-[state=on]:bg-elevated data-[state=on]:text-text"
 						>
 							<List size={12} />
 						</ToggleGroup.Item>
@@ -211,14 +211,14 @@
 			{#if workspace.photos.length === 0}
 				<div class="motion-enter flex h-full flex-col items-center justify-center text-center">
 					<div
-						class="border-subtle bg-surface text-muted mb-4 flex size-10 items-center justify-center rounded border"
+						class="mb-4 flex size-10 items-center justify-center rounded border border-subtle bg-surface text-muted"
 					>
 						<ImagePlus size={17} strokeWidth={1.25} />
 					</div>
-					<p class="text-text text-xs font-medium">empty library</p>
-					<p class="text-muted mt-1 text-[11px]">add photographs when you're ready.</p>
+					<p class="text-xs font-medium text-text">empty library</p>
+					<p class="mt-1 text-[11px] text-muted">add photographs when you're ready.</p>
 					<label
-						class="bg-text text-bg mt-4 flex h-8 cursor-pointer items-center rounded px-3 text-[11px] font-medium hover:opacity-85"
+						class="mt-4 flex h-8 cursor-pointer items-center rounded bg-text px-3 text-[11px] font-medium text-bg hover:opacity-85"
 					>
 						<input
 							type="file"
@@ -235,7 +235,7 @@
 				<div
 					class={view === 'grid'
 						? 'grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3'
-						: 'border-subtle bg-subtle flex flex-col gap-px overflow-hidden rounded border'}
+						: 'flex flex-col gap-px overflow-hidden rounded border border-subtle bg-subtle'}
 				>
 					{#each visiblePhotos as photo, index (photo.id)}
 						<PhotoCard
@@ -252,16 +252,16 @@
 				</div>
 			{:else}
 				<div class="flex h-full flex-col items-center justify-center text-center">
-					<Box size={28} strokeWidth={1} class="text-muted mb-3" />
-					<p class="text-text text-xs">no photos in this view</p>
-					<p class="text-muted mt-1 text-[11px]">try another collection or clear the search.</p>
+					<Box size={28} strokeWidth={1} class="mb-3 text-muted" />
+					<p class="text-xs text-text">no photos in this view</p>
+					<p class="mt-1 text-[11px] text-muted">try another collection or clear the search.</p>
 				</div>
 			{/if}
 		</div>
 
 		{#if workspace.photos.length > 0}
 			<footer
-				class="border-subtle bg-bg text-muted flex h-7 shrink-0 items-center justify-between border-t px-3 text-[11px] tracking-wide"
+				class="flex h-7 shrink-0 items-center justify-between border-t border-subtle bg-bg px-3 text-[11px] tracking-wide text-muted"
 			>
 				<span>{visiblePhotos.length} visible</span>
 				<span>{workspace.selectedIds.length} selected</span>

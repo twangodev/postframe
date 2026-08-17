@@ -36,16 +36,16 @@
 	}
 </script>
 
-<div class="border-subtle border-b p-3">
+<div class="border-b border-subtle p-3">
 	<img class="hidden" src={previewSrc} alt="" bind:naturalWidth bind:naturalHeight />
 	<div class="mb-2 flex items-center justify-between">
-		<p class="text-muted text-[11px] tracking-[0.03em]">
+		<p class="text-[11px] tracking-[0.03em] text-muted">
 			{subjects.length} subjects found · choose one to mask
 		</p>
 		<button
 			type="button"
 			aria-label="Dismiss subject choices"
-			class="text-muted hover:text-text cursor-pointer rounded p-0.5 transition-colors"
+			class="cursor-pointer rounded p-0.5 text-muted transition-colors hover:text-text"
 			onclick={onDismiss}
 		>
 			<X size={12} />
@@ -64,7 +64,7 @@
 				onblur={() => onHover(null)}
 			>
 				<span
-					class="bg-surface relative block h-14 w-11 overflow-hidden rounded"
+					class="relative block h-14 w-11 overflow-hidden rounded bg-surface"
 					style={cropStyle(subject.box)}
 				>
 					{#if created.includes(index)}
@@ -73,7 +73,7 @@
 						</span>
 					{/if}
 				</span>
-				<span class="text-muted block truncate text-center text-[10px] lowercase">
+				<span class="block truncate text-center text-[10px] text-muted lowercase">
 					{detectedSubjectName(subjects, index)}
 				</span>
 			</button>
@@ -86,10 +86,10 @@
 			onpointerenter={() => onHover(null)}
 		>
 			<span
-				class="bg-surface block h-14 w-11 overflow-hidden rounded bg-cover bg-center"
+				class="block h-14 w-11 overflow-hidden rounded bg-surface bg-cover bg-center"
 				style={`background-image: url(${previewSrc});`}
 			></span>
-			<span class="text-muted block truncate text-center text-[10px] lowercase">everyone</span>
+			<span class="block truncate text-center text-[10px] text-muted lowercase">everyone</span>
 		</button>
 	</div>
 </div>

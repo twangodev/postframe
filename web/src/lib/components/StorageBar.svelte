@@ -29,7 +29,7 @@
 </script>
 
 <div class="relative">
-	<div class="bg-subtle h-1.5 overflow-hidden rounded-full" aria-hidden="true">
+	<div class="h-1.5 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
 		{#if occupied.length > 0}
 			<BarChart
 				data={[row]}
@@ -64,7 +64,7 @@
 		{/each}
 	</div>
 </div>
-<p class="text-muted mt-2 text-[11px]">{summary}</p>
+<p class="mt-2 text-[11px] text-muted">{summary}</p>
 {#if occupied.length > 0}
 	<ul aria-label="Storage breakdown" class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
 		{#each occupied as segment (segment.id)}
@@ -73,7 +73,7 @@
 					<span class="size-1.5 rounded-full" style:background={segment.color}></span>
 					{segment.label}
 				</span>
-				<span class="text-muted font-mono">{formatBytes(segment.bytes)}</span>
+				<span class="font-mono text-muted">{formatBytes(segment.bytes)}</span>
 			</li>
 		{/each}
 	</ul>

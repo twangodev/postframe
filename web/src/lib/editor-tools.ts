@@ -76,7 +76,8 @@ export const generativeTools = new Set([
 type ToolChoice = [tool: string, label: string];
 
 type ToolShortcut =
-	{ kind: 'select'; tool: string; label: string } | { kind: 'cycle'; tools: ToolChoice[] };
+	| { kind: 'select'; tool: string; label: string }
+	| { kind: 'cycle'; tools: ToolChoice[] };
 
 const select = (tool: string, label: string): ToolShortcut => ({ kind: 'select', tool, label });
 const cycle = (tools: ToolChoice[]): ToolShortcut => ({ kind: 'cycle', tools });

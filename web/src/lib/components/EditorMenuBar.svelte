@@ -27,14 +27,14 @@
 </script>
 
 <nav
-	class="border-subtle bg-bg flex h-7 shrink-0 items-center border-t px-2"
+	class="flex h-7 shrink-0 items-center border-t border-subtle bg-bg px-2"
 	aria-label="Editor menu"
 >
 	<Menubar.Root loop class="flex h-full items-center gap-0.5">
 		{#each EDITOR_MENUS as menu (menu.id)}
 			<Menubar.Menu value={menu.id}>
 				<Menubar.Trigger
-					class="text-muted data-[state=open]:bg-surface data-[state=open]:text-text hover:bg-surface/60 hover:text-text flex h-5 cursor-default items-center rounded-sm px-2 text-[11px] outline-none"
+					class="flex h-5 cursor-default items-center rounded-sm px-2 text-[11px] text-muted outline-none hover:bg-surface/60 hover:text-text data-[state=open]:bg-surface data-[state=open]:text-text"
 				>
 					{menu.label}
 				</Menubar.Trigger>
@@ -42,7 +42,7 @@
 					<Menubar.Content align="start" sideOffset={3} class={contentClass}>
 						{#each menu.items as entry, index (`${menu.id}-${index}`)}
 							{#if entry.kind === 'separator'}
-								<Menubar.Separator class="bg-subtle my-1 h-px" />
+								<Menubar.Separator class="my-1 h-px bg-subtle" />
 							{:else if entry.kind === 'submenu'}
 								<Menubar.Sub>
 									<Menubar.SubTrigger class={itemClass}>
@@ -54,7 +54,7 @@
 										<Menubar.SubContent sideOffset={3} class={contentClass}>
 											{#each entry.items as child, childIndex (`${menu.id}-${index}-${childIndex}`)}
 												{#if child.kind === 'separator'}
-													<Menubar.Separator class="bg-subtle my-1 h-px" />
+													<Menubar.Separator class="my-1 h-px bg-subtle" />
 												{:else}
 													<Menubar.Item
 														disabled={disabled(child)}
@@ -67,7 +67,7 @@
 														</span>
 														<span class="flex-1">{child.label}</span>
 														{#if child.shortcut}
-															<kbd class="text-muted ml-5 font-mono text-[10px]"
+															<kbd class="ml-5 font-mono text-[10px] text-muted"
 																><ShortcutHint shortcut={child.shortcut} /></kbd
 															>
 														{/if}
@@ -89,7 +89,7 @@
 									</span>
 									<span class="flex-1">{entry.label}</span>
 									{#if entry.shortcut}
-										<kbd class="text-muted ml-5 font-mono text-[10px]"
+										<kbd class="ml-5 font-mono text-[10px] text-muted"
 											><ShortcutHint shortcut={entry.shortcut} /></kbd
 										>
 									{/if}

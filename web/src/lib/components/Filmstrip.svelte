@@ -26,8 +26,8 @@
 	}
 </script>
 
-<section class="motion-panel-up border-subtle bg-bg flex h-24 shrink-0 border-t">
-	<div class="border-subtle text-muted flex w-11 shrink-0 items-center justify-center border-r">
+<section class="motion-panel-up flex h-24 shrink-0 border-t border-subtle bg-bg">
+	<div class="flex w-11 shrink-0 items-center justify-center border-r border-subtle text-muted">
 		<ImageDown size={13} strokeWidth={1.25} />
 	</div>
 	<div class="flex min-w-0 flex-1 gap-2 overflow-x-auto p-2">
@@ -40,7 +40,7 @@
 					<button
 						{...props}
 						type="button"
-						class="motion-card group bg-canvas relative w-24 shrink-0 cursor-pointer overflow-hidden rounded border {workspace.activePhotoId ===
+						class="motion-card group relative w-24 shrink-0 cursor-pointer overflow-hidden rounded border bg-canvas {workspace.activePhotoId ===
 						photo.id
 							? 'border-accent'
 							: 'border-subtle hover:border-muted'}"
