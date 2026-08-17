@@ -28,8 +28,8 @@ pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
 pub use develop::{
-    CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform, EffectsSettings,
-    GradingSettings, GradingWheel, MixerBand, MixerSettings,
+    CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
+    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings,
 };
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
