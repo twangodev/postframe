@@ -1,6 +1,13 @@
-import type { ColorControlName, LightControlName } from './develop-settings';
+import {
+	withAdjustment,
+	type AdjustmentRecord,
+	type ColorControlName,
+	type LightControlName,
+	type ScalarControlName,
+	type ScalarGroupName
+} from './develop-settings';
 import { cloneEditDocument, cloneEditMask, type EditMask } from './edit-document';
-import type { EditorCommand } from './editor-command';
+import { adjustmentCommand, type EditorCommand } from './editor-command';
 import type { DevelopPreviewController } from './develop-preview';
 import type { MaskEdgeControlName } from './mask-edge-settings';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
@@ -10,7 +17,7 @@ export interface AdjustmentControlsHost {
 	readonly selectedPhoto: Photo | null;
 	readonly canAdjustLight: boolean;
 	readonly selectedMaskId: string | null;
-	readonly adjustments: Record<LightControlName | ColorControlName, number>;
+	readonly adjustments: AdjustmentRecord;
 	masks: EditMask[];
 	dispatchEditorCommand(command: EditorCommand): boolean;
 }
@@ -22,38 +29,49 @@ export class AdjustmentControls {
 		private readonly host: AdjustmentControlsHost
 	) {}
 
-	previewLight(control: LightControlName, value: number) {
+	previewAdjustment<Group extends ScalarGroupName>(
+		group: Group,
+		control: ScalarControlName<Group>,
+		value: number
+	) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		this.host.adjustments[control] = value;
-		const { light, color } = this.host.selectedPhoto.edit.adjustments;
-		this.develop.schedule({ ...light, [control]: value }, color);
+		Object.assign(this.host.adjustments, { [control]: value });
+		this.develop.schedule(
+			withAdjustment(this.host.selectedPhoto.edit.adjustments, group, control, value)
+		);
+	}
+
+	commitAdjustment<Group extends ScalarGroupName>(
+		group: Group,
+		control: ScalarControlName<Group>,
+		value: number
+	) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		if (!this.host.dispatchEditorCommand(adjustmentCommand(group, control, value))) {
+			this.releaseUnchangedPreview();
+		}
+	}
+
+	previewLight(control: LightControlName, value: number) {
+		this.previewAdjustment('light', control, value);
 	}
 
 	commitLight(control: LightControlName, value: number) {
-		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		if (!this.host.dispatchEditorCommand({ type: 'light.set', control, value })) {
-			this.releaseUnchangedPreview();
-		}
+		this.commitAdjustment('light', control, value);
 	}
 
 	previewColor(control: ColorControlName, value: number) {
-		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		this.host.adjustments[control] = value;
-		const { light, color } = this.host.selectedPhoto.edit.adjustments;
-		this.develop.schedule(light, { ...color, [control]: value });
+		this.previewAdjustment('color', control, value);
 	}
 
 	commitColor(control: ColorControlName, value: number) {
-		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		if (!this.host.dispatchEditorCommand({ type: 'color.set', control, value })) {
-			this.releaseUnchangedPreview();
-		}
+		this.commitAdjustment('color', control, value);
 	}
 
 	private releaseUnchangedPreview() {
 		this.develop.release();
 		const adjustments = this.host.selectedPhoto?.edit.adjustments;
-		if (adjustments) this.develop.refreshScope(adjustments.light, adjustments.color);
+		if (adjustments) this.develop.refreshScope(adjustments);
 	}
 
 	previewMaskLight(control: LightControlName, value: number) {

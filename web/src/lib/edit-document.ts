@@ -2,13 +2,15 @@ import { z } from 'zod';
 import {
 	colorSettingsSchema,
 	defaultColorSettings,
+	defaultDevelopSettings,
 	defaultLightSettings,
+	developSettingsSchema,
 	lightSettingsSchema,
 	type LightSettings
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 9;
+export const EDIT_DOCUMENT_VERSION = 10;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -131,7 +133,7 @@ export const editDocumentSchema = z
 	.object({
 		version: z.literal(EDIT_DOCUMENT_VERSION),
 		photoId: z.string().min(1),
-		adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema }),
+		adjustments: developSettingsSchema,
 		geometry: z.object({
 			rotation: z.number().finite().min(-180).max(180),
 			flipHorizontal: z.boolean(),
@@ -171,7 +173,7 @@ export function defaultEditDocument(
 	return {
 		version: EDIT_DOCUMENT_VERSION,
 		photoId,
-		adjustments: { light: lightSettingsSchema.parse(light), color: defaultColorSettings() },
+		adjustments: { ...defaultDevelopSettings(), light: lightSettingsSchema.parse(light) },
 		geometry: {
 			rotation: 0,
 			flipHorizontal: false,

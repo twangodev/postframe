@@ -90,8 +90,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'preview': {
 				const preview = await renderPreviewImage(
 					activeDocument(),
-					message.settings,
-					message.color,
+					message.adjustments,
 					message.tone
 				);
 				post(
@@ -108,8 +107,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'scope': {
 				const scope = renderScope(
 					activeDocument(),
-					message.settings,
-					message.color,
+					message.adjustments,
 					message.tone,
 					message.sampleTarget
 				);

@@ -11,17 +11,10 @@ import {
 	pyramidTileRegion,
 	pyramidTileUrl
 } from '../src/lib/postframe-tile-source.ts';
+import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
 const image = { width: 6001, height: 4003 };
-const settings = {
-	exposure: 0,
-	contrast: 0,
-	highlights: 0,
-	shadows: 0,
-	whites: 0,
-	blacks: 0
-};
-const color = { temperature: 0, tint: 0, vibrance: 0, saturation: 0 };
+const adjustments = defaultDevelopSettings();
 
 test('limits the client-rendered pyramid to supported power-of-two bins', () => {
 	const levels = pyramidLevels(image);
@@ -90,8 +83,7 @@ function tileSource(renderTile: Parameters<typeof createPostframeTileSource>[1][
 			revision: 3,
 			image,
 			renderTile,
-			settings,
-			color,
+			adjustments,
 			tone: true
 		}
 	) as OpenSeadragon.TileSource & {

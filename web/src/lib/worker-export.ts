@@ -1,4 +1,4 @@
-import type { ColorSettings, LightSettings } from './develop-settings';
+import type { DevelopSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import {
 	cropRegion,
@@ -11,13 +11,7 @@ import {
 } from './export.ts';
 import { wasm } from './worker-wasm.ts';
 import { post, type Request } from './worker-protocol.ts';
-import {
-	canvasContext,
-	colorArguments,
-	displayTransform,
-	imageData,
-	lightArguments
-} from './worker-render.ts';
+import { canvasContext, displayTransform, imageData } from './worker-render.ts';
 import { createMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument } from './worker-documents.ts';
 
@@ -62,8 +56,7 @@ function developExportImage(
 	request: Extract<Request, { type: 'export' }>,
 	onProgress: (completed: number, total: number) => void
 ) {
-	const light =
-		active.kind === 'display' ? displayTransform(active, request.settings, request.color) : null;
+	const light = active.kind === 'display' ? displayTransform(active, request.adjustments) : null;
 	const compositors = createMaskCompositors(request.masks);
 	try {
 		const rgba = new Uint8Array(width * height * 4);
@@ -72,7 +65,7 @@ function developExportImage(
 		for (const [index, region] of tiles.entries()) {
 			let tile =
 				active.kind === 'raw'
-					? developRawExportTile(active.session, request.settings, request.color, region)
+					? developRawExportTile(active.session, request.adjustments, region)
 					: developDisplayExportTile(active.bitmap, light!, region);
 			for (const mask of compositors) {
 				tile = mask.compositor.composite_rgba(
@@ -98,8 +91,7 @@ function developExportImage(
 
 function developRawExportTile(
 	session: WasmSession,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	region: ExportRegion
 ) {
 	const tile = session.render_tile(
@@ -108,8 +100,7 @@ function developRawExportTile(
 		region.width,
 		region.height,
 		1,
-		...lightArguments(settings),
-		...colorArguments(color),
+		adjustments,
 		true
 	);
 	try {

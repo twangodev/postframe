@@ -11,17 +11,39 @@ import {
 } from './edit-document.ts';
 import {
 	colorSettingsSchema,
+	developSettingsSchema,
 	lightSettingsSchema,
+	sameDevelopSettings,
+	withAdjustment,
 	type ColorControlName,
-	type LightControlName
+	type DevelopSettings,
+	type LightControlName,
+	type ScalarControlName,
+	type ScalarGroupName
 } from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
+export type AdjustmentCommand = {
+	[Group in ScalarGroupName]: {
+		type: 'adjustment.set';
+		group: Group;
+		control: ScalarControlName<Group>;
+		value: number;
+	};
+}[ScalarGroupName];
+
+export function adjustmentCommand<Group extends ScalarGroupName>(
+	group: Group,
+	control: ScalarControlName<Group>,
+	value: number
+): AdjustmentCommand {
+	return { type: 'adjustment.set', group, control, value } as AdjustmentCommand;
+}
+
 export type EditorCommand =
-	| { type: 'light.set'; control: LightControlName; value: number }
-	| { type: 'color.set'; control: ColorControlName; value: number }
+	| AdjustmentCommand
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
@@ -63,23 +85,13 @@ export function applyEditorCommand(
 	const next = cloneEditDocument(document);
 
 	switch (command.type) {
-		case 'light.set': {
-			const light = lightSettingsSchema.parse({
-				...next.adjustments.light,
-				[command.control]: command.value
-			});
-			if (next.adjustments.light[command.control] === light[command.control]) return null;
-			next.adjustments.light = light;
-			return transition(command, lightLabel(command.control, command.value), 'render', next);
-		}
-		case 'color.set': {
-			const color = colorSettingsSchema.parse({
-				...next.adjustments.color,
-				[command.control]: command.value
-			});
-			if (next.adjustments.color[command.control] === color[command.control]) return null;
-			next.adjustments.color = color;
-			return transition(command, adjustmentLabel(command.control, command.value), 'render', next);
+		case 'adjustment.set': {
+			const adjustments: DevelopSettings = developSettingsSchema.parse(
+				withAdjustment(next.adjustments, command.group, command.control, command.value)
+			);
+			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
+			next.adjustments = adjustments;
+			return transition(command, controlLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.light.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -90,7 +102,7 @@ export function applyEditorCommand(
 			});
 			if (mask.adjustments.light[command.control] === light[command.control]) return null;
 			mask.adjustments.light = light;
-			return transition(command, lightLabel(command.control, command.value), 'render', next);
+			return transition(command, controlLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.color.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -101,7 +113,7 @@ export function applyEditorCommand(
 			});
 			if (mask.adjustments.color[command.control] === color[command.control]) return null;
 			mask.adjustments.color = color;
-			return transition(command, adjustmentLabel(command.control, command.value), 'render', next);
+			return transition(command, controlLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.edge.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
@@ -175,7 +187,7 @@ function transition(
 	return { command, label, invalidation, document: editDocumentSchema.parse(document) };
 }
 
-function lightLabel(control: LightControlName, value: number) {
+function controlLabel(control: string, value: number) {
 	return adjustmentLabel(control, value, control === 'exposure' ? ' EV' : '');
 }
 

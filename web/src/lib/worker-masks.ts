@@ -2,7 +2,8 @@ import { adjustMaskEdges } from './mask-edge-adjustment.ts';
 import type { WasmDevelopedTileCompositor } from './wasm-runtime';
 import { wasm } from './worker-wasm.ts';
 import type { DevelopedMaskInput, RenderTileRequest } from './worker-protocol.ts';
-import { canvasContext, colorArguments, imageData, lightArguments } from './worker-render.ts';
+import { tonalDevelopSettings } from './develop-settings.ts';
+import { canvasContext, imageData } from './worker-render.ts';
 import type { ActiveDocument } from './worker-documents.ts';
 
 export interface ActiveMaskCompositor {
@@ -40,8 +41,7 @@ export function createMaskCompositors(masks: DevelopedMaskInput[]) {
 					adjusted.alpha,
 					mask.width,
 					mask.height,
-					...lightArguments(mask.settings.light),
-					...colorArguments(mask.settings.color)
+					tonalDevelopSettings(mask.settings.light, mask.settings.color)
 				)
 			});
 		}

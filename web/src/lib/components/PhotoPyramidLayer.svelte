@@ -9,7 +9,7 @@
 	import { PIXEL_GRID_START_SCALE, surfaceTransform } from '$lib/photo-viewport';
 	import type { Size, ViewportTransform } from '$lib/photo-viewport';
 	import type { RenderTileRequest } from '$lib/worker';
-	import type { ColorSettings, LightSettings } from '$lib/develop-settings';
+	import type { DevelopSettings } from '$lib/develop-settings';
 
 	interface Props {
 		photoId: string;
@@ -24,8 +24,7 @@
 		) => Promise<ImageBitmap>;
 		renderRevision: number;
 		onRenderSettled?: (revision: number) => void;
-		settings: LightSettings;
-		color: ColorSettings;
+		adjustments: DevelopSettings;
 		tone?: boolean;
 	}
 
@@ -55,8 +54,7 @@
 		renderTile,
 		renderRevision,
 		onRenderSettled = () => {},
-		settings,
-		color,
+		adjustments,
 		tone = true
 	}: Props = $props();
 	let container: HTMLDivElement;
@@ -150,13 +148,13 @@
 			replacement = null;
 			opened = false;
 			resetDiagnostics();
-			viewer.open({ tileSource: tileSource(renderRevision, settings, color, tone) });
+			viewer.open({ tileSource: tileSource(renderRevision, adjustments, tone) });
 			return;
 		}
 
 		if (!opened || renderedRevision === renderRevision) return;
 		renderedRevision = renderRevision;
-		queueReplacement(renderRevision, settings, color, tone);
+		queueReplacement(renderRevision, adjustments, tone);
 	});
 
 	$effect(() => {
@@ -204,37 +202,26 @@
 		};
 	}
 
-	function tileSource(
-		revision: number,
-		light: LightSettings,
-		grade: ColorSettings,
-		toneMapping: boolean
-	) {
+	function tileSource(revision: number, settings: DevelopSettings, toneMapping: boolean) {
 		return createPostframeTileSource(openSeadragon!, {
 			photoId,
 			revision,
 			image,
 			renderTile,
-			settings: light,
-			color: grade,
+			adjustments: settings,
 			tone: toneMapping,
 			onTileEvent: handleTileEvent
 		});
 	}
 
-	function queueReplacement(
-		revision: number,
-		light: LightSettings,
-		grade: ColorSettings,
-		toneMapping: boolean
-	) {
+	function queueReplacement(revision: number, settings: DevelopSettings, toneMapping: boolean) {
 		if (!viewer) return;
 		const nextGeneration = ++generation;
 		discardReplacement();
 		resetDiagnostics();
 
 		viewer.addTiledImage({
-			tileSource: tileSource(revision, light, grade, toneMapping),
+			tileSource: tileSource(revision, settings, toneMapping),
 			opacity: 0,
 			preload: true,
 			success: (event) => {

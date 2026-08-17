@@ -1,4 +1,4 @@
-import type { ColorSettings, LightSettings } from './develop-settings';
+import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
 import { RawWebGpuRenderer, type RawRenderProfile } from './webgpu-renderer.ts';
@@ -6,13 +6,7 @@ import { post, type DevelopPhase, type Request } from './worker-protocol.ts';
 import { wasm } from './worker-wasm.ts';
 import { measure, measureAsync } from './worker-performance.ts';
 import { fileSize, readFile, writeFileHandle } from './worker-files.ts';
-import {
-	colorArguments,
-	displayPreview,
-	lightArguments,
-	renderDisplayPreview,
-	renderRawPreview
-} from './worker-render.ts';
+import { displayPreview, renderDisplayPreview, renderRawPreview } from './worker-render.ts';
 import { clearMaskCompositors } from './worker-masks.ts';
 
 export interface RawDocument {
@@ -28,8 +22,7 @@ export interface DisplayDocument {
 	source: FileSystemFileHandle;
 	bitmap: ImageBitmap;
 	preview: ImageData;
-	settings: LightSettings;
-	color: ColorSettings;
+	adjustments: DevelopSettings;
 	light: WasmDisplayTransform;
 	adjusted: Uint8Array | null;
 }
@@ -189,9 +182,7 @@ async function publishRawDocument(
 		lightLut: null,
 		metadataSource: exportMetadataSource(message.frames)
 	};
-	const preview = measure('preview', () =>
-		renderRawPreview(session, message.settings, message.color, true)
-	);
+	const preview = measure('preview', () => renderRawPreview(session, message.adjustments, true));
 	post(
 		{
 			id: message.id,
@@ -242,10 +233,7 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 		() => createImageBitmap(source, { imageOrientation: 'from-image' }),
 		source.name
 	);
-	const light = new wasm.DisplayTransform(
-		...lightArguments(message.settings),
-		...colorArguments(message.color)
-	);
+	const light = new wasm.DisplayTransform(message.adjustments);
 	try {
 		postDisplayProgress(message, 'decoding', source.size, source.size);
 		const preview = displayPreview(bitmap, message.maxDimension);
@@ -254,15 +242,14 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 			source: message.source,
 			bitmap,
 			preview,
-			settings: { ...message.settings },
-			color: { ...message.color },
+			adjustments: cloneDevelopSettings(message.adjustments),
 			light,
 			adjusted: null
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);
 		const rendered = await measureAsync('preview', () =>
-			renderDisplayPreview(next, message.settings, message.color)
+			renderDisplayPreview(next, message.adjustments)
 		);
 		post(
 			{

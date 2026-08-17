@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
-	import { History, SlidersHorizontal, Sparkles } from '@lucide/svelte';
-	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import { History, Sparkles } from '@lucide/svelte';
+	import ColorSection from './ColorSection.svelte';
+	import DetailSection from './DetailSection.svelte';
+	import EffectsSection from './EffectsSection.svelte';
+	import LightSection from './LightSection.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
-	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -12,15 +14,6 @@
 	}
 
 	let { workspace }: Props = $props();
-
-	const previewLight = (control: LightControlName) => (value: number) =>
-		workspace.previewLight(control, value);
-	const commitLight = (control: LightControlName) => (value: number) =>
-		workspace.commitLight(control, value);
-	const previewColor = (control: ColorControlName) => (value: number) =>
-		workspace.previewColor(control, value);
-	const commitColor = (control: ColorControlName) => (value: number) =>
-		workspace.commitColor(control, value);
 </script>
 
 <Tabs.Content value="adjust" class="motion-tab">
@@ -37,150 +30,10 @@
 		</button>
 	</Panel>
 
-	<Panel title="Light">
-		<AdjustmentSlider
-			label="Exposure"
-			bind:value={workspace.adjustments.exposure}
-			min={-4}
-			max={4}
-			step={0.05}
-			decimals={2}
-			suffix=" EV"
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('exposure')}
-			onValueCommit={commitLight('exposure')}
-		/>
-		<AdjustmentSlider
-			label="Contrast"
-			bind:value={workspace.adjustments.contrast}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('contrast')}
-			onValueCommit={commitLight('contrast')}
-		/>
-		<AdjustmentSlider
-			label="Highlights"
-			bind:value={workspace.adjustments.highlights}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('highlights')}
-			onValueCommit={commitLight('highlights')}
-		/>
-		<AdjustmentSlider
-			label="Shadows"
-			bind:value={workspace.adjustments.shadows}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('shadows')}
-			onValueCommit={commitLight('shadows')}
-		/>
-		<AdjustmentSlider
-			label="Whites"
-			bind:value={workspace.adjustments.whites}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('whites')}
-			onValueCommit={commitLight('whites')}
-		/>
-		<AdjustmentSlider
-			label="Blacks"
-			bind:value={workspace.adjustments.blacks}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewLight('blacks')}
-			onValueCommit={commitLight('blacks')}
-		/>
-	</Panel>
-
-	<Panel title="Color">
-		<AdjustmentSlider
-			label="Temperature"
-			bind:value={workspace.adjustments.temperature}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewColor('temperature')}
-			onValueCommit={commitColor('temperature')}
-		/>
-		<AdjustmentSlider
-			label="Tint"
-			bind:value={workspace.adjustments.tint}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewColor('tint')}
-			onValueCommit={commitColor('tint')}
-		/>
-		<AdjustmentSlider
-			label="Vibrance"
-			bind:value={workspace.adjustments.vibrance}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewColor('vibrance')}
-			onValueCommit={commitColor('vibrance')}
-		/>
-		<AdjustmentSlider
-			label="Saturation"
-			bind:value={workspace.adjustments.saturation}
-			min={-100}
-			max={100}
-			disabled={!workspace.canAdjustLight}
-			onValueChange={previewColor('saturation')}
-			onValueCommit={commitColor('saturation')}
-		/>
-		<button
-			type="button"
-			class="mt-2 flex w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 py-2 text-[11px] text-muted hover:text-text"
-		>
-			color mixer <SlidersHorizontal size={12} />
-		</button>
-	</Panel>
-
-	<Panel title="Presence" open={false}>
-		<AdjustmentSlider
-			label="Texture"
-			bind:value={workspace.adjustments.texture}
-			min={-100}
-			max={100}
-		/>
-		<AdjustmentSlider
-			label="Clarity"
-			bind:value={workspace.adjustments.clarity}
-			min={-100}
-			max={100}
-		/>
-		<AdjustmentSlider
-			label="Dehaze"
-			bind:value={workspace.adjustments.dehaze}
-			min={-100}
-			max={100}
-		/>
-	</Panel>
-
-	<Panel title="Detail" open={false}>
-		<AdjustmentSlider
-			label="Sharpening"
-			bind:value={workspace.adjustments.sharpening}
-			min={0}
-			max={100}
-			defaultValue={40}
-			signed={false}
-		/>
-		<AdjustmentSlider
-			label="Noise reduction"
-			bind:value={workspace.adjustments.noiseReduction}
-			min={0}
-			max={100}
-			defaultValue={10}
-			signed={false}
-		/>
-	</Panel>
+	<LightSection {workspace} />
+	<ColorSection {workspace} />
+	<DetailSection {workspace} />
+	<EffectsSection {workspace} />
 
 	<Panel title="Optics" open={false}>
 		<label class="flex cursor-pointer items-center gap-2 py-1 text-[11px] text-muted">
@@ -193,7 +46,7 @@
 
 	<Panel title="Presets" open={false}>
 		<div class="space-y-1">
-			{#each ['Clean color', 'Soft highlight', 'Neutral portrait', 'Cinematic dusk'] as preset}
+			{#each ['Clean color', 'Soft highlight', 'Neutral portrait', 'Cinematic dusk'] as preset (preset)}
 				<button
 					type="button"
 					class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-muted lowercase hover:bg-surface hover:text-text"
@@ -207,7 +60,7 @@
 
 	<Panel title="History" open={false} meta={`${workspace.history.length}`}>
 		<div class="space-y-2 border-l border-subtle pl-3">
-			{#each [...workspace.history].reverse() as item, index}
+			{#each [...workspace.history].reverse() as item, index (index)}
 				<div
 					class="flex items-center gap-2 text-[11px] lowercase {index === 0
 						? 'text-text'

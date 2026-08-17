@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import fc from 'fast-check';
 
-import { parseEditDocument } from '../src/lib/edit-document.ts';
+import { EDIT_DOCUMENT_VERSION, parseEditDocument } from '../src/lib/edit-document.ts';
 
 const bounded = (min: number, max: number) => fc.double({ min, max, noNaN: true });
 const unit = bounded(0, 1);
@@ -45,6 +45,72 @@ const edgeArbitrary = fc.record({
 });
 
 const pointArbitrary = fc.record({ x: unit, y: unit });
+
+const curveArbitrary = fc
+	.uniqueArray(fc.tuple(unit, unit), { minLength: 2, maxLength: 6, selector: ([x]) => x })
+	.map((points) => points.sort(([left], [right]) => left - right).map(([x, y]) => ({ x, y })));
+
+const curveSettingsArbitrary = fc.record({
+	luminance: curveArbitrary,
+	red: curveArbitrary,
+	green: curveArbitrary,
+	blue: curveArbitrary
+});
+
+const bandArbitrary = fc.record({ hue: slider, saturation: slider, luminance: slider });
+
+const mixerArbitrary = fc.record({
+	red: bandArbitrary,
+	orange: bandArbitrary,
+	yellow: bandArbitrary,
+	green: bandArbitrary,
+	aqua: bandArbitrary,
+	blue: bandArbitrary,
+	purple: bandArbitrary,
+	magenta: bandArbitrary
+});
+
+const wheelArbitrary = fc.record({
+	hue: bounded(0, 360),
+	saturation: bounded(0, 100),
+	luminance: slider
+});
+
+const gradingArbitrary = fc.record({
+	shadows: wheelArbitrary,
+	midtones: wheelArbitrary,
+	highlights: wheelArbitrary,
+	blending: bounded(0, 100),
+	balance: slider
+});
+
+const detailArbitrary = fc.record({
+	texture: slider,
+	clarity: slider,
+	dehaze: slider,
+	sharpenAmount: bounded(0, 150),
+	noiseLuminance: bounded(0, 100),
+	noiseColor: bounded(0, 100)
+});
+
+const effectsArbitrary = fc.record({
+	vignetteAmount: slider,
+	vignetteMidpoint: bounded(0, 100),
+	vignetteRoundness: slider,
+	vignetteFeather: bounded(0, 100),
+	grainAmount: bounded(0, 100),
+	grainSize: bounded(0, 100)
+});
+
+const developArbitrary = fc.record({
+	light: lightArbitrary,
+	color: colorArbitrary,
+	curve: curveSettingsArbitrary,
+	mixer: mixerArbitrary,
+	grading: gradingArbitrary,
+	detail: detailArbitrary,
+	effects: effectsArbitrary
+});
 
 const span = fc
 	.tuple(unit, unit)
@@ -177,9 +243,9 @@ const maskArbitrary = fc.record({
 
 const documentArbitrary = fc
 	.record({
-		version: fc.constant(9),
+		version: fc.constant(EDIT_DOCUMENT_VERSION),
 		photoId: word,
-		adjustments: fc.record({ light: lightArbitrary, color: colorArbitrary }),
+		adjustments: developArbitrary,
 		geometry: fc.record({
 			rotation: bounded(-180, 180),
 			flipHorizontal: fc.boolean(),
@@ -190,7 +256,7 @@ const documentArbitrary = fc
 	})
 	.map((document) => structuredClone(document));
 
-test('parsing a valid v9 document returns it unchanged (seed 3301)', () => {
+test('parsing a valid v10 document returns it unchanged (seed 3301)', () => {
 	fc.assert(
 		fc.property(documentArbitrary, (document) => {
 			const parsed = parseEditDocument(structuredClone(document), document.photoId);

@@ -12,10 +12,12 @@ import type { RenderTileRequest } from './worker';
 import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
-	defaultColorSettings,
-	defaultLightSettings,
+	defaultDevelopSettings,
+	scalarAdjustments,
 	type ColorControlName,
-	type LightControlName
+	type LightControlName,
+	type ScalarControlName,
+	type ScalarGroupName
 } from './develop-settings';
 import {
 	cloneEditDocument,
@@ -35,7 +37,7 @@ import type { MaskEdgeControlName } from './mask-edge-settings';
 import { AdjustmentControls } from './adjustment-controls';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
-import { defaultAdjustments, EditorSession } from './editor-session';
+import { EditorSession } from './editor-session';
 import { entityId } from './entity-id';
 import { MaskPainting, type GradientComponent } from './mask-painting';
 import { MaskRasterPipeline, type SelectedMaskRaster } from './mask-raster-pipeline';
@@ -125,12 +127,8 @@ export class WorkspaceState {
 	});
 	selectedMaskRaster = $state<SelectedMaskRaster | null>(null);
 	subjectChoices = $state<SubjectChoices | null>(null);
-	adjustments = $state({ ...defaultAdjustments });
-	renderSettings = $state({
-		settings: defaultLightSettings(),
-		color: defaultColorSettings(),
-		revision: 0
-	});
+	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
+	renderSettings = $state({ adjustments: defaultDevelopSettings(), revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);
@@ -379,6 +377,18 @@ export class WorkspaceState {
 
 	cancelDocument = () => this.session.cancel();
 
+	previewAdjustment = <Group extends ScalarGroupName>(
+		group: Group,
+		control: ScalarControlName<Group>,
+		value: number
+	) => this.controls.previewAdjustment(group, control, value);
+
+	commitAdjustment = <Group extends ScalarGroupName>(
+		group: Group,
+		control: ScalarControlName<Group>,
+		value: number
+	) => this.controls.commitAdjustment(group, control, value);
+
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);
 
@@ -426,8 +436,7 @@ export class WorkspaceState {
 		const edit = cloneEditDocument(photo.edit);
 		const jpeg = await this.workerClient.exportPhoto(
 			{
-				settings: edit.adjustments.light,
-				color: edit.adjustments.color,
+				adjustments: edit.adjustments,
 				masks: await this.pipeline.renderMasks(edit),
 				geometry: edit.geometry,
 				quality: options.quality

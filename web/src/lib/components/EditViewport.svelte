@@ -140,8 +140,7 @@
 						transform={viewport.transform}
 						renderTile={workspace.renderTile}
 						renderRevision={workspace.renderSettings.revision}
-						settings={workspace.renderSettings.settings}
-						color={workspace.renderSettings.color}
+						adjustments={workspace.renderSettings.adjustments}
 						onRenderSettled={workspace.settleDevelopRender}
 					/>
 					{#if workspace.developPreview?.photoId === active.id}

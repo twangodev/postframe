@@ -1,4 +1,8 @@
-import type { ColorSettings, LightSettings } from './develop-settings';
+import {
+	cloneDevelopSettings,
+	sameDevelopSettings,
+	type DevelopSettings
+} from './develop-settings';
 import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from './image-scope';
 import type { WasmSession } from './wasm-runtime';
 import { wasm } from './worker-wasm.ts';
@@ -15,61 +19,19 @@ export function imageData(pixels: Uint8Array, width: number, height: number) {
 	return new ImageData(new Uint8ClampedArray(pixels), width, height);
 }
 
-export function lightArguments(settings: LightSettings) {
-	return [
-		settings.exposure,
-		settings.contrast,
-		settings.highlights,
-		settings.shadows,
-		settings.whites,
-		settings.blacks
-	] as const;
-}
-
-export function colorArguments(settings: ColorSettings) {
-	return [settings.temperature, settings.tint, settings.vibrance, settings.saturation] as const;
-}
-
-export function displayTransform(
-	active: DisplayDocument,
-	settings: LightSettings,
-	color: ColorSettings
-) {
-	if (sameLightSettings(active.settings, settings) && sameColorSettings(active.color, color)) {
-		return active.light;
-	}
+export function displayTransform(active: DisplayDocument, adjustments: DevelopSettings) {
+	if (sameDevelopSettings(active.adjustments, adjustments)) return active.light;
 	active.light.free();
-	active.settings = { ...settings };
-	active.color = { ...color };
-	active.light = new wasm.DisplayTransform(...lightArguments(settings), ...colorArguments(color));
+	active.adjustments = cloneDevelopSettings(adjustments);
+	active.light = new wasm.DisplayTransform(active.adjustments);
 	active.adjusted = null;
 	return active.light;
 }
 
-function displayAdjusted(active: DisplayDocument, settings: LightSettings, color: ColorSettings) {
-	const light = displayTransform(active, settings, color);
+function displayAdjusted(active: DisplayDocument, adjustments: DevelopSettings) {
+	const light = displayTransform(active, adjustments);
 	active.adjusted ??= light.apply_rgba(new Uint8Array(active.preview.data));
 	return active.adjusted;
-}
-
-function sameLightSettings(left: LightSettings, right: LightSettings) {
-	return (
-		left.exposure === right.exposure &&
-		left.contrast === right.contrast &&
-		left.highlights === right.highlights &&
-		left.shadows === right.shadows &&
-		left.whites === right.whites &&
-		left.blacks === right.blacks
-	);
-}
-
-function sameColorSettings(left: ColorSettings, right: ColorSettings) {
-	return (
-		left.temperature === right.temperature &&
-		left.tint === right.tint &&
-		left.vibrance === right.vibrance &&
-		left.saturation === right.saturation
-	);
 }
 
 export function displayPreview(bitmap: ImageBitmap, maxDimension: number) {
@@ -85,22 +47,20 @@ export function displayPreview(bitmap: ImageBitmap, maxDimension: number) {
 
 export async function renderPreviewImage(
 	active: ActiveDocument,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	tone: boolean
 ) {
 	return active.kind === 'raw'
-		? renderRawPreviewImage(active.session, settings, color, tone)
-		: renderDisplayImage(active, settings, color);
+		? renderRawPreviewImage(active.session, adjustments, tone)
+		: renderDisplayImage(active, adjustments);
 }
 
 export function renderRawPreview(
 	session: WasmSession,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	tone: boolean
 ) {
-	const frame = session.preview_frame(...lightArguments(settings), ...colorArguments(color), tone);
+	const frame = session.preview_frame(adjustments, tone);
 	try {
 		const image = frame.jpeg.buffer as ArrayBuffer;
 		const histogram = frame.histogram.buffer as ArrayBuffer;
@@ -123,14 +83,8 @@ export function renderRawPreview(
 	}
 }
 
-function renderRawPreviewImage(
-	session: WasmSession,
-	settings: LightSettings,
-	color: ColorSettings,
-	tone: boolean
-) {
-	const image = session.preview_jpeg(...lightArguments(settings), ...colorArguments(color), tone)
-		.buffer as ArrayBuffer;
+function renderRawPreviewImage(session: WasmSession, adjustments: DevelopSettings, tone: boolean) {
+	const image = session.preview_jpeg(adjustments, tone).buffer as ArrayBuffer;
 	return {
 		image,
 		mediaType: 'image/jpeg' as const,
@@ -140,29 +94,22 @@ function renderRawPreviewImage(
 
 export function renderScope(
 	active: ActiveDocument,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	tone: boolean,
 	sampleTarget: number
 ) {
 	return active.kind === 'raw'
-		? renderRawScope(active.session, settings, color, tone, sampleTarget)
-		: renderDisplayScope(active, settings, color, sampleTarget);
+		? renderRawScope(active.session, adjustments, tone, sampleTarget)
+		: renderDisplayScope(active, adjustments, sampleTarget);
 }
 
 function renderRawScope(
 	session: WasmSession,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	tone: boolean,
 	sampleTarget: number
 ) {
-	const frame = session.preview_scope(
-		...lightArguments(settings),
-		...colorArguments(color),
-		tone,
-		Math.max(1, Math.floor(sampleTarget))
-	);
+	const frame = session.preview_scope(adjustments, tone, Math.max(1, Math.floor(sampleTarget)));
 	try {
 		return transferableScope({
 			histogram: frame.histogram,
@@ -176,13 +123,9 @@ function renderRawScope(
 	}
 }
 
-export async function renderDisplayPreview(
-	active: DisplayDocument,
-	settings: LightSettings,
-	color: ColorSettings
-) {
-	const image = await renderDisplayImage(active, settings, color);
-	const scope = renderDisplayScope(active, settings, color);
+export async function renderDisplayPreview(active: DisplayDocument, adjustments: DevelopSettings) {
+	const image = await renderDisplayImage(active, adjustments);
+	const scope = renderDisplayScope(active, adjustments);
 	return {
 		...image,
 		scope: scope.data,
@@ -190,12 +133,8 @@ export async function renderDisplayPreview(
 	};
 }
 
-async function renderDisplayImage(
-	active: DisplayDocument,
-	settings: LightSettings,
-	color: ColorSettings
-) {
-	const rgba = new Uint8ClampedArray(displayAdjusted(active, settings, color));
+async function renderDisplayImage(active: DisplayDocument, adjustments: DevelopSettings) {
+	const rgba = new Uint8ClampedArray(displayAdjusted(active, adjustments));
 	const context = canvasContext(active.preview.width, active.preview.height, false);
 	context.putImageData(new ImageData(rgba, active.preview.width, active.preview.height), 0, 0);
 	const image = await (await context.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer();
@@ -208,13 +147,12 @@ async function renderDisplayImage(
 
 function renderDisplayScope(
 	active: DisplayDocument,
-	settings: LightSettings,
-	color: ColorSettings,
+	adjustments: DevelopSettings,
 	sampleTarget?: number
 ) {
 	return transferableScope(
 		imageScopeFromRgba(
-			new Uint8ClampedArray(displayAdjusted(active, settings, color)),
+			new Uint8ClampedArray(displayAdjusted(active, adjustments)),
 			active.preview.width,
 			active.preview.height,
 			sampleTarget

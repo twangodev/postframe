@@ -11,7 +11,8 @@ import { applyEditorCommand } from '../src/lib/editor-command.ts';
 test('applies light commands immutably with render invalidation', () => {
 	const before = defaultEditDocument('photo-one');
 	const result = applyEditorCommand(before, {
-		type: 'light.set',
+		type: 'adjustment.set',
+		group: 'light',
 		control: 'contrast',
 		value: 35
 	});
@@ -22,7 +23,8 @@ test('applies light commands immutably with render invalidation', () => {
 	assert.equal(before.adjustments.light.contrast, 0);
 	assert.equal(
 		applyEditorCommand(result.document, {
-			type: 'light.set',
+			type: 'adjustment.set',
+			group: 'light',
 			control: 'contrast',
 			value: 35
 		}),
@@ -33,7 +35,8 @@ test('applies light commands immutably with render invalidation', () => {
 test('applies global color commands immutably with render invalidation', () => {
 	const before = defaultEditDocument('photo-one');
 	const result = applyEditorCommand(before, {
-		type: 'color.set',
+		type: 'adjustment.set',
+		group: 'color',
 		control: 'saturation',
 		value: -20
 	});
@@ -44,14 +47,20 @@ test('applies global color commands immutably with render invalidation', () => {
 	assert.equal(before.adjustments.color.saturation, 0);
 	assert.equal(
 		applyEditorCommand(result.document, {
-			type: 'color.set',
+			type: 'adjustment.set',
+			group: 'color',
 			control: 'saturation',
 			value: -20
 		}),
 		null
 	);
 	assert.throws(() =>
-		applyEditorCommand(before, { type: 'color.set', control: 'tint', value: 101 })
+		applyEditorCommand(before, {
+			type: 'adjustment.set',
+			group: 'color',
+			control: 'tint',
+			value: 101
+		})
 	);
 });
 

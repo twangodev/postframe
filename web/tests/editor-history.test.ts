@@ -13,7 +13,8 @@ test('records a committed command as one reversible document edit', () => {
 	const history = new EditorHistory();
 	const before = defaultEditDocument('photo-one');
 	const transition = applyEditorCommand(before, {
-		type: 'light.set',
+		type: 'adjustment.set',
+		group: 'light',
 		control: 'exposure',
 		value: 1.25
 	});
@@ -35,7 +36,8 @@ test('clears redo after a new command', () => {
 	const history = new EditorHistory();
 	const neutral = defaultEditDocument('photo-one');
 	const raised = applyEditorCommand(neutral, {
-		type: 'light.set',
+		type: 'adjustment.set',
+		group: 'light',
 		control: 'shadows',
 		value: 40
 	});
@@ -44,7 +46,8 @@ test('clears redo after a new command', () => {
 	history.undo();
 
 	const lowered = applyEditorCommand(neutral, {
-		type: 'light.set',
+		type: 'adjustment.set',
+		group: 'light',
 		control: 'shadows',
 		value: -30
 	});

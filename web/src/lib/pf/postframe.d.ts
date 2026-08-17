@@ -5,14 +5,14 @@ export class DevelopedTileCompositor {
     free(): void;
     [Symbol.dispose](): void;
     composite_rgba(rgba: Uint8Array, tile_width: number, tile_height: number, image_width: number, image_height: number, x: number, y: number, width: number, height: number): Uint8Array;
-    constructor(mask: Uint8Array, mask_width: number, mask_height: number, exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number);
+    constructor(mask: Uint8Array, mask_width: number, mask_height: number, settings: any);
 }
 
 export class DisplayTransform {
     free(): void;
     [Symbol.dispose](): void;
     apply_rgba(rgba: Uint8Array): Uint8Array;
-    constructor(exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number);
+    constructor(settings: any);
     readonly luminance_lut: Float32Array;
 }
 
@@ -101,18 +101,18 @@ export class Session {
     height(): number;
     merge(preview_dimension: number): void;
     constructor();
-    preview_frame(exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number, tone: boolean): PreviewFrame;
+    preview_frame(settings: any, tone: boolean): PreviewFrame;
     /**
      * Interactive preview: SDR JPEG at the thumbnail size, LUT-rendered.
      */
-    preview_jpeg(exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number, tone: boolean): Uint8Array;
-    preview_scope(exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number, tone: boolean, sample_target: number): ScopeFrame;
+    preview_jpeg(settings: any, tone: boolean): Uint8Array;
+    preview_scope(settings: any, tone: boolean, sample_target: number): ScopeFrame;
     /**
      * Ultra HDR JPEG at the thumbnail size, for HDR-capable display.
      */
     preview_ultra(): Uint8Array;
     render_profile(): RenderProfile;
-    render_tile(x: number, y: number, width: number, height: number, bin: number, exposure: number, contrast: number, highlights: number, shadows: number, whites: number, blacks: number, temperature: number, tint: number, vibrance: number, saturation: number, tone: boolean): RenderedTile;
+    render_tile(x: number, y: number, width: number, height: number, bin: number, settings: any, tone: boolean): RenderedTile;
     render_tile_linear(x: number, y: number, width: number, height: number, bin: number): LinearTile;
     restore_cache(cache: Uint8Array, preview_dimension: number): void;
     width(): number;
@@ -130,15 +130,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
-    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
-    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
     readonly __wbg_rawinspection_free: (a: number, b: number) => void;
-    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
-    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number];
-    readonly displaytransform_apply_rgba: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly displaytransform_luminance_lut: (a: number) => [number, number];
-    readonly displaytransform_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number];
     readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
     readonly rawinspection_camera_make: (a: number) => [number, number];
     readonly rawinspection_camera_model: (a: number) => [number, number];
@@ -160,6 +152,7 @@ export interface InitOutput {
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
+    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
     readonly lineartile_width: (a: number) => number;
@@ -186,12 +179,12 @@ export interface InitOutput {
     readonly session_height: (a: number) => [number, number, number];
     readonly session_merge: (a: number, b: number) => [number, number];
     readonly session_new: () => number;
-    readonly session_preview_frame: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
-    readonly session_preview_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
-    readonly session_preview_scope: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number];
+    readonly session_preview_frame: (a: number, b: any, c: number) => [number, number, number];
+    readonly session_preview_jpeg: (a: number, b: any, c: number) => [number, number, number, number];
+    readonly session_preview_scope: (a: number, b: any, c: number, d: number) => [number, number, number];
     readonly session_preview_ultra: (a: number) => [number, number, number, number];
     readonly session_render_profile: (a: number) => [number, number, number];
-    readonly session_render_tile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number];
+    readonly session_render_tile: (a: number, b: number, c: number, d: number, e: number, f: number, g: any, h: number) => [number, number, number];
     readonly session_render_tile_linear: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly session_restore_cache: (a: number, b: number, c: number, d: number) => [number, number];
     readonly session_width: (a: number) => [number, number, number];
@@ -200,8 +193,18 @@ export interface InitOutput {
     readonly scopeframe_sample_count: (a: number) => number;
     readonly scopeframe_waveform_height: (a: number) => number;
     readonly scopeframe_waveform_width: (a: number) => number;
-    readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
+    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
+    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
+    readonly displaytransform_apply_rgba: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_new: (a: any) => [number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_exn_store: (a: number) => void;
+    readonly __externref_table_alloc: () => number;
+    readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_drop_slice: (a: number, b: number) => void;

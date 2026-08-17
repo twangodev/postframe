@@ -1,4 +1,4 @@
-import type { ColorSettings, LightSettings } from './develop-settings';
+import type { DevelopSettings } from './develop-settings';
 import type { ImageScopeData } from './image-scope';
 import type { ObjectUrlRegistry } from './object-url-registry';
 import type { Photo } from './photo-record';
@@ -32,23 +32,23 @@ export class DevelopPreviewController {
 		private readonly host: DevelopPreviewHost
 	) {}
 
-	schedule(settings: LightSettings, color: ColorSettings) {
+	schedule(adjustments: DevelopSettings) {
 		this.clearPreviewTimer();
 		this.show('applying');
 		this.previewTimer = setTimeout(() => {
 			this.previewTimer = null;
-			this.request(settings, color, 'applying');
+			this.request(adjustments, 'applying');
 		}, 40);
 	}
 
-	request(settings: LightSettings, color: ColorSettings, phase: DevelopPreviewPhase) {
+	request(adjustments: DevelopSettings, phase: DevelopPreviewPhase) {
 		this.clearPreviewTimer();
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
 		const photoId = this.host.selectedPhoto.id;
 		const revision = ++this.previewRevision;
 		this.show(phase);
 		void this.workerClient
-			.preview(settings, color, true)
+			.preview(adjustments, true)
 			.then((preview) => {
 				if (revision !== this.previewRevision || this.host.selectedPhoto?.id !== photoId) return;
 				const src = URL.createObjectURL(new Blob([preview.image], { type: preview.mediaType }));
@@ -58,7 +58,7 @@ export class DevelopPreviewController {
 					src,
 					phase: this.host.developPreview?.phase ?? phase
 				};
-				this.scheduleScope(settings, color, photoId, phase === 'refining');
+				this.scheduleScope(adjustments, photoId, phase === 'refining');
 			})
 			.catch(() => {
 				if (revision === this.previewRevision && this.refinementRevision === null) {
@@ -73,9 +73,9 @@ export class DevelopPreviewController {
 
 	// Re-measures the scope at the committed settings after a preview that
 	// never became a document change.
-	refreshScope(settings: LightSettings, color: ColorSettings) {
+	refreshScope(adjustments: DevelopSettings) {
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
-		this.scheduleScope(settings, color, this.host.selectedPhoto.id, true);
+		this.scheduleScope(adjustments, this.host.selectedPhoto.id, true);
 	}
 
 	settle(revision: number) {
@@ -116,12 +116,7 @@ export class DevelopPreviewController {
 		this.previewTimer = null;
 	}
 
-	private scheduleScope(
-		settings: LightSettings,
-		color: ColorSettings,
-		photoId: string,
-		committed: boolean
-	) {
+	private scheduleScope(adjustments: DevelopSettings, photoId: string, committed: boolean) {
 		this.clearScopeTimer();
 		const revision = ++this.scopeRevision;
 		const elapsed = Date.now() - this.lastScopeAt;
@@ -131,8 +126,7 @@ export class DevelopPreviewController {
 			this.lastScopeAt = Date.now();
 			void this.workerClient
 				?.scope(
-					settings,
-					color,
+					adjustments,
 					true,
 					committed ? COMMITTED_SCOPE_SAMPLE_TARGET : INTERACTIVE_SCOPE_SAMPLE_TARGET
 				)

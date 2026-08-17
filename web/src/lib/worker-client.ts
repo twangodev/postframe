@@ -8,7 +8,7 @@ import type {
 	Response
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
-import type { ColorSettings, LightSettings } from './develop-settings.ts';
+import { cloneDevelopSettings, type DevelopSettings } from './develop-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
 import {
 	RenderPerformanceRecorder,
@@ -35,8 +35,7 @@ interface PendingRequest {
 }
 
 export interface ExportPhotoRequest {
-	settings: LightSettings;
-	color: ColorSettings;
+	adjustments: DevelopSettings;
 	masks: DevelopedMaskInput[];
 	geometry: ExportGeometry;
 	quality: number;
@@ -48,8 +47,7 @@ interface PreviewWaiter {
 }
 
 interface QueuedPreview {
-	settings: LightSettings;
-	color: ColorSettings;
+	adjustments: DevelopSettings;
 	tone: boolean;
 	waiters: PreviewWaiter[];
 }
@@ -115,8 +113,7 @@ export class PostframeWorkerClient {
 		frames: RawFrameHandleInput[],
 		cache: FileSystemFileHandle,
 		maxDimension: number,
-		settings: LightSettings,
-		color: ColorSettings
+		adjustments: DevelopSettings
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -125,8 +122,7 @@ export class PostframeWorkerClient {
 				frames,
 				cache,
 				maxDimension,
-				settings: { ...settings },
-				color: { ...color }
+				adjustments: cloneDevelopSettings(adjustments)
 			}),
 			'opened'
 		);
@@ -136,8 +132,7 @@ export class PostframeWorkerClient {
 	async openDisplayDocument(
 		source: FileSystemFileHandle,
 		maxDimension: number,
-		settings: LightSettings,
-		color: ColorSettings
+		adjustments: DevelopSettings
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -145,8 +140,7 @@ export class PostframeWorkerClient {
 				type: 'open-display',
 				source,
 				maxDimension,
-				settings: { ...settings },
-				color: { ...color }
+				adjustments: cloneDevelopSettings(adjustments)
 			}),
 			'opened'
 		);
@@ -154,7 +148,7 @@ export class PostframeWorkerClient {
 	}
 
 	async renderTile(tile: RenderTileRequest, signal?: AbortSignal) {
-		const request = { ...tile, settings: { ...tile.settings }, color: { ...tile.color } };
+		const request = { ...tile, adjustments: cloneDevelopSettings(tile.adjustments) };
 		const response = await this.send(
 			(id) => ({ id, type: 'tile', ...request }),
 			'tile',
@@ -190,7 +184,7 @@ export class PostframeWorkerClient {
 		return new Uint8Array(response.alpha);
 	}
 
-	preview(settings: LightSettings, color: ColorSettings, tone: boolean) {
+	preview(adjustments: DevelopSettings, tone: boolean) {
 		return new Promise<RenderedPreview>((resolve, reject) => {
 			if (this.destroyed) {
 				reject(new Error('Postframe worker closed'));
@@ -198,14 +192,12 @@ export class PostframeWorkerClient {
 			}
 			const waiter = { resolve, reject };
 			if (this.queuedPreview) {
-				this.queuedPreview.settings = { ...settings };
-				this.queuedPreview.color = { ...color };
+				this.queuedPreview.adjustments = cloneDevelopSettings(adjustments);
 				this.queuedPreview.tone = tone;
 				this.queuedPreview.waiters.push(waiter);
 			} else {
 				this.queuedPreview = {
-					settings: { ...settings },
-					color: { ...color },
+					adjustments: cloneDevelopSettings(adjustments),
 					tone,
 					waiters: [waiter]
 				};
@@ -214,13 +206,12 @@ export class PostframeWorkerClient {
 		});
 	}
 
-	async scope(settings: LightSettings, color: ColorSettings, tone: boolean, sampleTarget: number) {
+	async scope(adjustments: DevelopSettings, tone: boolean, sampleTarget: number) {
 		const response = await this.send(
 			(id) => ({
 				id,
 				type: 'scope',
-				settings: { ...settings },
-				color: { ...color },
+				adjustments: cloneDevelopSettings(adjustments),
 				tone,
 				sampleTarget
 			}),
@@ -240,8 +231,7 @@ export class PostframeWorkerClient {
 			(id) => ({
 				id,
 				type: 'export',
-				settings: { ...request.settings },
-				color: { ...request.color },
+				adjustments: cloneDevelopSettings(request.adjustments),
 				masks,
 				geometry: {
 					...request.geometry,
@@ -350,8 +340,7 @@ export class PostframeWorkerClient {
 			(id) => ({
 				id,
 				type: 'preview',
-				settings: preview.settings,
-				color: preview.color,
+				adjustments: preview.adjustments,
 				tone: preview.tone
 			}),
 			'preview'

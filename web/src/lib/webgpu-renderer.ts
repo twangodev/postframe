@@ -1,4 +1,9 @@
-import type { ColorSettings, LightSettings } from './develop-settings.ts';
+import {
+	developSettingsKey,
+	type ColorSettings,
+	type DevelopSettings,
+	type LightSettings
+} from './develop-settings.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
@@ -37,7 +42,7 @@ export class RawWebGpuRenderer {
 	private readonly lightBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
 	private sourceBytes = 0;
-	private lightKey = '';
+	private lutKey = '';
 	private lost = false;
 
 	private constructor(
@@ -91,16 +96,15 @@ export class RawWebGpuRenderer {
 	async render(
 		key: string,
 		source: LinearTileSource | null,
-		settings: LightSettings,
-		color: ColorSettings,
+		adjustments: DevelopSettings,
 		tone: boolean,
 		luminanceLut: Float32Array
 	) {
 		if (this.lost) throw new Error('WebGPU device is unavailable');
 		const cached = source ? this.uploadSource(key, source) : this.touchSource(key);
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
-		this.updateLight(settings, luminanceLut);
-		this.updateUniforms(cached, settings, color, tone);
+		this.updateLuminanceLut(adjustments, luminanceLut);
+		this.updateUniforms(cached, adjustments, tone);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
 		const context = canvas.getContext('webgpu') as unknown as GPUCanvasContext | null;
@@ -199,22 +203,18 @@ export class RawWebGpuRenderer {
 		this.sourceBytes = 0;
 	}
 
-	private updateLight(settings: LightSettings, luminanceLut: Float32Array) {
-		const key = lightKey(settings);
-		if (this.lightKey === key) return;
+	private updateLuminanceLut(adjustments: DevelopSettings, luminanceLut: Float32Array) {
+		const key = developSettingsKey(adjustments);
+		if (this.lutKey === key) return;
 		if (luminanceLut.length !== LIGHT_LUT_LENGTH) {
 			throw new Error('Light LUT has an unexpected size');
 		}
 		this.device.queue.writeBuffer(this.lightBuffer, 0, luminanceLut);
-		this.lightKey = key;
+		this.lutKey = key;
 	}
 
-	private updateUniforms(
-		source: CachedSource,
-		settings: LightSettings,
-		color: ColorSettings,
-		tone: boolean
-	) {
+	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
+		const { light, color } = adjustments;
 		const bytes = new ArrayBuffer(64);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
@@ -224,9 +224,9 @@ export class RawWebGpuRenderer {
 		integers[3] = this.profile.lookupShift;
 		integers[4] = this.profile.transferLutLength;
 		integers[5] = tone ? 1 : 0;
-		integers[6] = lightIdentity(settings) ? 1 : 0;
+		integers[6] = lightIdentity(light) ? 1 : 0;
 		integers[7] = colorIdentity(color) ? 1 : 0;
-		floats[8] = 2 ** settings.exposure;
+		floats[8] = 2 ** light.exposure;
 		floats[9] = Math.max(1, this.profile.radianceMax * floats[8]);
 		floats[10] = 1 + color.saturation / 100;
 		floats[11] = color.vibrance / 100;
@@ -271,16 +271,6 @@ function balanceGains(color: ColorSettings) {
 		0
 	);
 	return gains.map((gain) => gain / luminance);
-}
-
-function lightKey(settings: LightSettings) {
-	return [
-		settings.contrast,
-		settings.highlights,
-		settings.shadows,
-		settings.whites,
-		settings.blacks
-	].join(':');
 }
 
 const RAW_TILE_SHADER = /* wgsl */ `

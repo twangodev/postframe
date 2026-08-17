@@ -1,4 +1,4 @@
-import type { ColorSettings, LightSettings } from './develop-settings';
+import type { ColorSettings, DevelopSettings, LightSettings } from './develop-settings';
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
@@ -61,8 +61,7 @@ export interface RenderTileRequest {
 	width: number;
 	height: number;
 	bin: number;
-	settings: LightSettings;
-	color: ColorSettings;
+	adjustments: DevelopSettings;
 	tone: boolean;
 }
 
@@ -97,26 +96,23 @@ export type Request =
 			frames: RawFrameHandleInput[];
 			cache: FileSystemFileHandle;
 			maxDimension: number;
-			settings: LightSettings;
-			color: ColorSettings;
+			adjustments: DevelopSettings;
 	  }
 	| {
 			id: number;
 			type: 'open-display';
 			source: FileSystemFileHandle;
 			maxDimension: number;
-			settings: LightSettings;
-			color: ColorSettings;
+			adjustments: DevelopSettings;
 	  }
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
-	| { id: number; type: 'preview'; settings: LightSettings; color: ColorSettings; tone: boolean }
+	| { id: number; type: 'preview'; adjustments: DevelopSettings; tone: boolean }
 	| {
 			id: number;
 			type: 'scope';
-			settings: LightSettings;
-			color: ColorSettings;
+			adjustments: DevelopSettings;
 			tone: boolean;
 			sampleTarget: number;
 	  }
@@ -124,8 +120,7 @@ export type Request =
 	| {
 			id: number;
 			type: 'export';
-			settings: LightSettings;
-			color: ColorSettings;
+			adjustments: DevelopSettings;
 			masks: DevelopedMaskInput[];
 			geometry: ExportGeometry;
 			quality: number;

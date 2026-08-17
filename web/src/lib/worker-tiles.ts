@@ -1,15 +1,14 @@
-import type { LightSettings } from './develop-settings';
+import {
+	defaultColorSettings,
+	developSettingsKey,
+	tonalDevelopSettings,
+	type DevelopSettings
+} from './develop-settings';
 import type { WasmSession } from './wasm-runtime';
 import type { LinearTileSource } from './webgpu-renderer.ts';
 import { wasm } from './worker-wasm.ts';
 import type { RenderTileRequest } from './worker-protocol.ts';
-import {
-	canvasContext,
-	colorArguments,
-	displayTransform,
-	imageData,
-	lightArguments
-} from './worker-render.ts';
+import { canvasContext, displayTransform, imageData } from './worker-render.ts';
 import { compositeDevelopedTile, hasMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument, RawDocument } from './worker-documents.ts';
 
@@ -43,10 +42,9 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 				return await active.renderer.render(
 					key,
 					source,
-					request.settings,
-					request.color,
+					request.adjustments,
 					request.tone,
-					rawLightLut(active, request.settings)
+					rawLuminanceLut(active, request.adjustments)
 				);
 			} catch {
 				active.renderer.destroy();
@@ -61,8 +59,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			request.width,
 			request.height,
 			request.bin,
-			...lightArguments(request.settings),
-			...colorArguments(request.color),
+			request.adjustments,
 			request.tone
 		);
 		try {
@@ -91,7 +88,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 		height
 	);
 	const pixels = context.getImageData(0, 0, width, height);
-	const adjusted = displayTransform(active, request.settings, request.color).apply_rgba(
+	const adjusted = displayTransform(active, request.adjustments).apply_rgba(
 		new Uint8Array(pixels.data)
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
@@ -102,26 +99,11 @@ function rawTileKey(tile: RenderTileRequest) {
 	return `${tile.x}:${tile.y}:${tile.width}:${tile.height}:${tile.bin}`;
 }
 
-function rawLightLut(active: RawDocument, settings: LightSettings) {
-	const key = [
-		settings.contrast,
-		settings.highlights,
-		settings.shadows,
-		settings.whites,
-		settings.blacks
-	].join(':');
+function rawLuminanceLut(active: RawDocument, adjustments: DevelopSettings) {
+	const key = developSettingsKey(adjustments);
 	if (active.lightLut?.key === key) return active.lightLut.values;
 	const transform = new wasm.DisplayTransform(
-		0,
-		settings.contrast,
-		settings.highlights,
-		settings.shadows,
-		settings.whites,
-		settings.blacks,
-		0,
-		0,
-		0,
-		0
+		tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings())
 	);
 	try {
 		const values = transform.luminance_lut;

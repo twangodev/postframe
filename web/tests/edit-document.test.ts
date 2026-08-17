@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	defaultGradingSettings,
+	defaultMixerSettings,
+	identityCurve
+} from '../src/lib/develop-settings.ts';
+import {
 	EDIT_DOCUMENT_VERSION,
+	cloneEditDocument,
 	createEditMask,
 	defaultEditDocument,
 	editDocumentStorageName,
@@ -51,6 +57,67 @@ test('rejects mismatched photos, duplicate masks, and invalid normalized crops',
 		raster: null
 	});
 	assert.equal(editDocumentSchema.safeParse({ ...document, masks: [object] }).success, false);
+});
+
+test('round-trips a document carrying every develop group', () => {
+	const document = defaultEditDocument('photo-one');
+	document.adjustments = {
+		light: { exposure: 0.5, contrast: 10, highlights: -20, shadows: 30, whites: 5, blacks: -5 },
+		color: { temperature: 25, tint: -10, vibrance: 15, saturation: -8 },
+		curve: {
+			luminance: [
+				{ x: 0, y: 0.05 },
+				{ x: 0.5, y: 0.6 },
+				{ x: 1, y: 1 }
+			],
+			red: identityCurve(),
+			green: identityCurve(),
+			blue: identityCurve()
+		},
+		mixer: { ...defaultMixerSettings(), aqua: { hue: -12, saturation: 40, luminance: 7 } },
+		grading: {
+			...defaultGradingSettings(),
+			midtones: { hue: 210, saturation: 35, luminance: -6 },
+			balance: 18
+		},
+		detail: {
+			texture: 12,
+			clarity: -4,
+			dehaze: 20,
+			sharpenAmount: 90,
+			noiseLuminance: 30,
+			noiseColor: 15
+		},
+		effects: {
+			vignetteAmount: -40,
+			vignetteMidpoint: 60,
+			vignetteRoundness: 25,
+			vignetteFeather: 70,
+			grainAmount: 20,
+			grainSize: 35
+		}
+	};
+	assert.equal(document.version, 10);
+	assert.deepEqual(editDocumentSchema.parse(document), document);
+	assert.deepEqual(cloneEditDocument(document).adjustments, document.adjustments);
+	assert.notEqual(
+		cloneEditDocument(document).adjustments.curve.luminance,
+		document.adjustments.curve.luminance
+	);
+});
+
+test('keeps mask adjustments tonal while the document carries every group', () => {
+	const mask = createEditMask('mask-one', 'brush');
+	assert.deepEqual(Object.keys(mask.adjustments), ['light', 'color']);
+	assert.deepEqual(Object.keys(defaultEditDocument('photo-one').adjustments), [
+		'light',
+		'color',
+		'curve',
+		'mixer',
+		'grading',
+		'detail',
+		'effects'
+	]);
 });
 
 test('rejects current documents lacking global color adjustments', () => {

@@ -1,7 +1,9 @@
 import {
+	cloneDevelopSettings,
 	COLOR_CONTROL_NAMES,
 	LIGHT_CONTROL_NAMES,
 	type ColorSettings,
+	type DevelopSettings,
 	type LightSettings
 } from './develop-settings';
 import {
@@ -31,7 +33,7 @@ export interface MaskRasterPipelineHost {
 	readonly selectedMaskId: string | null;
 	masks: EditMask[];
 	selectedMaskRaster: SelectedMaskRaster | null;
-	renderSettings: { settings: LightSettings; color: ColorSettings; revision: number };
+	renderSettings: { adjustments: DevelopSettings; revision: number };
 	markRefining(revision: number): void;
 	failSmartMask(error: unknown): void;
 }
@@ -91,8 +93,7 @@ export class MaskRasterPipeline {
 
 	private publishRenderSettings(document: EditDocument) {
 		this.host.renderSettings = {
-			settings: { ...document.adjustments.light },
-			color: { ...document.adjustments.color },
+			adjustments: cloneDevelopSettings(document.adjustments),
 			revision: this.host.renderSettings.revision + 1
 		};
 		this.host.markRefining(this.host.renderSettings.revision);
