@@ -13,11 +13,7 @@ import { LibraryCatalog } from '../src/lib/library-catalog.ts';
 import { LibraryService } from '../src/lib/library-service.ts';
 import type { PhotoCollection, StoredPhoto } from '../src/lib/library-schema.ts';
 import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
-import {
-	EDIT_DOCUMENT_VERSION,
-	createEditMask,
-	defaultEditDocument
-} from '../src/lib/edit-document.ts';
+import { createEditMask, defaultEditDocument } from '../src/lib/edit-document.ts';
 import { renderCacheStorageName } from '../src/lib/render-cache.ts';
 
 class MemoryAssetStore {
@@ -133,7 +129,7 @@ class MemoryAssetStore {
 	}
 }
 
-test('round-trips versioned edit documents and migrates legacy develop settings', async () => {
+test('round-trips versioned edit documents and rejects earlier schema formats', async () => {
 	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
 	const assets = new MemoryAssetStore();
 	const service = new LibraryService(catalog, assets as unknown as AssetStore);
@@ -153,9 +149,7 @@ test('round-trips versioned edit documents and migrates legacy develop settings'
 
 		const legacy = { ...defaultDevelopSettings(), contrast: 25 };
 		assets.edits.set('photo-two.json', new Blob([JSON.stringify(legacy)]));
-		const migrated = await service.loadEditDocument('photo-two');
-		assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-		assert.equal(migrated.adjustments.light.contrast, 25);
+		await assert.rejects(() => service.loadEditDocument('photo-two'));
 	} finally {
 		await service.clearAll();
 	}

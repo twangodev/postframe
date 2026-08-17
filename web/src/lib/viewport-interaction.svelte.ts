@@ -1,4 +1,6 @@
 import type { EditMask, MaskComponent, NormalizedPoint } from './edit-document.ts';
+import { linearLayout } from './mask-gizmo-linear.ts';
+import { pixelToNormalized } from './mask-gizmo.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
 import {
@@ -103,18 +105,24 @@ export class ViewportInteraction {
 				) ?? null
 	);
 
-	linearGuide = $derived.by(() =>
-		this.context.tool() === 'mask-linear' && this.context.selectedMask()?.kind === 'linear'
-			? this.gradientDrag
-				? { start: this.gradientDrag.start, end: this.gradientDrag.current }
-				: (this.context
-						.selectedMask()
-						?.components.find(
-							(component): component is Extract<MaskComponent, { type: 'linear' }> =>
-								component.type === 'linear'
-						) ?? null)
-			: null
-	);
+	linearGuide = $derived.by(() => {
+		if (this.context.tool() !== 'mask-linear' || this.context.selectedMask()?.kind !== 'linear')
+			return null;
+		if (this.gradientDrag)
+			return { start: this.gradientDrag.start, end: this.gradientDrag.current };
+		const component = this.context
+			.selectedMask()
+			?.components.find(
+				(component): component is Extract<MaskComponent, { type: 'linear' }> =>
+					component.type === 'linear'
+			);
+		if (!component) return null;
+		const layout = linearLayout(component, this.image);
+		return {
+			start: pixelToNormalized(layout.negative, this.image),
+			end: pixelToNormalized(layout.positive, this.image)
+		};
+	});
 
 	radialGuide = $derived.by(() =>
 		this.context.tool() === 'mask-radial' && this.context.selectedMask()?.kind === 'radial'
@@ -131,6 +139,12 @@ export class ViewportInteraction {
 						feather: this.radialComponent?.feather ?? 0.5
 					}
 				: this.radialComponent
+					? {
+							center: this.radialComponent.center,
+							radius: this.radialComponent.radiusX,
+							feather: this.radialComponent.feather
+						}
+					: null
 			: null
 	);
 

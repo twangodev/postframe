@@ -10,7 +10,7 @@ import {
 	editMaskSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
-import { defaultColorSettings, defaultDevelopSettings } from '../src/lib/develop-settings.ts';
+import { defaultColorSettings } from '../src/lib/develop-settings.ts';
 
 test('creates an independent versioned non-destructive document', () => {
 	const first = defaultEditDocument('photo-one');
@@ -26,42 +26,6 @@ test('creates an independent versioned non-destructive document', () => {
 	assert.notEqual(first, second);
 	assert.notEqual(first.adjustments.light, second.adjustments.light);
 	assert.equal(editDocumentStorageName('photo-one'), 'photo-one.json');
-});
-
-test('migrates version-one develop settings without changing their light values', () => {
-	const legacy = { ...defaultDevelopSettings(), exposure: 1.25, highlights: -30 };
-	const migrated = parseEditDocument(legacy, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.equal(migrated.photoId, 'photo-one');
-	assert.equal(migrated.adjustments.light.exposure, 1.25);
-	assert.equal(migrated.adjustments.light.highlights, -30);
-});
-
-test('preserves global edits while removing version-two visual masks', () => {
-	const previous = {
-		...defaultEditDocument('photo-one'),
-		version: 2,
-		adjustments: {
-			light: { ...defaultEditDocument('photo-one').adjustments.light, exposure: 0.75 }
-		},
-		masks: [{ id: 'visual-only' }]
-	};
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.adjustments.light.exposure, 0.75);
-	assert.deepEqual(migrated.masks, []);
-});
-
-test('preserves version-three masks with neutral edge settings', () => {
-	const mask = createEditMask('mask-one', 'subject');
-	const { edge: _, ...versionThreeMask } = mask;
-	const previous = {
-		...defaultEditDocument('photo-one'),
-		version: 3,
-		masks: [versionThreeMask]
-	};
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.deepEqual(migrated.masks[0], mask);
 });
 
 test('rejects mismatched photos, duplicate masks, and invalid normalized crops', () => {
@@ -90,57 +54,6 @@ test('rejects mismatched photos, duplicate masks, and invalid normalized crops',
 	assert.equal(editDocumentSchema.safeParse({ ...document, masks: [object] }).success, false);
 });
 
-test('carries version-four documents forward unchanged', () => {
-	const mask = createEditMask('mask-one', 'subject');
-	const previous = { ...defaultEditDocument('photo-one'), version: 4, masks: [mask] };
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.deepEqual(migrated.masks, [mask]);
-	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
-});
-
-test('carries version-five documents forward unchanged', () => {
-	const mask = createEditMask('mask-one', 'linear');
-	const previous = { ...defaultEditDocument('photo-one'), version: 5, masks: [mask] };
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.deepEqual(migrated.masks, [mask]);
-	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
-});
-
-test('migrates version-six masks to neutral color adjustments', () => {
-	const mask = createEditMask('mask-one', 'radial');
-	const previous = {
-		...defaultEditDocument('photo-one'),
-		version: 6,
-		masks: [{ ...mask, adjustments: { light: { ...mask.adjustments.light, exposure: 1.5 } } }]
-	};
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.equal(migrated.masks[0]?.adjustments.light.exposure, 1.5);
-	assert.deepEqual(migrated.masks[0]?.adjustments.color, defaultColorSettings());
-	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
-});
-
-test('migrates version-seven documents to neutral global color', () => {
-	const mask = createEditMask('mask-one', 'subject');
-	mask.adjustments.color = { ...mask.adjustments.color, saturation: 40 };
-	const previous = {
-		...defaultEditDocument('photo-one'),
-		version: 7,
-		adjustments: {
-			light: { ...defaultEditDocument('photo-one').adjustments.light, exposure: 0.5 }
-		},
-		masks: [mask]
-	};
-	const migrated = parseEditDocument(previous, 'photo-one');
-	assert.equal(migrated.version, EDIT_DOCUMENT_VERSION);
-	assert.equal(migrated.adjustments.light.exposure, 0.5);
-	assert.deepEqual(migrated.adjustments.color, defaultColorSettings());
-	assert.equal(migrated.masks[0]?.adjustments.color.saturation, 40);
-	assert.throws(() => parseEditDocument({ ...previous, photoId: 'photo-two' }, 'photo-one'));
-});
-
 test('rejects current documents lacking global color adjustments', () => {
 	const document = defaultEditDocument('photo-one');
 	assert.equal(
@@ -161,35 +74,63 @@ test('rejects current documents whose masks lack color adjustments', () => {
 	assert.equal(editDocumentSchema.safeParse(document).success, false);
 });
 
-test('accepts gradient components carrying their geometry', () => {
+test('accepts gradient components carrying their transform', () => {
 	const linear = createEditMask('mask-linear', 'linear');
 	linear.components.push({
 		id: 'component-linear',
 		type: 'linear',
 		operation: 'add',
-		start: { x: 0.2, y: 0.8 },
-		end: { x: 0.9, y: 0.1 },
-		raster: null
+		raster: null,
+		anchor: { x: 0.5, y: 0.5 },
+		rotation: 0.4,
+		compression: 0.25
 	});
 	const radial = createEditMask('mask-radial', 'radial');
 	radial.components.push({
 		id: 'component-radial',
 		type: 'radial',
 		operation: 'add',
+		raster: null,
 		center: { x: 0.5, y: 0.5 },
-		radius: 0.25,
-		feather: 0.5,
-		raster: null
+		radiusX: 0.3,
+		radiusY: 0.2,
+		rotation: 0.1,
+		feather: 0.5
 	});
 	const document = { ...defaultEditDocument('photo-one'), masks: [linear, radial] };
 	assert.deepEqual(parseEditDocument(document, 'photo-one').masks, [linear, radial]);
 	assert.equal(
 		editMaskSchema.safeParse({
 			...radial,
-			components: [{ ...radial.components[0], radius: 1.5 }]
+			components: [{ ...radial.components[0], radiusX: 1.5 }]
 		}).success,
 		false
 	);
+});
+
+test('rejects documents from earlier schema versions outright', () => {
+	assert.throws(() =>
+		parseEditDocument({ ...defaultEditDocument('photo-one'), version: 8 }, 'photo-one')
+	);
+	const legacyLinear = {
+		...defaultEditDocument('photo-one'),
+		masks: [
+			{
+				...createEditMask('mask-linear', 'linear'),
+				components: [
+					{
+						id: 'component-linear',
+						type: 'linear',
+						operation: 'add',
+						raster: null,
+						start: { x: 0.25, y: 0.5 },
+						end: { x: 0.75, y: 0.5 }
+					}
+				]
+			}
+		]
+	};
+	assert.throws(() => parseEditDocument(legacyLinear, 'photo-one'));
 });
 
 test('accepts detected-subject components with their originating box', () => {

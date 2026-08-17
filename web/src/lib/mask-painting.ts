@@ -69,21 +69,17 @@ export class MaskPainting {
 		const target = this.paintableMask('linear');
 		if (!target || (start.x === end.x && start.y === end.y)) return;
 		const existing = target.mask.components.find((component) => component.type === 'linear');
+		const geometry = linearGeometryFromSpan(start, end, target.paintDims);
 		await this.commitRasterizedComponent(
 			target,
 			{
 				id: existing?.id ?? entityId('component'),
 				type: 'linear',
 				operation: existing?.operation ?? 'add',
-				start,
-				end,
+				...geometry,
 				raster: null
 			},
-			rasterizeLinearGradient(
-				linearGeometryFromSpan(start, end, target.paintDims),
-				target.paintDims.width,
-				target.paintDims.height
-			)
+			rasterizeLinearGradient(geometry, target.paintDims.width, target.paintDims.height)
 		);
 	};
 
@@ -94,7 +90,13 @@ export class MaskPainting {
 			(component): component is Extract<MaskComponent, { type: 'radial' }> =>
 				component.type === 'radial'
 		);
-		const geometry = { center, radius: Math.min(1, radius), feather: existing?.feather ?? 0.5 };
+		const geometry = {
+			center,
+			radiusX: Math.min(1, radius),
+			radiusY: Math.min(1, radius),
+			rotation: 0,
+			feather: existing?.feather ?? 0.5
+		};
 		await this.commitRasterizedComponent(
 			target,
 			{
@@ -104,17 +106,7 @@ export class MaskPainting {
 				...geometry,
 				raster: null
 			},
-			rasterizeRadialGradient(
-				{
-					center,
-					radiusX: geometry.radius,
-					radiusY: geometry.radius,
-					rotation: 0,
-					feather: geometry.feather
-				},
-				target.paintDims.width,
-				target.paintDims.height
-			)
+			rasterizeRadialGradient(geometry, target.paintDims.width, target.paintDims.height)
 		);
 	};
 

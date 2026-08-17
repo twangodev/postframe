@@ -3,14 +3,12 @@ import {
 	colorSettingsSchema,
 	defaultColorSettings,
 	defaultLightSettings,
-	developSettingsSchema,
-	lightSettings,
 	lightSettingsSchema,
 	type LightSettings
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 8;
+export const EDIT_DOCUMENT_VERSION = 9;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -105,31 +103,27 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 	}),
 	maskComponentBaseSchema.extend({
 		type: z.literal('linear'),
-		start: normalizedPointSchema,
-		end: normalizedPointSchema
+		anchor: normalizedPointSchema,
+		rotation: z.number().finite(),
+		compression: z.number().finite().positive().max(1)
 	}),
 	maskComponentBaseSchema.extend({
 		type: z.literal('radial'),
 		center: normalizedPointSchema,
-		radius: z.number().finite().positive().max(1),
+		radiusX: z.number().finite().positive().max(1),
+		radiusY: z.number().finite().positive().max(1),
+		rotation: z.number().finite(),
 		feather: z.number().finite().min(0).max(1)
 	})
 ]);
 
-const versionThreeEditMaskSchema = z.object({
+export const editMaskSchema = z.object({
 	id: z.string().min(1),
 	name: z.string().trim().min(1),
 	kind: maskKindSchema,
 	visible: z.boolean(),
 	components: z.array(maskComponentSchema),
-	adjustments: z.object({ light: lightSettingsSchema })
-});
-
-const versionSixEditMaskSchema = versionThreeEditMaskSchema.extend({
-	edge: maskEdgeSettingsSchema
-});
-
-export const editMaskSchema = versionSixEditMaskSchema.extend({
+	edge: maskEdgeSettingsSchema,
 	adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema })
 });
 
@@ -189,64 +183,9 @@ export function defaultEditDocument(
 }
 
 export function parseEditDocument(value: unknown, photoId: string): EditDocument {
-	const current = editDocumentSchema.safeParse(value);
-	if (current.success) {
-		if (current.data.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
-		return current.data;
-	}
-
-	const legacy = developSettingsSchema.safeParse(value);
-	if (legacy.success) return defaultEditDocument(photoId, lightSettings(legacy.data));
-
-	const versionSeven = versionSevenEditDocumentSchema.safeParse(value);
-	if (versionSeven.success) {
-		if (versionSeven.data.photoId !== photoId)
-			throw new Error(`Edit document belongs to another photo`);
-		return editDocumentSchema.parse({
-			...versionSeven.data,
-			version: EDIT_DOCUMENT_VERSION,
-			adjustments: adjustmentsWithDefaultColor(versionSeven.data.adjustments)
-		});
-	}
-
-	const versionFourToSix = versionFourToSixEditDocumentSchema.safeParse(value);
-	if (versionFourToSix.success) {
-		if (versionFourToSix.data.photoId !== photoId)
-			throw new Error(`Edit document belongs to another photo`);
-		return editDocumentSchema.parse({
-			...versionFourToSix.data,
-			version: EDIT_DOCUMENT_VERSION,
-			adjustments: adjustmentsWithDefaultColor(versionFourToSix.data.adjustments),
-			masks: versionFourToSix.data.masks.map(maskWithDefaultColor)
-		});
-	}
-
-	const versionThree = versionThreeEditDocumentSchema.safeParse(value);
-	if (versionThree.success) {
-		if (versionThree.data.photoId !== photoId)
-			throw new Error(`Edit document belongs to another photo`);
-		return editDocumentSchema.parse({
-			...versionThree.data,
-			version: EDIT_DOCUMENT_VERSION,
-			adjustments: adjustmentsWithDefaultColor(versionThree.data.adjustments),
-			masks: versionThree.data.masks.map((mask) =>
-				maskWithDefaultColor({ ...mask, edge: defaultMaskEdgeSettings() })
-			)
-		});
-	}
-
-	const previous = versionTwoEditDocumentSchema.safeParse(value);
-	if (previous.success) {
-		if (previous.data.photoId !== photoId)
-			throw new Error(`Edit document belongs to another photo`);
-		return {
-			...previous.data,
-			version: EDIT_DOCUMENT_VERSION,
-			adjustments: adjustmentsWithDefaultColor(previous.data.adjustments),
-			masks: []
-		};
-	}
-	return editDocumentSchema.parse(value);
+	const document = editDocumentSchema.parse(value);
+	if (document.photoId !== photoId) throw new Error(`Edit document belongs to another photo`);
+	return document;
 }
 
 export function cloneEditDocument(document: EditDocument): EditDocument {
@@ -281,69 +220,3 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 export function editDocumentStorageName(photoId: string) {
 	return `${photoId}.json`;
 }
-
-function maskWithDefaultColor<Mask extends z.infer<typeof versionThreeEditMaskSchema>>(mask: Mask) {
-	return { ...mask, adjustments: { ...mask.adjustments, color: defaultColorSettings() } };
-}
-
-function adjustmentsWithDefaultColor(adjustments: { light: LightSettings }) {
-	return { ...adjustments, color: defaultColorSettings() };
-}
-
-// Snapshot of the mask shape as v7 wrote it, so future mask changes cannot
-// redefine what a stored v7 document looks like.
-const versionSevenEditMaskSchema = versionSixEditMaskSchema.extend({
-	adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema })
-});
-
-const versionSevenEditDocumentSchema = z.object({
-	version: z.literal(7),
-	photoId: z.string().min(1),
-	adjustments: z.object({ light: lightSettingsSchema }),
-	geometry: z.object({
-		rotation: z.number().finite().min(-180).max(180),
-		flipHorizontal: z.boolean(),
-		flipVertical: z.boolean(),
-		crop: normalizedCropSchema.nullable()
-	}),
-	masks: z.array(versionSevenEditMaskSchema)
-});
-
-const versionFourToSixEditDocumentSchema = z.object({
-	version: z.union([z.literal(4), z.literal(5), z.literal(6)]),
-	photoId: z.string().min(1),
-	adjustments: z.object({ light: lightSettingsSchema }),
-	geometry: z.object({
-		rotation: z.number().finite().min(-180).max(180),
-		flipHorizontal: z.boolean(),
-		flipVertical: z.boolean(),
-		crop: normalizedCropSchema.nullable()
-	}),
-	masks: z.array(versionSixEditMaskSchema)
-});
-
-const versionThreeEditDocumentSchema = z.object({
-	version: z.literal(3),
-	photoId: z.string().min(1),
-	adjustments: z.object({ light: lightSettingsSchema }),
-	geometry: z.object({
-		rotation: z.number().finite().min(-180).max(180),
-		flipHorizontal: z.boolean(),
-		flipVertical: z.boolean(),
-		crop: normalizedCropSchema.nullable()
-	}),
-	masks: z.array(versionThreeEditMaskSchema)
-});
-
-const versionTwoEditDocumentSchema = z.object({
-	version: z.literal(2),
-	photoId: z.string().min(1),
-	adjustments: z.object({ light: lightSettingsSchema }),
-	geometry: z.object({
-		rotation: z.number().finite().min(-180).max(180),
-		flipHorizontal: z.boolean(),
-		flipVertical: z.boolean(),
-		crop: normalizedCropSchema.nullable()
-	}),
-	masks: z.array(z.unknown())
-});
