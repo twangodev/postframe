@@ -13,6 +13,7 @@ pub mod composite;
 pub mod curve;
 pub mod decode;
 pub mod develop;
+pub mod effects;
 pub mod error;
 pub mod export;
 pub mod fit;
@@ -31,8 +32,9 @@ pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustmen
 pub use curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 pub use develop::{
     CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
-    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings,
+    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings, PixelContext,
 };
+pub use effects::VignetteFrame;
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use grade::{ColorSettings, ColorTransform};

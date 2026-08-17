@@ -42,6 +42,14 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 				return await active.renderer.render(
 					key,
 					source,
+					{
+						x: request.x,
+						y: request.y,
+						bin: request.bin,
+						imageWidth: active.image.width,
+						imageHeight: active.image.height,
+						crop: request.crop
+					},
 					request.adjustments,
 					request.tone,
 					rawToneTables(active, request.adjustments)
@@ -60,6 +68,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			request.height,
 			request.bin,
 			request.adjustments,
+			request.crop,
 			request.tone
 		);
 		try {
@@ -88,8 +97,18 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 		height
 	);
 	const pixels = context.getImageData(0, 0, width, height);
-	const adjusted = displayTransform(active, request.adjustments).apply_rgba(
-		new Uint8Array(pixels.data)
+	const adjusted = displayTransform(active, request.adjustments, request.crop).apply_tile_rgba(
+		new Uint8Array(pixels.data),
+		width,
+		height,
+		{
+			imageWidth: active.bitmap.width,
+			imageHeight: active.bitmap.height,
+			x: request.x,
+			y: request.y,
+			width: request.width,
+			height: request.height
+		}
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
 	return context.canvas.transferToImageBitmap();
@@ -105,10 +124,13 @@ function rawTileKey(tile: RenderTileRequest) {
 function rawToneTables(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
 	if (active.toneTables?.key === key) return active.toneTables;
-	const transform = new wasm.DisplayTransform({
-		...tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings()),
-		curve: adjustments.curve
-	});
+	const transform = new wasm.DisplayTransform(
+		{
+			...tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings()),
+			curve: adjustments.curve
+		},
+		null
+	);
 	try {
 		const tables = {
 			key,

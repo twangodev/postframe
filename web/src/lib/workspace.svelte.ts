@@ -15,6 +15,7 @@ import {
 	defaultCurveSettings,
 	defaultDevelopSettings,
 	scalarAdjustments,
+	type DevelopSettings,
 	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
@@ -29,6 +30,7 @@ import {
 	type EditMask,
 	type MaskKind,
 	type MaskOperation,
+	type NormalizedCrop,
 	type NormalizedPoint
 } from './edit-document';
 import type { MaskBrushStroke } from './mask-rasterizer';
@@ -132,7 +134,11 @@ export class WorkspaceState {
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
 	curve = $state(defaultCurveSettings());
-	renderSettings = $state({ adjustments: defaultDevelopSettings(), revision: 0 });
+	renderSettings = $state<{
+		adjustments: DevelopSettings;
+		crop: NormalizedCrop | null;
+		revision: number;
+	}>({ adjustments: defaultDevelopSettings(), crop: null, revision: 0 });
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);

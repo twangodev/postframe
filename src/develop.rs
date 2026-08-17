@@ -1,7 +1,11 @@
+use crate::composite::DevelopedTileRegion;
 use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
+use crate::effects::{self, VignetteFrame};
 use crate::grade::{ColorSettings, ColorTransform};
-use crate::light::{LightSettings, LightTransform, decode_srgb, encode_srgb};
-use crate::{Error, Result};
+use crate::light::{
+    LightSettings, LightTransform, decode_srgb, encode_srgb, linear_to_srgb, srgb_to_linear,
+};
+use crate::{Error, Result, parallel};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -405,10 +409,33 @@ impl Default for DevelopSettings {
     }
 }
 
+/// Where a pixel sits in the image, for stages that are not purely tonal.
+#[derive(Clone, Copy, Debug)]
+pub struct PixelContext {
+    pub x: usize,
+    pub y: usize,
+    pub image_width: usize,
+    pub image_height: usize,
+}
+
+impl PixelContext {
+    fn normalized(self) -> (f32, f32) {
+        (
+            (self.x as f32 + 0.5) / self.image_width.max(1) as f32,
+            (self.y as f32 + 0.5) / self.image_height.max(1) as f32,
+        )
+    }
+
+    fn aspect(self) -> f32 {
+        self.image_width.max(1) as f32 / self.image_height.max(1) as f32
+    }
+}
+
 /// The develop pipeline compiled into the form each render path consumes.
 #[derive(Clone)]
 pub struct DevelopTransform {
     settings: DevelopSettings,
+    frame: VignetteFrame,
     light: LightTransform,
     color: ColorTransform,
     channels: Option<[ToneCurve; 3]>,
@@ -416,8 +443,15 @@ pub struct DevelopTransform {
 
 impl DevelopTransform {
     pub fn new(settings: DevelopSettings) -> Result<Self> {
+        Self::framed(settings, VignetteFrame::FULL)
+    }
+
+    /// The same pipeline with its position-dependent stages centred on a
+    /// rectangle of the image — the crop, when the document carries one.
+    pub fn framed(settings: DevelopSettings, frame: VignetteFrame) -> Result<Self> {
         let settings = settings.validated()?;
         Ok(Self {
+            frame: frame.validated()?,
             light: with_luminance_curve(
                 LightTransform::new(settings.light)?,
                 &settings.curve.luminance,
@@ -430,6 +464,10 @@ impl DevelopTransform {
 
     pub fn settings(&self) -> &DevelopSettings {
         &self.settings
+    }
+
+    pub fn frame(&self) -> VignetteFrame {
+        self.frame
     }
 
     /// The luminance response with the luminance curve already composed in.
@@ -457,6 +495,30 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
+    /// Develop a tile in place over the region of the image it covers, so the
+    /// position-dependent stages know where each pixel came from.
+    pub fn apply_display_rgba8_at(
+        &self,
+        rgba: &[u8],
+        tile: (usize, usize),
+        region: DevelopedTileRegion,
+    ) -> Result<Vec<u8>> {
+        if rgba.len() != tile.0.saturating_mul(tile.1).saturating_mul(4) {
+            return Err(Error::Unsupported("RGBA buffer size mismatch"));
+        }
+        let mut adjusted = rgba.to_vec();
+        parallel::fill_rows(&mut adjusted, tile.0 * 4, |output_y, row| {
+            for (output_x, pixel) in row.chunks_exact_mut(4).enumerate() {
+                let developed = self.apply_display_pixel_at(
+                    [pixel[0], pixel[1], pixel[2]],
+                    region.pixel_context((output_x, output_y), tile),
+                );
+                pixel[..3].copy_from_slice(&developed);
+            }
+        });
+        Ok(adjusted)
+    }
+
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.apply_channel_curves(
             self.light
@@ -464,11 +526,23 @@ impl DevelopTransform {
         )
     }
 
+    pub fn apply_display_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let shaded = self.vignetted(self.color.apply_display_pixel(pixel), at);
+        let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
+        self.grained(toned, at)
+    }
+
     pub fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.apply_channel_curves(
             self.light
                 .apply_encoded_pixel(self.color.apply_display_pixel(pixel)),
         )
+    }
+
+    pub fn apply_encoded_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let shaded = self.vignetted(self.color.apply_display_pixel(pixel), at);
+        let toned = self.apply_channel_curves(self.light.apply_encoded_pixel(shaded));
+        self.grained(toned, at)
     }
 
     fn apply_channel_curves(&self, encoded: [u8; 3]) -> [u8; 3] {
@@ -479,6 +553,37 @@ impl DevelopTransform {
                 (curved * 255.0).round() as u8
             }),
         }
+    }
+
+    fn vignetted(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let gain = effects::vignette_gain(
+            self.settings.effects,
+            self.frame,
+            at.aspect(),
+            at.normalized(),
+        );
+        if gain == 1.0 {
+            return pixel;
+        }
+        pixel.map(|channel| linear_to_srgb(srgb_to_linear(channel) * gain))
+    }
+
+    fn grained(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
+        let effects = self.settings.effects;
+        if effects.grain_amount == 0.0 {
+            return pixel;
+        }
+        let luminance =
+            (0.2126 * pixel[0] as f32 + 0.7152 * pixel[1] as f32 + 0.0722 * pixel[2] as f32)
+                / 255.0;
+        let offset = effects::grain_offset(
+            effects,
+            luminance,
+            at.x as u32,
+            at.y as u32,
+            effects::grain_cell(at.image_width, at.image_height, effects.grain_size),
+        );
+        pixel.map(|channel| (channel as f32 + offset).round().clamp(0.0, 255.0) as u8)
     }
 }
 
@@ -589,11 +694,197 @@ mod tests {
         )
     }
 
+    fn effected(effects: EffectsSettings) -> DevelopTransform {
+        DevelopTransform::new(DevelopSettings {
+            effects,
+            ..DevelopSettings::neutral()
+        })
+        .unwrap()
+    }
+
+    fn whole(width: usize, height: usize) -> DevelopedTileRegion {
+        DevelopedTileRegion {
+            image_width: width,
+            image_height: height,
+            x: 0,
+            y: 0,
+            width,
+            height,
+        }
+    }
+
+    fn at(x: usize, y: usize) -> PixelContext {
+        PixelContext {
+            x,
+            y,
+            image_width: 63,
+            image_height: 47,
+        }
+    }
+
     #[test]
     fn neutral_settings_leave_every_byte_untouched() {
         let transform = DevelopTransform::new(DevelopSettings::neutral()).unwrap();
         let source = [0, 31, 127, 9, 201, 240, 255, 73];
         assert_eq!(transform.apply_display_rgba8(&source).unwrap(), source);
+        assert_eq!(
+            transform
+                .apply_display_rgba8_at(&source, (2, 1), whole(2, 1))
+                .unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn position_changes_nothing_until_an_effect_asks_for_it() {
+        let settings = DevelopSettings {
+            effects: EffectsSettings {
+                vignette_midpoint: 20.0,
+                vignette_roundness: 100.0,
+                vignette_feather: 0.0,
+                grain_size: 80.0,
+                ..EffectsSettings::NEUTRAL
+            },
+            ..vivid()
+        };
+        let transform = DevelopTransform::new(settings).unwrap();
+        for pixel in [[0, 0, 0], [12, 200, 96], [128, 128, 128], [255, 255, 255]] {
+            for position in [(0, 0), (31, 23), (62, 46)] {
+                let placed = transform.apply_display_pixel_at(pixel, at(position.0, position.1));
+                assert_eq!(placed, transform.apply_display_pixel(pixel));
+            }
+        }
+    }
+
+    #[test]
+    fn the_vignette_darkens_the_corners_and_leaves_the_frame_centre_exact() {
+        let transform = effected(EffectsSettings {
+            vignette_amount: -100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let gray = [128, 128, 128];
+        assert_eq!(transform.apply_display_pixel_at(gray, at(31, 23)), gray);
+        let corner = transform.apply_display_pixel_at(gray, at(0, 0));
+        assert!(corner[0] < gray[0], "corner {corner:?}");
+        let brightened = effected(EffectsSettings {
+            vignette_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        })
+        .apply_display_pixel_at(gray, at(0, 0));
+        assert!(brightened[0] > gray[0], "corner {brightened:?}");
+    }
+
+    #[test]
+    fn the_vignette_scales_the_channels_alike() {
+        let transform = effected(EffectsSettings {
+            vignette_amount: -75.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let source = [64, 128, 192];
+        let corner = transform.apply_display_pixel_at(source, at(0, 46));
+        let scale = |channel: usize| {
+            crate::light::srgb_to_linear(corner[channel])
+                / crate::light::srgb_to_linear(source[channel])
+        };
+        assert!(
+            (scale(0) - scale(1)).abs() < 0.01,
+            "{} {}",
+            scale(0),
+            scale(1)
+        );
+        assert!(
+            (scale(1) - scale(2)).abs() < 0.01,
+            "{} {}",
+            scale(1),
+            scale(2)
+        );
+    }
+
+    #[test]
+    fn the_vignette_centres_on_the_frame_rather_than_the_image() {
+        let settings = DevelopSettings {
+            effects: EffectsSettings {
+                vignette_amount: -100.0,
+                vignette_midpoint: 30.0,
+                ..EffectsSettings::NEUTRAL
+            },
+            ..DevelopSettings::neutral()
+        };
+        let corner = VignetteFrame {
+            x: 0.0,
+            y: 0.0,
+            width: 0.25,
+            height: 0.25,
+        };
+        let transform = DevelopTransform::framed(settings, corner).unwrap();
+        let gray = [128, 128, 128];
+        let brightest = (0..47)
+            .flat_map(|y| (0..63).map(move |x| (x, y)))
+            .max_by_key(|&(x, y)| transform.apply_display_pixel_at(gray, at(x, y))[0])
+            .unwrap();
+        assert!(
+            brightest.0 < 16 && brightest.1 < 12,
+            "the gain peaks at {brightest:?}, outside the frame"
+        );
+        assert!(
+            transform.apply_display_pixel_at(gray, at(31, 23))[0] < gray[0],
+            "the image centre escaped the falloff"
+        );
+    }
+
+    #[test]
+    fn grain_ignores_which_tile_carried_the_pixel() {
+        let transform = effected(EffectsSettings {
+            grain_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let strip: Vec<u8> = std::iter::repeat_n([128, 128, 128, 255], 4)
+            .flatten()
+            .collect();
+        let region = |x: usize, width: usize| DevelopedTileRegion {
+            image_width: 4,
+            image_height: 1,
+            x,
+            y: 0,
+            width,
+            height: 1,
+        };
+        let whole_strip = transform
+            .apply_display_rgba8_at(&strip, (4, 1), region(0, 4))
+            .unwrap();
+        let left = transform
+            .apply_display_rgba8_at(&strip[..8], (2, 1), region(0, 2))
+            .unwrap();
+        let right = transform
+            .apply_display_rgba8_at(&strip[8..], (2, 1), region(2, 2))
+            .unwrap();
+        assert_eq!(whole_strip[..8], left[..]);
+        assert_eq!(whole_strip[8..], right[..]);
+        assert_ne!(whole_strip, strip);
+    }
+
+    #[test]
+    fn grain_spares_the_darkest_and_brightest_pixels() {
+        let transform = effected(EffectsSettings {
+            grain_amount: 100.0,
+            ..EffectsSettings::NEUTRAL
+        });
+        let moved = |pixel: [u8; 3]| {
+            (0..16)
+                .map(|x| {
+                    let developed = transform.apply_display_pixel_at(pixel, at(x, 3));
+                    (developed[0] as i16 - pixel[0] as i16).abs()
+                })
+                .max()
+                .unwrap()
+        };
+        assert_eq!(moved([0, 0, 0]), 0);
+        assert_eq!(moved([255, 255, 255]), 0);
+        assert!(moved([128, 128, 128]) > 0);
+        assert_eq!(
+            effected(EffectsSettings::NEUTRAL).apply_display_pixel_at([128, 128, 128], at(3, 3)),
+            [128, 128, 128]
+        );
     }
 
     #[test]
