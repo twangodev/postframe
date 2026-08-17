@@ -1,10 +1,9 @@
+use crate::hue::{chroma_fraction, luminance};
 use crate::light::{linear_to_srgb, srgb_to_linear};
 use crate::{Error, Result};
 
 pub const MAX_TEMPERATURE_SHIFT_STOPS: f32 = 0.5;
 pub const MAX_TINT_SHIFT_STOPS: f32 = 0.5;
-
-const LUMINANCE_WEIGHTS: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -77,16 +76,15 @@ impl ColorTransform {
         if self.settings == ColorSettings::NEUTRAL {
             return pixel;
         }
-        let linear = pixel.map(srgb_to_linear);
-        let balanced = [
-            linear[0] * self.balance[0],
-            linear[1] * self.balance[1],
-            linear[2] * self.balance[2],
-        ];
-        self.scale_chroma(balanced).map(linear_to_srgb)
+        self.scale_chroma(self.balanced(pixel.map(srgb_to_linear)))
+            .map(linear_to_srgb)
     }
 
-    fn scale_chroma(&self, linear: [f32; 3]) -> [f32; 3] {
+    pub(crate) fn balanced(&self, linear: [f32; 3]) -> [f32; 3] {
+        std::array::from_fn(|channel| linear[channel] * self.balance[channel])
+    }
+
+    pub(crate) fn scale_chroma(&self, linear: [f32; 3]) -> [f32; 3] {
         let scale = self.chroma_scale(linear);
         if scale == 1.0 {
             return linear;
@@ -112,19 +110,6 @@ fn balance_gains(settings: ColorSettings) -> [f32; 3] {
     ];
     let luminance = luminance(gains);
     gains.map(|gain| gain / luminance)
-}
-
-pub(crate) fn luminance([red, green, blue]: [f32; 3]) -> f32 {
-    LUMINANCE_WEIGHTS[0] * red + LUMINANCE_WEIGHTS[1] * green + LUMINANCE_WEIGHTS[2] * blue
-}
-
-fn chroma_fraction(linear: [f32; 3]) -> f32 {
-    let maximum = linear.into_iter().fold(0.0f32, f32::max);
-    if maximum <= 0.0 {
-        return 0.0;
-    }
-    let minimum = linear.into_iter().fold(f32::INFINITY, f32::min);
-    ((maximum - minimum) / maximum).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

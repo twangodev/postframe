@@ -2,7 +2,7 @@ import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
 import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
-import { RawWebGpuRenderer, type RawRenderProfile, type ToneTables } from './webgpu-renderer.ts';
+import { RawWebGpuRenderer, type DevelopLuts, type RawRenderProfile } from './webgpu-renderer.ts';
 import { post, type DevelopPhase, type Request } from './worker-protocol.ts';
 import { wasm } from './worker-wasm.ts';
 import { measure, measureAsync } from './worker-performance.ts';
@@ -15,7 +15,7 @@ export interface RawDocument {
 	image: { width: number; height: number };
 	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
-	toneTables: (ToneTables & { key: string }) | null;
+	developLuts: (DevelopLuts & { key: string }) | null;
 	metadataSource: FileSystemFileHandle | null;
 }
 
@@ -183,7 +183,7 @@ async function publishRawDocument(
 		image: { width: session.width(), height: session.height() },
 		session,
 		renderer: await createRawRenderer(session),
-		toneTables: null,
+		developLuts: null,
 		metadataSource: exportMetadataSource(message.frames)
 	};
 	const preview = measure('preview', () =>

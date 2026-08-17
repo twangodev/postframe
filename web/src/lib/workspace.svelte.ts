@@ -14,7 +14,10 @@ import type { StorageBreakdown } from './storage-breakdown';
 import {
 	defaultCurveSettings,
 	defaultDevelopSettings,
+	defaultGradingSettings,
+	defaultMixerSettings,
 	scalarAdjustments,
+	type AdjustmentTarget,
 	type DevelopSettings,
 	type ColorControlName,
 	type CurveChannelName,
@@ -39,7 +42,7 @@ import type { EditorCommand } from './editor-command';
 import type { ImageScopeData } from './image-scope';
 import type { MaskEdgeStroke } from './smart-mask';
 import type { MaskEdgeControlName } from './mask-edge-settings';
-import { AdjustmentControls } from './adjustment-controls';
+import { AdjustmentControls, type AdjustmentChange } from './adjustment-controls';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
@@ -134,6 +137,8 @@ export class WorkspaceState {
 	subjectChoices = $state<SubjectChoices | null>(null);
 	adjustments = $state(scalarAdjustments(defaultDevelopSettings()));
 	curve = $state(defaultCurveSettings());
+	mixer = $state(defaultMixerSettings());
+	grading = $state(defaultGradingSettings());
 	renderSettings = $state<{
 		adjustments: DevelopSettings;
 		crop: NormalizedCrop | null;
@@ -211,6 +216,8 @@ export class WorkspaceState {
 				'canAdjustLight',
 				'adjustments',
 				'curve',
+				'mixer',
+				'grading',
 				'masks',
 				'selectedMaskId',
 				'documentStatus',
@@ -405,6 +412,18 @@ export class WorkspaceState {
 
 	commitCurve = (channel: CurveChannelName, points: CurvePoints) =>
 		this.controls.commitCurve(channel, points);
+
+	previewAdjustmentAt = (target: AdjustmentTarget, value: number) =>
+		this.controls.previewAdjustmentAt(target, value);
+
+	commitAdjustmentAt = (target: AdjustmentTarget, value: number) =>
+		this.controls.commitAdjustmentAt(target, value);
+
+	previewAdjustmentsAt = (changes: readonly AdjustmentChange[]) =>
+		this.controls.previewAdjustmentsAt(changes);
+
+	commitAdjustmentsAt = (changes: readonly AdjustmentChange[]) =>
+		this.controls.commitAdjustmentsAt(changes);
 
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);

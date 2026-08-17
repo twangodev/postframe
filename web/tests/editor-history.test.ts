@@ -57,6 +57,24 @@ test('clears redo after a new command', () => {
 	assert.deepEqual(history.labels, ['shadows -30']);
 });
 
+test('reverses a nested mixer edit as one step', () => {
+	const history = new EditorHistory();
+	const before = defaultEditDocument('photo-one');
+	const transition = applyEditorCommand(before, {
+		type: 'adjustment.set',
+		group: 'mixer',
+		band: 'aqua',
+		control: 'luminance',
+		value: -30
+	});
+	assert.ok(transition);
+
+	history.commit(before, transition);
+	assert.deepEqual(history.labels, ['aqua luminance -30']);
+	assert.deepEqual(history.undo(), { document: before, invalidation: 'render' });
+	assert.equal(history.redo()?.document.adjustments.mixer.aqua.luminance, -30);
+});
+
 test('records commands containing reactive mask arrays as plain history data', () => {
 	const history = new EditorHistory();
 	const before = defaultEditDocument('photo-one');

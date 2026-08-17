@@ -1,11 +1,12 @@
 import {
-	withAdjustment,
+	mirrorAdjustments,
+	withAdjustmentAt,
 	withCurve,
-	type AdjustmentRecord,
+	type AdjustmentMirror,
+	type AdjustmentTarget,
 	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
-	type CurveSettings,
 	type LightControlName,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -17,12 +18,15 @@ import type { MaskEdgeControlName } from './mask-edge-settings';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
 import type { Photo } from './photo-record';
 
-export interface AdjustmentControlsHost {
+export interface AdjustmentChange {
+	target: AdjustmentTarget;
+	value: number;
+}
+
+export interface AdjustmentControlsHost extends AdjustmentMirror {
 	readonly selectedPhoto: Photo | null;
 	readonly canAdjustLight: boolean;
 	readonly selectedMaskId: string | null;
-	readonly adjustments: AdjustmentRecord;
-	readonly curve: CurveSettings;
 	masks: EditMask[];
 	dispatchEditorCommand(command: EditorCommand): boolean;
 }
@@ -39,13 +43,7 @@ export class AdjustmentControls {
 		control: ScalarControlName<Group>,
 		value: number
 	) {
-		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		Object.assign(this.host.adjustments, { [control]: value });
-		const edit = this.host.selectedPhoto.edit;
-		this.develop.schedule(
-			withAdjustment(edit.adjustments, group, control, value),
-			edit.geometry.crop
-		);
+		this.previewAdjustmentAt({ group, control } as AdjustmentTarget, value);
 	}
 
 	commitAdjustment<Group extends ScalarGroupName>(
@@ -53,10 +51,36 @@ export class AdjustmentControls {
 		control: ScalarControlName<Group>,
 		value: number
 	) {
+		this.commitAdjustmentAt({ group, control } as AdjustmentTarget, value);
+	}
+
+	previewAdjustmentAt(target: AdjustmentTarget, value: number) {
+		this.previewAdjustmentsAt([{ target, value }]);
+	}
+
+	commitAdjustmentAt(target: AdjustmentTarget, value: number) {
+		this.commitAdjustmentsAt([{ target, value }]);
+	}
+
+	/// A grading puck moves a hue and a saturation with one gesture, so previews
+	/// and commits take a whole set of changes rather than a single control.
+	previewAdjustmentsAt(changes: readonly AdjustmentChange[]) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
-		if (!this.host.dispatchEditorCommand(adjustmentCommand(group, control, value))) {
-			this.releaseUnchangedPreview();
-		}
+		const edit = this.host.selectedPhoto.edit;
+		const adjustments = changes.reduce(
+			(settings, { target, value }) => withAdjustmentAt(settings, target, value),
+			edit.adjustments
+		);
+		mirrorAdjustments(this.host, adjustments);
+		this.develop.schedule(adjustments, edit.geometry.crop);
+	}
+
+	commitAdjustmentsAt(changes: readonly AdjustmentChange[]) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
+		const applied = changes
+			.map(({ target, value }) => this.host.dispatchEditorCommand(adjustmentCommand(target, value)))
+			.some(Boolean);
+		if (!applied) this.releaseUnchangedPreview();
 	}
 
 	previewCurve(channel: CurveChannelName, points: CurvePoints) {

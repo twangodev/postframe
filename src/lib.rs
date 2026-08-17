@@ -20,6 +20,7 @@ pub mod export;
 pub mod fit;
 pub mod grade;
 pub mod hdr;
+pub mod hue;
 pub mod light;
 mod parallel;
 pub mod preview;
@@ -34,7 +35,8 @@ pub use curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 pub use detail::{DetailPlanes, DetailSample, DetailTransform};
 pub use develop::{
     CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
-    EffectsSettings, GradingSettings, GradingWheel, MixerBand, MixerSettings, PixelContext,
+    EffectsSettings, GradingRange, GradingSettings, GradingTransform, GradingWheel, MixerBand,
+    MixerLuts, MixerSettings, PixelContext,
 };
 pub use effects::VignetteFrame;
 pub use error::{Error, Result};

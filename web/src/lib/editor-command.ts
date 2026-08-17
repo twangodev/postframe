@@ -15,29 +15,21 @@ import {
 	developSettingsSchema,
 	lightSettingsSchema,
 	sameDevelopSettings,
-	withAdjustment,
+	withAdjustmentAt,
 	withCurve,
+	type AdjustmentTarget,
 	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
 	type DevelopSettings,
-	type LightControlName,
-	type ScalarControlName,
-	type ScalarGroupName
+	type LightControlName
 } from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
 export type AdjustmentCommand =
-	| {
-			[Group in ScalarGroupName]: {
-				type: 'adjustment.set';
-				group: Group;
-				control: ScalarControlName<Group>;
-				value: number;
-			};
-	  }[ScalarGroupName]
+	| (AdjustmentTarget & { type: 'adjustment.set'; value: number })
 	| {
 			type: 'adjustment.set';
 			group: 'curve';
@@ -45,12 +37,8 @@ export type AdjustmentCommand =
 			value: CurvePoints;
 	  };
 
-export function adjustmentCommand<Group extends ScalarGroupName>(
-	group: Group,
-	control: ScalarControlName<Group>,
-	value: number
-): AdjustmentCommand {
-	return { type: 'adjustment.set', group, control, value } as AdjustmentCommand;
+export function adjustmentCommand(target: AdjustmentTarget, value: number): AdjustmentCommand {
+	return { type: 'adjustment.set', ...target, value } as AdjustmentCommand;
 }
 
 export function curveCommand(channel: CurveChannelName, points: CurvePoints): AdjustmentCommand {
@@ -105,17 +93,15 @@ export function applyEditorCommand(
 
 	switch (command.type) {
 		case 'adjustment.set': {
-			const shaped =
-				command.group === 'curve'
+			const curved = command.group === 'curve';
+			const adjustments: DevelopSettings = developSettingsSchema.parse(
+				curved
 					? withCurve(next.adjustments, command.control, command.value)
-					: withAdjustment(next.adjustments, command.group, command.control, command.value);
-			const adjustments: DevelopSettings = developSettingsSchema.parse(shaped);
+					: withAdjustmentAt(next.adjustments, command, command.value)
+			);
 			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
 			next.adjustments = adjustments;
-			const label =
-				command.group === 'curve'
-					? `${command.control} curve`
-					: controlLabel(command.control, command.value);
+			const label = curved ? `${command.control} curve` : targetLabel(command);
 			return transition(command, label, 'render', next);
 		}
 		case 'mask.light.set': {
@@ -210,6 +196,11 @@ function transition(
 	document: EditDocument
 ): EditorTransition {
 	return { command, label, invalidation, document: editDocumentSchema.parse(document) };
+}
+
+function targetLabel(target: AdjustmentTarget & { value: number }) {
+	const section = 'band' in target ? target.band : 'range' in target ? target.range : null;
+	return controlLabel(section ? `${section} ${target.control}` : target.control, target.value);
 }
 
 function controlLabel(control: string, value: number) {

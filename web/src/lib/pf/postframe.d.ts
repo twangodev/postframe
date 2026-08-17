@@ -22,7 +22,9 @@ export class DisplayTransform {
      * the identity.
      */
     readonly channel_luts: Float32Array;
+    readonly grading_scalars: Float32Array;
     readonly luminance_lut: Float32Array;
+    readonly mixer_luts: Float32Array;
 }
 
 export class LinearTile {
@@ -143,12 +145,24 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
+    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
+    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
+    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number, number];
+    readonly displaytransform_channel_luts: (a: number) => [number, number];
+    readonly displaytransform_grading_scalars: (a: number) => [number, number];
+    readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_mixer_luts: (a: number) => [number, number];
+    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
+    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_detail: (a: number) => [number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
@@ -190,16 +204,6 @@ export interface InitOutput {
     readonly scopeframe_sample_count: (a: number) => number;
     readonly scopeframe_waveform_height: (a: number) => number;
     readonly scopeframe_waveform_width: (a: number) => number;
-    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
-    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
-    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
-    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
-    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
-    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number, number];
-    readonly displaytransform_channel_luts: (a: number) => [number, number];
-    readonly displaytransform_luminance_lut: (a: number) => [number, number];
-    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
-    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly __wbg_rawinspection_free: (a: number, b: number) => void;
     readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
     readonly rawinspection_camera_make: (a: number) => [number, number];

@@ -70,6 +70,16 @@ impl DisplayTransform {
             .map(|luts| luts.concat())
             .unwrap_or_default()
     }
+
+    #[wasm_bindgen(getter)]
+    pub fn mixer_luts(&self) -> Vec<f32> {
+        self.develop.mixer_luts().values()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn grading_scalars(&self) -> Vec<f32> {
+        self.develop.grading().scalars()
+    }
 }
 
 #[wasm_bindgen]

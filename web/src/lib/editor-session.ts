@@ -1,11 +1,9 @@
 import {
-	cloneCurveSettings,
 	cloneDevelopSettings,
 	defaultDevelopSettings,
+	mirrorAdjustments,
 	sameDevelopSettings,
-	scalarAdjustments,
-	type AdjustmentRecord,
-	type CurveSettings,
+	type AdjustmentMirror,
 	type DevelopSettings
 } from './develop-settings';
 import {
@@ -25,15 +23,13 @@ import type { Photo } from './photo-record';
 import type { SmartMaskStatus } from './smart-masking';
 import type { WorkspacePersistence } from './workspace-persistence';
 
-export interface EditorSessionHost {
+export interface EditorSessionHost extends AdjustmentMirror {
 	readonly selectedPhoto: Photo | null;
 	masks: EditMask[];
 	selectedMaskId: string | null;
 	selectedMaskRaster: SelectedMaskRaster | null;
 	imageScope: ImageScopeData | null;
 	smartMaskStatus: SmartMaskStatus;
-	adjustments: AdjustmentRecord;
-	curve: CurveSettings;
 	renderSettings: { adjustments: DevelopSettings; crop: NormalizedCrop | null; revision: number };
 	history: string[];
 	canUndo: boolean;
@@ -90,8 +86,7 @@ export class EditorSession {
 		this.host.selectedMaskId = null;
 		this.host.selectedMaskRaster = null;
 		this.host.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
-		this.host.adjustments = scalarAdjustments(adjustments);
-		this.host.curve = cloneCurveSettings(adjustments.curve);
+		mirrorAdjustments(this.host, adjustments);
 		this.host.renderSettings = {
 			adjustments: cloneDevelopSettings(adjustments),
 			crop: cloneCrop(document?.geometry.crop ?? null),
@@ -115,8 +110,7 @@ export class EditorSession {
 		) {
 			this.host.selectedMaskId = this.host.masks.at(-1)?.id ?? null;
 		}
-		Object.assign(this.host.adjustments, scalarAdjustments(next.adjustments));
-		Object.assign(this.host.curve, cloneCurveSettings(next.adjustments.curve));
+		mirrorAdjustments(this.host, next.adjustments);
 
 		if (invalidation === 'render') {
 			if (globalAdjustmentsChanged) {

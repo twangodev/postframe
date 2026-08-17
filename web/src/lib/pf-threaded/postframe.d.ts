@@ -22,7 +22,9 @@ export class DisplayTransform {
      * the identity.
      */
     readonly channel_luts: Float32Array;
+    readonly grading_scalars: Float32Array;
     readonly luminance_lut: Float32Array;
+    readonly mixer_luts: Float32Array;
 }
 
 export class LinearTile {
@@ -155,22 +157,6 @@ export function wbg_rayon_start_worker(receiver: number): void;
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
-    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
-    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
-    readonly rawinspection_camera_make: (a: number) => [number, number];
-    readonly rawinspection_camera_model: (a: number) => [number, number];
-    readonly rawinspection_captured_at: (a: number) => [number, number];
-    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
-    readonly rawinspection_f_number: (a: number) => [number, number];
-    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
-    readonly rawinspection_height: (a: number) => number;
-    readonly rawinspection_iso: (a: number) => number;
-    readonly rawinspection_lens: (a: number) => [number, number];
-    readonly rawinspection_orientation: (a: number) => number;
-    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
-    readonly rawinspection_width: (a: number) => number;
-    readonly supported_raw_extensions: () => [number, number];
-    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;
@@ -225,9 +211,27 @@ export interface InitOutput {
     readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number, number];
     readonly displaytransform_channel_luts: (a: number) => [number, number];
+    readonly displaytransform_grading_scalars: (a: number) => [number, number];
     readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_mixer_luts: (a: number) => [number, number];
     readonly displaytransform_new: (a: any, b: any) => [number, number, number];
     readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
+    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
+    readonly rawinspection_camera_make: (a: number) => [number, number];
+    readonly rawinspection_camera_model: (a: number) => [number, number];
+    readonly rawinspection_captured_at: (a: number) => [number, number];
+    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
+    readonly rawinspection_f_number: (a: number) => [number, number];
+    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
+    readonly rawinspection_height: (a: number) => number;
+    readonly rawinspection_iso: (a: number) => number;
+    readonly rawinspection_lens: (a: number) => [number, number];
+    readonly rawinspection_orientation: (a: number) => number;
+    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
+    readonly rawinspection_width: (a: number) => number;
+    readonly supported_raw_extensions: () => [number, number];
+    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;

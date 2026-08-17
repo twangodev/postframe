@@ -3,8 +3,13 @@ use crate::curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
 use crate::detail::{DetailPlanes, DetailTransform};
 use crate::effects::{self, VignetteFrame};
 use crate::grade::{ColorSettings, ColorTransform};
+use crate::hue::{
+    brightest, chroma_fraction, from_hue, hue_degrees, luminance, scale_luminance,
+    scale_saturation, with_hue_shift,
+};
 use crate::light::{
-    LightSettings, LightTransform, decode_srgb, encode_srgb, linear_to_srgb, srgb_to_linear,
+    LightSettings, LightTransform, MIDDLE_GRAY, decode_srgb, encode_srgb, linear_to_srgb,
+    srgb_to_linear,
 };
 use crate::{Error, Result, parallel};
 
@@ -157,6 +162,92 @@ const NEUTRAL_BAND: MixerBand = MixerBand {
     luminance: 0.0,
 };
 
+pub const MIXER_BAND_CENTERS: [f32; MIXER_BANDS] =
+    [0.0, 30.0, 60.0, 120.0, 180.0, 240.0, 280.0, 320.0];
+pub const MIXER_LUT_LENGTH: usize = 360;
+pub const MAX_MIXER_HUE_SHIFT_DEGREES: f32 = 30.0;
+
+/// How much each band claims of a hue. Adjacent bands cross over as a raised
+/// cosine and every other band contributes nothing, so the eight weights sum
+/// to one at every hue and a color between two bands blends them.
+pub fn mixer_band_weights(degrees: f32) -> [f32; MIXER_BANDS] {
+    let hue = degrees.rem_euclid(360.0);
+    let below = MIXER_BAND_CENTERS
+        .iter()
+        .rposition(|&center| center <= hue)
+        .unwrap_or(MIXER_BANDS - 1);
+    let above = (below + 1) % MIXER_BANDS;
+    let span = (MIXER_BAND_CENTERS[above] - MIXER_BAND_CENTERS[below]).rem_euclid(360.0);
+    let position = (hue - MIXER_BAND_CENTERS[below]).rem_euclid(360.0) / span;
+    let crossfade = (1.0 - (std::f32::consts::PI * position).cos()) / 2.0;
+    let mut weights = [0.0; MIXER_BANDS];
+    weights[below] = 1.0 - crossfade;
+    weights[above] = crossfade;
+    weights
+}
+
+/// The mixer's response sampled once per hue degree: a shift in degrees plus
+/// multiplicative saturation and luminance scales.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MixerLuts {
+    hue_shift: Vec<f32>,
+    saturation: Vec<f32>,
+    luminance: Vec<f32>,
+}
+
+impl MixerLuts {
+    pub fn new(settings: &MixerSettings) -> Self {
+        let bands = settings.bands();
+        let blend = |control: fn(&MixerBand) -> f32, neutral: f32, range: f32| {
+            (0..MIXER_LUT_LENGTH)
+                .map(|degree| {
+                    let weighted: f32 = mixer_band_weights(degree as f32)
+                        .iter()
+                        .zip(&bands)
+                        .map(|(weight, band)| weight * control(band) / 100.0 * range)
+                        .sum();
+                    neutral + weighted
+                })
+                .collect()
+        };
+        Self {
+            hue_shift: blend(|band| band.hue, 0.0, MAX_MIXER_HUE_SHIFT_DEGREES),
+            saturation: blend(|band| band.saturation, 1.0, 1.0),
+            luminance: blend(|band| band.luminance, 1.0, 1.0),
+        }
+    }
+
+    /// The three tables end to end, in the order the shader reads them.
+    pub fn values(&self) -> Vec<f32> {
+        [&self.hue_shift, &self.saturation, &self.luminance]
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect()
+    }
+
+    pub fn apply(&self, linear: [f32; 3]) -> [f32; 3] {
+        let chroma = chroma_fraction(linear);
+        if chroma <= 0.0 {
+            return linear;
+        }
+        let hue = hue_degrees(linear);
+        let faded = |table: &[f32], neutral: f32| neutral + (sample(table, hue) - neutral) * chroma;
+        let shifted = with_hue_shift(linear, faded(&self.hue_shift, 0.0));
+        let saturated = scale_saturation(shifted, faded(&self.saturation, 1.0));
+        scale_luminance(saturated, faded(&self.luminance, 1.0))
+    }
+}
+
+/// Wrapping linear interpolation, so hue 359.5 blends back into hue 0.
+fn sample(table: &[f32], hue: f32) -> f32 {
+    let position = hue.rem_euclid(table.len() as f32);
+    let index = position as usize % table.len();
+    let fraction = position - index as f32;
+    let above = table[(index + 1) % table.len()];
+    table[index] + fraction * (above - table[index])
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 pub struct GradingWheel {
@@ -221,6 +312,103 @@ const NEUTRAL_WHEEL: GradingWheel = GradingWheel {
     saturation: 0.0,
     luminance: 0.0,
 };
+
+pub const GRADING_SHADOW_EDGE_STOPS: f32 = -1.0;
+pub const GRADING_HIGHLIGHT_EDGE_STOPS: f32 = 1.0;
+pub const MIN_GRADING_CROSSFADE_STOPS: f32 = 0.5;
+pub const MAX_GRADING_CROSSFADE_STOPS: f32 = 2.5;
+pub const MAX_GRADING_BALANCE_STOPS: f32 = 2.0;
+pub const MAX_GRADING_LUMINANCE_STOPS: f32 = 0.5;
+pub const MAX_GRADING_MIX: f32 = 0.5;
+pub const GRADING_SCALARS: usize = 12;
+
+/// One wheel reduced to what a pixel needs: a hue to move toward, how far to
+/// move at full range weight, and an exposure shift in stops.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GradingRange {
+    pub hue: f32,
+    pub mix: f32,
+    pub stops: f32,
+}
+
+impl GradingRange {
+    fn blend(&self, linear: [f32; 3], weight: f32) -> [f32; 3] {
+        let amount = self.mix * weight;
+        if amount <= 0.0 {
+            return linear;
+        }
+        let tint = from_hue(self.hue, 1.0, brightest(linear));
+        std::array::from_fn(|channel| linear[channel] + (tint[channel] - linear[channel]) * amount)
+    }
+}
+
+/// The grading wheels compiled to the tonal ramps and per-range tints both
+/// render paths apply.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GradingTransform {
+    pub shadow_edge: f32,
+    pub highlight_edge: f32,
+    pub crossfade: f32,
+    pub ranges: [GradingRange; 3],
+}
+
+impl GradingTransform {
+    pub fn new(settings: GradingSettings) -> Self {
+        let balance = settings.balance / 100.0 * MAX_GRADING_BALANCE_STOPS;
+        let widening =
+            settings.blending / 100.0 * (MAX_GRADING_CROSSFADE_STOPS - MIN_GRADING_CROSSFADE_STOPS);
+        Self {
+            shadow_edge: GRADING_SHADOW_EDGE_STOPS + balance,
+            highlight_edge: GRADING_HIGHLIGHT_EDGE_STOPS + balance,
+            crossfade: MIN_GRADING_CROSSFADE_STOPS + widening,
+            ranges: settings.wheels().map(|wheel| GradingRange {
+                hue: wheel.hue,
+                mix: wheel.saturation / 100.0 * MAX_GRADING_MIX,
+                stops: wheel.luminance / 100.0 * MAX_GRADING_LUMINANCE_STOPS,
+            }),
+        }
+    }
+
+    /// Shadow, midtone and highlight weights at a linear luminance. The
+    /// midtone is the remainder, so the three sum to one everywhere and
+    /// grading on its own can neither darken nor brighten the image.
+    pub fn range_weights(&self, luminance: f32) -> [f32; 3] {
+        let stops = (luminance.max(f32::MIN_POSITIVE) / MIDDLE_GRAY).log2();
+        let above = |edge: f32| smoothstep(edge - self.crossfade, edge + self.crossfade, stops);
+        let shadow = 1.0 - above(self.shadow_edge);
+        let highlight = above(self.highlight_edge);
+        [shadow, 1.0 - shadow - highlight, highlight]
+    }
+
+    /// The ramp edges, the crossfade half-width, then each range's hue, mix and
+    /// stops — the order the shader's uniform block declares them in.
+    pub fn scalars(&self) -> Vec<f32> {
+        [self.shadow_edge, self.highlight_edge, self.crossfade]
+            .into_iter()
+            .chain(
+                self.ranges
+                    .iter()
+                    .flat_map(|range| [range.hue, range.mix, range.stops]),
+            )
+            .collect()
+    }
+
+    pub fn apply(&self, linear: [f32; 3]) -> [f32; 3] {
+        let weights = self.range_weights(luminance(linear));
+        let mut tinted = linear;
+        let mut stops = 0.0;
+        for (range, weight) in self.ranges.iter().zip(weights) {
+            tinted = range.blend(tinted, weight);
+            stops += range.stops * weight;
+        }
+        scale_luminance(tinted, stops.exp2())
+    }
+}
+
+fn smoothstep(start: f32, end: f32, value: f32) -> f32 {
+    let position = ((value - start) / (end - start)).clamp(0.0, 1.0);
+    position * position * (3.0 - 2.0 * position)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -441,6 +629,9 @@ pub struct DevelopTransform {
     color: ColorTransform,
     detail: DetailTransform,
     channels: Option<[ToneCurve; 3]>,
+    mixer: MixerLuts,
+    grading: GradingTransform,
+    hue_identity: bool,
 }
 
 impl DevelopTransform {
@@ -461,6 +652,9 @@ impl DevelopTransform {
             color: ColorTransform::new(settings.color)?,
             detail: DetailTransform::new(settings.detail),
             channels: channel_curves(&settings.curve),
+            mixer: MixerLuts::new(&settings.mixer),
+            grading: GradingTransform::new(settings.grading),
+            hue_identity: settings.mixer.is_neutral() && settings.grading.is_neutral(),
             settings,
         })
     }
@@ -484,6 +678,14 @@ impl DevelopTransform {
         self.channels
             .as_ref()
             .map(|curves| curves.each_ref().map(ToneCurve::samples))
+    }
+
+    pub fn mixer_luts(&self) -> &MixerLuts {
+        &self.mixer
+    }
+
+    pub fn grading(&self) -> GradingTransform {
+        self.grading
     }
 
     pub fn apply_display_rgba8(&self, rgba: &[u8]) -> Result<Vec<u8>> {
@@ -527,7 +729,7 @@ impl DevelopTransform {
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.apply_channel_curves(
             self.light
-                .apply_display_pixel(self.color.apply_display_pixel(pixel)),
+                .apply_display_pixel(self.apply_chroma_pixel(pixel)),
         )
     }
 
@@ -536,7 +738,7 @@ impl DevelopTransform {
     /// Showing them in a preview its tiled export could not reproduce is worse
     /// than leaving them absent from both.
     pub fn apply_display_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
-        let shaded = self.vignetted(self.color.apply_display_pixel(pixel), at);
+        let shaded = self.vignetted(self.apply_chroma_pixel(pixel), at);
         let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
         self.grained(toned, at)
     }
@@ -544,8 +746,20 @@ impl DevelopTransform {
     pub fn apply_encoded_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         self.apply_channel_curves(
             self.light
-                .apply_encoded_pixel(self.color.apply_display_pixel(pixel)),
+                .apply_encoded_pixel(self.apply_chroma_pixel(pixel)),
         )
+    }
+
+    /// Stages one through four. The hue stages open up the color transform's
+    /// linear pass so they can sit between its white balance and its chroma
+    /// scale; with both neutral the pass stays closed and untouched.
+    fn apply_chroma_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
+        if self.hue_identity {
+            return self.color.apply_display_pixel(pixel);
+        }
+        let balanced = self.color.balanced(pixel.map(srgb_to_linear));
+        let graded = self.grading.apply(self.mixer.apply(balanced));
+        self.color.scale_chroma(graded).map(linear_to_srgb)
     }
 
     /// The tile chain, the only one where the spatial stages have the planes
@@ -556,7 +770,7 @@ impl DevelopTransform {
         at: PixelContext,
         planes: Option<&DetailPlanes>,
     ) -> [u8; 3] {
-        let presented = self.presented(self.color.apply_display_pixel(pixel), at, planes);
+        let presented = self.presented(self.apply_chroma_pixel(pixel), at, planes);
         let shaded = self.vignetted(presented, at);
         let toned = self.apply_channel_curves(self.light.apply_encoded_pixel(shaded));
         self.grained(toned, at)
@@ -1069,8 +1283,28 @@ mod tests {
             CurvePoint { x: 1.0, y: 1.0 },
         ]);
 
-        let stages: [(&str, DevelopSettings); 9] = [
+        let stages: [(&str, DevelopSettings); 11] = [
             ("1 white balance", tweak(|s| s.color.temperature = 70.0)),
+            (
+                "2 mixer",
+                tweak(|s| {
+                    s.mixer.aqua = MixerBand {
+                        hue: 80.0,
+                        saturation: -70.0,
+                        luminance: 60.0,
+                    }
+                }),
+            ),
+            (
+                "3 grading",
+                tweak(|s| {
+                    s.grading.shadows = GradingWheel {
+                        hue: 40.0,
+                        saturation: 90.0,
+                        luminance: 50.0,
+                    }
+                }),
+            ),
             ("4 saturation", tweak(|s| s.color.saturation = -80.0)),
             ("5 dehaze", tweak(|s| s.detail.dehaze = 70.0)),
             ("6 clarity", tweak(|s| s.detail.clarity = 90.0)),
@@ -1324,5 +1558,234 @@ mod tests {
             point(0.5, 0.6),
             point(1.0, 1.0)
         ]));
+    }
+
+    fn banded(band: &str, values: MixerBand) -> DevelopSettings {
+        let mut mixer = MixerSettings::NEUTRAL;
+        match band {
+            "red" => mixer.red = values,
+            "yellow" => mixer.yellow = values,
+            "blue" => mixer.blue = values,
+            _ => panic!("unknown band"),
+        }
+        DevelopSettings {
+            mixer,
+            ..DevelopSettings::neutral()
+        }
+    }
+
+    fn shadow_wheel(wheel: GradingWheel) -> GradingSettings {
+        GradingSettings {
+            shadows: wheel,
+            ..GradingSettings::NEUTRAL
+        }
+    }
+
+    #[test]
+    fn every_band_owns_its_center_alone() {
+        for (band, center) in MIXER_BAND_CENTERS.into_iter().enumerate() {
+            let weights = mixer_band_weights(center);
+            assert_eq!(weights[band], 1.0, "band {band} does not own {center}");
+            assert_eq!(weights.into_iter().sum::<f32>(), 1.0);
+        }
+    }
+
+    #[test]
+    fn mixer_band_weights_sum_to_one_across_the_whole_wheel() {
+        let worst = (0..3_600)
+            .map(|tenth| {
+                let sum: f32 = mixer_band_weights(tenth as f32 / 10.0).into_iter().sum();
+                (sum - 1.0).abs()
+            })
+            .fold(0.0f32, f32::max);
+        assert!(worst < 1e-5, "weights deviate from one by {worst}");
+    }
+
+    #[test]
+    fn the_hue_luts_interpolate_across_the_wrap() {
+        let luts = MixerLuts::new(&MixerSettings {
+            red: MixerBand {
+                saturation: 100.0,
+                ..NEUTRAL_BAND
+            },
+            ..MixerSettings::NEUTRAL
+        });
+        let below = sample(&luts.saturation, 359.0);
+        let across = sample(&luts.saturation, 359.5);
+        assert!(below < across && across < sample(&luts.saturation, 0.0));
+        assert_eq!(
+            sample(&luts.saturation, 360.0),
+            sample(&luts.saturation, 0.0)
+        );
+    }
+
+    #[test]
+    fn moving_one_band_leaves_a_distant_hue_byte_identical() {
+        let moved = MixerBand {
+            hue: 100.0,
+            saturation: -100.0,
+            luminance: 60.0,
+        };
+        let blue = [0, 0, 255, 255];
+        let red = [255, 0, 0, 255];
+        let reddened = DevelopTransform::new(banded("red", moved)).unwrap();
+        let blued = DevelopTransform::new(banded("blue", moved)).unwrap();
+        assert_eq!(reddened.apply_display_rgba8(&blue).unwrap(), blue);
+        assert_eq!(blued.apply_display_rgba8(&red).unwrap(), red);
+        assert_ne!(reddened.apply_display_rgba8(&red).unwrap(), red);
+        assert_ne!(blued.apply_display_rgba8(&blue).unwrap(), blue);
+    }
+
+    #[test]
+    fn band_saturation_desaturates_only_its_own_hues() {
+        let transform = DevelopTransform::new(banded(
+            "yellow",
+            MixerBand {
+                saturation: -100.0,
+                ..NEUTRAL_BAND
+            },
+        ))
+        .unwrap();
+        let yellow = transform.apply_display_rgba8(&[255, 255, 0, 255]).unwrap();
+        assert_eq!(yellow[0], yellow[1]);
+        assert_eq!(yellow[1], yellow[2]);
+        assert_eq!(
+            transform.apply_display_rgba8(&[0, 0, 255, 255]).unwrap(),
+            [0, 0, 255, 255]
+        );
+    }
+
+    #[test]
+    fn the_mixer_leaves_grayscale_alone() {
+        let transform = DevelopTransform::new(banded(
+            "red",
+            MixerBand {
+                hue: 100.0,
+                saturation: 100.0,
+                luminance: -100.0,
+            },
+        ))
+        .unwrap();
+        let grays = [0, 0, 0, 255, 128, 128, 128, 255, 255, 255, 255, 255];
+        assert_eq!(transform.apply_display_rgba8(&grays).unwrap(), grays);
+    }
+
+    #[test]
+    fn grading_range_weights_sum_to_one_at_every_luminance() {
+        for blending in [0.0, 25.0, 50.0, 100.0] {
+            for balance in [-100.0, -40.0, 0.0, 40.0, 100.0] {
+                let grading = GradingTransform::new(GradingSettings {
+                    blending,
+                    balance,
+                    ..GradingSettings::NEUTRAL
+                });
+                let worst = (0..=1_000)
+                    .map(|step| {
+                        let weights = grading.range_weights(step as f32 / 1_000.0);
+                        assert!(
+                            weights.into_iter().all(|weight| weight >= -1e-6),
+                            "negative weight {weights:?} at {step}"
+                        );
+                        (weights.into_iter().sum::<f32>() - 1.0).abs()
+                    })
+                    .fold(0.0f32, f32::max);
+                assert!(
+                    worst < 1e-5,
+                    "weights deviate from one by {worst} at blending {blending} balance {balance}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn grading_luminance_moves_only_its_own_tonal_range() {
+        let transform = DevelopTransform::new(DevelopSettings {
+            grading: shadow_wheel(GradingWheel {
+                hue: 0.0,
+                saturation: 0.0,
+                luminance: 100.0,
+            }),
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let lifted = transform.apply_display_rgba8(&[40, 40, 40, 255]).unwrap();
+        assert!(lifted[0] > 40, "shadow {lifted:?} was not lifted");
+        assert_eq!(
+            transform
+                .apply_display_rgba8(&[250, 250, 250, 255])
+                .unwrap(),
+            [250, 250, 250, 255]
+        );
+    }
+
+    #[test]
+    fn a_shadow_wheel_warms_shadows_without_touching_near_white() {
+        let transform = DevelopTransform::new(DevelopSettings {
+            grading: shadow_wheel(GradingWheel {
+                hue: 40.0,
+                saturation: 100.0,
+                luminance: 0.0,
+            }),
+            ..DevelopSettings::neutral()
+        })
+        .unwrap();
+        let shadow = transform.apply_display_rgba8(&[40, 40, 40, 255]).unwrap();
+        assert!(shadow[0] > shadow[1], "shadow {shadow:?} is not warmer");
+        assert!(shadow[1] > shadow[2], "shadow {shadow:?} is not warmer");
+        assert_eq!(
+            transform
+                .apply_display_rgba8(&[250, 250, 250, 255])
+                .unwrap(),
+            [250, 250, 250, 255]
+        );
+    }
+
+    #[test]
+    fn a_wheel_without_saturation_or_luminance_is_a_no_op_at_any_hue() {
+        let source = [12, 90, 200, 255, 240, 130, 30, 41];
+        for hue in [0.0, 90.0, 210.0, 359.0] {
+            let transform = DevelopTransform::new(DevelopSettings {
+                grading: GradingSettings {
+                    shadows: GradingWheel {
+                        hue,
+                        ..NEUTRAL_WHEEL
+                    },
+                    midtones: GradingWheel {
+                        hue,
+                        ..NEUTRAL_WHEEL
+                    },
+                    highlights: GradingWheel {
+                        hue,
+                        ..NEUTRAL_WHEEL
+                    },
+                    ..GradingSettings::NEUTRAL
+                },
+                ..DevelopSettings::neutral()
+            })
+            .unwrap();
+            assert_eq!(transform.apply_display_rgba8(&source).unwrap(), source);
+        }
+    }
+
+    #[test]
+    fn the_compact_gpu_forms_carry_the_whole_stage() {
+        let neutral = DevelopTransform::new(DevelopSettings::neutral()).unwrap();
+        let luts = neutral.mixer_luts().values();
+        assert_eq!(luts.len(), 3 * MIXER_LUT_LENGTH);
+        assert!(luts[..MIXER_LUT_LENGTH].iter().all(|&shift| shift == 0.0));
+        assert!(luts[MIXER_LUT_LENGTH..].iter().all(|&scale| scale == 1.0));
+
+        let scalars = neutral.grading().scalars();
+        assert_eq!(scalars.len(), GRADING_SCALARS);
+        assert_eq!(
+            scalars[..3],
+            [
+                GRADING_SHADOW_EDGE_STOPS,
+                GRADING_HIGHLIGHT_EDGE_STOPS,
+                MIN_GRADING_CROSSFADE_STOPS
+                    + 0.5 * (MAX_GRADING_CROSSFADE_STOPS - MIN_GRADING_CROSSFADE_STOPS)
+            ]
+        );
+        assert!(scalars[3..].iter().all(|&scalar| scalar == 0.0));
     }
 }

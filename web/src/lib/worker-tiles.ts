@@ -1,8 +1,7 @@
 import {
 	defaultColorSettings,
-	developSettingsKey,
 	detailTileKey,
-	tonalDevelopSettings,
+	developSettingsKey,
 	type DevelopSettings
 } from './develop-settings';
 import type { WasmSession } from './wasm-runtime';
@@ -59,7 +58,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 					},
 					request.adjustments,
 					request.tone,
-					rawToneTables(active, request.adjustments)
+					rawDevelopLuts(active, request.adjustments)
 				);
 			} catch {
 				active.renderer.destroy();
@@ -126,27 +125,30 @@ function rawTileKey(tile: RenderTileRequest) {
 	return `${region}:${detailTileKey(tile.adjustments.detail)}`;
 }
 
-// The shader applies exposure and color itself, so the tables only have to
-// carry the stages Rust resolves: the light response composed with the
-// luminance curve, and the three channel curves.
-function rawToneTables(active: RawDocument, adjustments: DevelopSettings) {
+// The shader applies exposure and color itself, so the tables only carry the
+// stages Rust resolves: the light response composed with the luminance curve,
+// the channel curves, the mixer hue tables and the grading scalars.
+function rawDevelopLuts(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
-	if (active.toneTables?.key === key) return active.toneTables;
+	if (active.developLuts?.key === key) return active.developLuts;
 	const transform = new wasm.DisplayTransform(
 		{
-			...tonalDevelopSettings({ ...adjustments.light, exposure: 0 }, defaultColorSettings()),
-			curve: adjustments.curve
+			...adjustments,
+			light: { ...adjustments.light, exposure: 0 },
+			color: defaultColorSettings()
 		},
 		null
 	);
 	try {
-		const tables = {
+		const luts = {
 			key,
 			luminance: transform.luminance_lut,
-			channels: transform.channel_luts
+			channels: transform.channel_luts,
+			mixer: transform.mixer_luts,
+			grading: transform.grading_scalars
 		};
-		active.toneTables = tables;
-		return tables;
+		active.developLuts = luts;
+		return luts;
 	} finally {
 		transform.free();
 	}

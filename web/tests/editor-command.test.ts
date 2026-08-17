@@ -266,3 +266,73 @@ test('validates geometry commands before committing them', () => {
 	assert.ok(flipped);
 	assert.equal(flipped.document.geometry.flipHorizontal, true);
 });
+
+test('applies mixer band commands immutably and names the band', () => {
+	const before = defaultEditDocument('photo-one');
+	const result = applyEditorCommand(before, {
+		type: 'adjustment.set',
+		group: 'mixer',
+		band: 'orange',
+		control: 'saturation',
+		value: -55
+	});
+	assert.ok(result);
+	assert.equal(result.document.adjustments.mixer.orange.saturation, -55);
+	assert.equal(result.document.adjustments.mixer.red.saturation, 0);
+	assert.equal(result.invalidation, 'render');
+	assert.equal(result.label, 'orange saturation -55');
+	assert.equal(before.adjustments.mixer.orange.saturation, 0);
+	assert.equal(
+		applyEditorCommand(result.document, {
+			type: 'adjustment.set',
+			group: 'mixer',
+			band: 'orange',
+			control: 'saturation',
+			value: -55
+		}),
+		null
+	);
+	assert.throws(() =>
+		applyEditorCommand(before, {
+			type: 'adjustment.set',
+			group: 'mixer',
+			band: 'orange',
+			control: 'hue',
+			value: 101
+		})
+	);
+});
+
+test('applies grading commands for both a range and the shared sliders', () => {
+	const before = defaultEditDocument('photo-one');
+	const tinted = applyEditorCommand(before, {
+		type: 'adjustment.set',
+		group: 'grading',
+		range: 'shadows',
+		control: 'hue',
+		value: 210
+	});
+	assert.ok(tinted);
+	assert.equal(tinted.document.adjustments.grading.shadows.hue, 210);
+	assert.equal(tinted.label, 'shadows hue +210');
+
+	const balanced = applyEditorCommand(tinted.document, {
+		type: 'adjustment.set',
+		group: 'grading',
+		control: 'balance',
+		value: -25
+	});
+	assert.ok(balanced);
+	assert.equal(balanced.document.adjustments.grading.balance, -25);
+	assert.equal(balanced.document.adjustments.grading.shadows.hue, 210);
+	assert.equal(balanced.label, 'balance -25');
+	assert.throws(() =>
+		applyEditorCommand(before, {
+			type: 'adjustment.set',
+			group: 'grading',
+			range: 'shadows',
+			control: 'saturation',
+			value: -1
+		})
+	);
+});

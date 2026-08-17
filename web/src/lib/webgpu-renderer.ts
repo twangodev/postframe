@@ -6,14 +6,19 @@ import {
 	type DetailSettings,
 	type DevelopSettings,
 	type EffectsSettings,
-	type LightSettings
+	type GradingSettings,
+	type LightSettings,
+	type MixerSettings
 } from './develop-settings.ts';
 import type { NormalizedCrop } from './edit-document.ts';
 
 const SOURCE_CACHE_BUDGET = 192 * 1024 * 1024;
 const LIGHT_LUT_LENGTH = 4096;
 const CHANNEL_LUT_LENGTH = 3 * 1024;
-const UNIFORM_BYTES = 128;
+const MIXER_LUT_LENGTH = 360;
+const MIXER_LUT_VALUES = 3 * MIXER_LUT_LENGTH;
+const GRADING_SCALARS = 12;
+const UNIFORM_BYTES = 192;
 const EFFECTS_UNIFORM_BYTES = 64;
 const DETAIL_PLANE_FORMAT: GPUTextureFormat = 'r32float';
 const BUFFER_COPY_DST = 0x0008;
@@ -39,13 +44,16 @@ export interface LinearTileSource {
 }
 
 /**
- * Tables Rust resolved for the tone stages: the light response with the
- * luminance curve already composed in, and the three channel curves back to
- * back — empty while all three are the identity.
+ * The Rust-computed compact forms the shader consumes instead of re-deriving
+ * each stage: the light response with the luminance curve already composed in,
+ * the three channel curves back to back (empty while all three are the
+ * identity), the mixer hue tables, and the grading scalars.
  */
-export interface ToneTables {
+export interface DevelopLuts {
 	luminance: Float32Array;
 	channels: Float32Array;
+	mixer: Float32Array;
+	grading: Float32Array;
 }
 
 /** Where a tile sits in its image, which the position-dependent stages read. */
@@ -72,6 +80,7 @@ export class RawWebGpuRenderer {
 	private readonly mixBuffer: GPUBuffer;
 	private readonly lightBuffer: GPUBuffer;
 	private readonly channelBuffer: GPUBuffer;
+	private readonly mixerBuffer: GPUBuffer;
 	private readonly uniformBuffer: GPUBuffer;
 	private readonly effectsBuffer: GPUBuffer;
 	private readonly detailFallback: GPUTexture;
@@ -93,6 +102,10 @@ export class RawWebGpuRenderer {
 		});
 		this.channelBuffer = device.createBuffer({
 			size: CHANNEL_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
+			usage: BUFFER_STORAGE | BUFFER_COPY_DST
+		});
+		this.mixerBuffer = device.createBuffer({
+			size: MIXER_LUT_VALUES * Float32Array.BYTES_PER_ELEMENT,
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
 		});
 		this.uniformBuffer = device.createBuffer({
@@ -146,13 +159,13 @@ export class RawWebGpuRenderer {
 		placement: RawTilePlacement,
 		adjustments: DevelopSettings,
 		tone: boolean,
-		tables: ToneTables
+		luts: DevelopLuts
 	) {
 		if (this.lost) throw new Error('WebGPU device is unavailable');
 		const cached = source ? this.uploadSource(key, source) : this.touchSource(key);
 		if (!cached) throw new Error('WebGPU source tile is unavailable');
-		this.updateToneTables(adjustments, tables);
-		this.updateUniforms(cached, adjustments, tone);
+		this.updateLuts(adjustments, luts);
+		this.updateUniforms(cached, adjustments, tone, luts.grading);
 		this.updateEffects(placement, adjustments.effects);
 
 		const canvas = new OffscreenCanvas(cached.width, cached.height);
@@ -168,6 +181,7 @@ export class RawWebGpuRenderer {
 				{ binding: 3, resource: { buffer: this.lightBuffer } },
 				{ binding: 4, resource: { buffer: this.uniformBuffer } },
 				{ binding: 5, resource: { buffer: this.channelBuffer } },
+				{ binding: 6, resource: { buffer: this.mixerBuffer } },
 				{ binding: 7, resource: (cached.detail ?? this.detailFallback).createView() },
 				{ binding: 8, resource: { buffer: this.effectsBuffer } }
 			]
@@ -200,6 +214,7 @@ export class RawWebGpuRenderer {
 		this.mixBuffer.destroy();
 		this.lightBuffer.destroy();
 		this.channelBuffer.destroy();
+		this.mixerBuffer.destroy();
 		this.uniformBuffer.destroy();
 		this.effectsBuffer.destroy();
 		this.device.destroy();
@@ -282,24 +297,36 @@ export class RawWebGpuRenderer {
 		this.sourceBytes = 0;
 	}
 
-	private updateToneTables(adjustments: DevelopSettings, tables: ToneTables) {
+	private updateLuts(adjustments: DevelopSettings, luts: DevelopLuts) {
 		const key = developSettingsKey(adjustments);
 		if (this.lutKey === key) return;
-		if (tables.luminance.length !== LIGHT_LUT_LENGTH) {
+		if (luts.luminance.length !== LIGHT_LUT_LENGTH) {
 			throw new Error('Light LUT has an unexpected size');
 		}
-		this.device.queue.writeBuffer(this.lightBuffer, 0, tables.luminance);
-		if (tables.channels.length > 0) {
-			if (tables.channels.length !== CHANNEL_LUT_LENGTH) {
+		if (luts.mixer.length !== MIXER_LUT_VALUES) {
+			throw new Error('Mixer LUTs have an unexpected size');
+		}
+		this.device.queue.writeBuffer(this.lightBuffer, 0, luts.luminance);
+		this.device.queue.writeBuffer(this.mixerBuffer, 0, luts.mixer);
+		if (luts.channels.length > 0) {
+			if (luts.channels.length !== CHANNEL_LUT_LENGTH) {
 				throw new Error('Channel curve LUTs have an unexpected size');
 			}
-			this.device.queue.writeBuffer(this.channelBuffer, 0, tables.channels);
+			this.device.queue.writeBuffer(this.channelBuffer, 0, luts.channels);
 		}
 		this.lutKey = key;
 	}
 
-	private updateUniforms(source: CachedSource, adjustments: DevelopSettings, tone: boolean) {
+	private updateUniforms(
+		source: CachedSource,
+		adjustments: DevelopSettings,
+		tone: boolean,
+		gradingScalars: Float32Array
+	) {
 		const { color, detail } = adjustments;
+		if (gradingScalars.length !== GRADING_SCALARS) {
+			throw new Error('Grading scalars have an unexpected size');
+		}
 		const bytes = new ArrayBuffer(UNIFORM_BYTES);
 		const integers = new Uint32Array(bytes);
 		const floats = new Float32Array(bytes);
@@ -323,6 +350,9 @@ export class RawWebGpuRenderer {
 		floats[19] = (detail.clarity / 100) * MAX_CLARITY_STOPS;
 		floats[20] = (detail.sharpenAmount / SHARPEN_RANGE) * MAX_SHARPEN_STOPS;
 		floats[21] = detail.dehaze / 100;
+		integers[22] = mixerIdentity(adjustments.mixer) ? 1 : 0;
+		integers[23] = gradingIdentity(adjustments.grading) ? 1 : 0;
+		floats.set(gradingScalars, 24);
 		this.device.queue.writeBuffer(this.uniformBuffer, 0, bytes);
 	}
 
@@ -398,11 +428,25 @@ function effectsIdentity(effects: EffectsSettings) {
 	return effects.vignetteAmount === 0 && effects.grainAmount === 0;
 }
 
+function mixerIdentity(mixer: MixerSettings) {
+	return Object.values(mixer).every(
+		(band) => band.hue === 0 && band.saturation === 0 && band.luminance === 0
+	);
+}
+
+function gradingIdentity(grading: GradingSettings) {
+	return [grading.shadows, grading.midtones, grading.highlights].every(
+		(wheel) => wheel.saturation === 0 && wheel.luminance === 0
+	);
+}
+
 function adjustmentsIdentity(adjustments: DevelopSettings) {
 	return (
 		luminanceIdentity(adjustments) &&
 		colorIdentity(adjustments.color) &&
 		channelCurvesIdentity(adjustments.curve) &&
+		mixerIdentity(adjustments.mixer) &&
+		gradingIdentity(adjustments.grading) &&
 		detailIdentity(adjustments.detail) &&
 		effectsIdentity(adjustments.effects)
 	);
@@ -450,6 +494,20 @@ struct Params {
   clarity_stops: f32,
   sharpen_stops: f32,
   haze: f32,
+  mixer_identity: u32,
+  grading_identity: u32,
+  grading_shadow_edge: f32,
+  grading_highlight_edge: f32,
+  grading_crossfade: f32,
+  shadow_hue: f32,
+  shadow_mix: f32,
+  shadow_stops: f32,
+  midtone_hue: f32,
+  midtone_mix: f32,
+  midtone_stops: f32,
+  highlight_hue: f32,
+  highlight_mix: f32,
+  highlight_stops: f32,
 }
 
 // Vignette and grain in the shape src/effects.rs computes them, whose tests
@@ -477,8 +535,12 @@ const MIN_TRANSMISSION = 0.1;
 @group(0) @binding(3) var<storage, read> light_lut: array<f32>;
 @group(0) @binding(4) var<uniform> params: Params;
 @group(0) @binding(5) var<storage, read> channel_lut: array<f32>;
+@group(0) @binding(6) var<storage, read> mixer_shift_then_saturation_then_luminance: array<f32>;
 @group(0) @binding(7) var detail_planes: texture_2d<f32>;
 @group(0) @binding(8) var<uniform> effects: Effects;
+
+const MIXER_HUES: u32 = 360u;
+const MIDDLE_GRAY: f32 = 0.18;
 
 const MAX_VIGNETTE_STOPS: f32 = 2.0;
 const MAX_ROUNDNESS_EXPONENT: f32 = 6.0;
@@ -522,17 +584,122 @@ fn encode_srgb(linear: vec3<f32>) -> vec3<f32> {
   return select(high, low, clamped <= vec3<f32>(0.0031308));
 }
 
-fn apply_color(linear: vec3<f32>) -> vec3<f32> {
-  let balanced = linear * params.balance;
-  let maximum = max(balanced.r, max(balanced.g, balanced.b));
-  let minimum = min(balanced.r, min(balanced.g, balanced.b));
-  let fraction = select(0.0, clamp((maximum - minimum) / maximum, 0.0, 1.0), maximum > 0.0);
+fn apply_balance(linear: vec3<f32>) -> vec3<f32> {
+  return linear * params.balance;
+}
+
+fn apply_chroma(linear: vec3<f32>) -> vec3<f32> {
+  let fraction = chroma_fraction(linear);
   let scale = max(params.saturation_scale * (1.0 + params.vibrance_amount * (1.0 - fraction)), 0.0);
   if (scale == 1.0) {
-    return balanced;
+    return linear;
   }
-  let luminance = dot(balanced, LUMINANCE_WEIGHTS);
-  return max(vec3<f32>(luminance) + (balanced - vec3<f32>(luminance)) * scale, vec3<f32>(0.0));
+  let luminance = dot(linear, LUMINANCE_WEIGHTS);
+  return max(vec3<f32>(luminance) + (linear - vec3<f32>(luminance)) * scale, vec3<f32>(0.0));
+}
+
+fn chroma_fraction(linear: vec3<f32>) -> f32 {
+  let maximum = max(linear.r, max(linear.g, linear.b));
+  let minimum = min(linear.r, min(linear.g, linear.b));
+  return select(0.0, clamp((maximum - minimum) / maximum, 0.0, 1.0), maximum > 0.0);
+}
+
+fn hue_degrees(linear: vec3<f32>) -> f32 {
+  let maximum = max(linear.r, max(linear.g, linear.b));
+  let minimum = min(linear.r, min(linear.g, linear.b));
+  let chroma = maximum - minimum;
+  if (chroma <= 0.0) {
+    return 0.0;
+  }
+  var sextant = (linear.r - linear.g) / chroma + 4.0;
+  if (maximum == linear.r) {
+    sextant = (linear.g - linear.b) / chroma;
+  } else if (maximum == linear.g) {
+    sextant = (linear.b - linear.r) / chroma + 2.0;
+  }
+  let degrees = sextant * 60.0;
+  return degrees - floor(degrees / 360.0) * 360.0;
+}
+
+fn from_hue(degrees: f32, saturation: f32, value: f32) -> vec3<f32> {
+  let position = (degrees - floor(degrees / 360.0) * 360.0) / 60.0;
+  let chroma = value * clamp(saturation, 0.0, 1.0);
+  let ramp = chroma * (1.0 - abs(position % 2.0 - 1.0));
+  var sextant = vec3<f32>(chroma, 0.0, ramp);
+  if (position < 1.0) {
+    sextant = vec3<f32>(chroma, ramp, 0.0);
+  } else if (position < 2.0) {
+    sextant = vec3<f32>(ramp, chroma, 0.0);
+  } else if (position < 3.0) {
+    sextant = vec3<f32>(0.0, chroma, ramp);
+  } else if (position < 4.0) {
+    sextant = vec3<f32>(0.0, ramp, chroma);
+  } else if (position < 5.0) {
+    sextant = vec3<f32>(ramp, 0.0, chroma);
+  }
+  return sextant + vec3<f32>(value - chroma);
+}
+
+fn mixer_sample(table: u32, hue: f32) -> f32 {
+  let hues = f32(MIXER_HUES);
+  let position = hue - floor(hue / hues) * hues;
+  let index = min(u32(position), MIXER_HUES - 1u);
+  let base = table * MIXER_HUES;
+  let below = mixer_shift_then_saturation_then_luminance[base + index];
+  let above = mixer_shift_then_saturation_then_luminance[base + (index + 1u) % MIXER_HUES];
+  return below + (position - f32(index)) * (above - below);
+}
+
+fn apply_mixer(linear: vec3<f32>) -> vec3<f32> {
+  let chroma = chroma_fraction(linear);
+  if (chroma <= 0.0) {
+    return linear;
+  }
+  let hue = hue_degrees(linear);
+  let shift = mixer_sample(0u, hue) * chroma;
+  let saturation = 1.0 + (mixer_sample(1u, hue) - 1.0) * chroma;
+  let luminance = 1.0 + (mixer_sample(2u, hue) - 1.0) * chroma;
+  var adjusted = linear;
+  if (shift != 0.0) {
+    adjusted = from_hue(hue + shift, chroma, max(adjusted.r, max(adjusted.g, adjusted.b)));
+  }
+  if (saturation != 1.0) {
+    let gray = dot(adjusted, LUMINANCE_WEIGHTS);
+    adjusted = max(vec3<f32>(gray) + (adjusted - vec3<f32>(gray)) * saturation, vec3<f32>(0.0));
+  }
+  return max(adjusted * luminance, vec3<f32>(0.0));
+}
+
+fn grading_tint(linear: vec3<f32>, hue: f32, amount: f32) -> vec3<f32> {
+  if (amount <= 0.0) {
+    return linear;
+  }
+  let brightest = max(0.0, max(linear.r, max(linear.g, linear.b)));
+  return linear + (from_hue(hue, 1.0, brightest) - linear) * amount;
+}
+
+fn apply_grading(linear: vec3<f32>) -> vec3<f32> {
+  let stops = log2(max(dot(linear, LUMINANCE_WEIGHTS), 1.1754944e-38) / MIDDLE_GRAY);
+  let crossfade = params.grading_crossfade;
+  let shadow = 1.0 - smoothstep(
+    params.grading_shadow_edge - crossfade,
+    params.grading_shadow_edge + crossfade,
+    stops
+  );
+  let highlight = smoothstep(
+    params.grading_highlight_edge - crossfade,
+    params.grading_highlight_edge + crossfade,
+    stops
+  );
+  let weights = vec3<f32>(shadow, 1.0 - shadow - highlight, highlight);
+  var tinted = grading_tint(linear, params.shadow_hue, params.shadow_mix * weights.x);
+  tinted = grading_tint(tinted, params.midtone_hue, params.midtone_mix * weights.y);
+  tinted = grading_tint(tinted, params.highlight_hue, params.highlight_mix * weights.z);
+  let stop_shift = dot(
+    vec3<f32>(params.shadow_stops, params.midtone_stops, params.highlight_stops),
+    weights
+  );
+  return max(tinted * exp2(stop_shift), vec3<f32>(0.0));
 }
 
 // The fine plane occupies the tile's rows, the coarse plane the rows below it.
@@ -671,7 +838,16 @@ fn apply_adjustments(encoded: vec3<f32>, tile: vec2<i32>, pixel: vec2<u32>) -> v
   }
   var linear = decode_srgb(encoded);
   if (params.color_identity != 1u) {
-    linear = apply_color(linear);
+    linear = apply_balance(linear);
+  }
+  if (params.mixer_identity != 1u) {
+    linear = apply_mixer(linear);
+  }
+  if (params.grading_identity != 1u) {
+    linear = apply_grading(linear);
+  }
+  if (params.color_identity != 1u) {
+    linear = apply_chroma(linear);
   }
   if (params.detail_identity != 1u) {
     linear = apply_detail(apply_dehaze(linear), detail_sample(tile));

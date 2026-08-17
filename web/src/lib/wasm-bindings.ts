@@ -35,6 +35,14 @@ export const WASM_BINDINGS = {
 		rust: 'DisplayTransform::channel_luts',
 		worker: 'tile'
 	},
+	display_mixer_luts: {
+		rust: 'DisplayTransform::mixer_luts',
+		worker: 'tile'
+	},
+	display_grading_scalars: {
+		rust: 'DisplayTransform::grading_scalars',
+		worker: 'tile'
+	},
 	developed_tile_compositor: {
 		rust: 'DevelopedTileCompositor::new',
 		worker: ['set-masks', 'export']
@@ -78,6 +86,8 @@ export const WASM_BINDINGS = {
 	| 'apply_display_rgba'
 	| 'display_luminance_lut'
 	| 'display_channel_luts'
+	| 'display_mixer_luts'
+	| 'display_grading_scalars'
 	| 'developed_tile_compositor'
 	| 'developed_tile_compositor_free'
 	| 'composite_developed_rgba',
@@ -148,6 +158,8 @@ export const WASM_TODOS = {
 			'apply_display_rgba',
 			'display_luminance_lut',
 			'display_channel_luts',
+			'display_mixer_luts',
+			'display_grading_scalars',
 			'developed_tile_compositor',
 			'developed_tile_compositor_free',
 			'composite_developed_rgba',

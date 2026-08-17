@@ -9,7 +9,9 @@ import {
 	detailTileKey,
 	developSettingsSchema,
 	identityCurve,
-	tonalDevelopSettings
+	tonalDevelopSettings,
+	withAdjustment,
+	withAdjustmentAt
 } from '../src/lib/develop-settings.ts';
 
 test('the source tile key tracks the tile-side detail work and nothing else', () => {
@@ -111,4 +113,38 @@ test('clones settings held behind a reactive proxy', () => {
 	cloned.curve.luminance[0].y = 0.5;
 	assert.equal(settings.light.exposure, 0);
 	assert.equal(settings.curve.luminance[0].y, 0);
+});
+
+test('addresses a mixer band without disturbing its neighbours', () => {
+	const before = defaultDevelopSettings();
+	const after = withAdjustmentAt(before, { group: 'mixer', band: 'aqua', control: 'hue' }, -40);
+
+	assert.equal(after.mixer.aqua.hue, -40);
+	assert.equal(after.mixer.aqua.saturation, 0);
+	assert.deepEqual(after.mixer.blue, before.mixer.blue);
+	assert.equal(before.mixer.aqua.hue, 0);
+});
+
+test('addresses a grading range and its shared sliders', () => {
+	const before = defaultDevelopSettings();
+	const tinted = withAdjustmentAt(
+		before,
+		{ group: 'grading', range: 'highlights', control: 'saturation' },
+		65
+	);
+	assert.equal(tinted.grading.highlights.saturation, 65);
+	assert.deepEqual(tinted.grading.shadows, before.grading.shadows);
+
+	const balanced = withAdjustmentAt(tinted, { group: 'grading', control: 'balance' }, -20);
+	assert.equal(balanced.grading.balance, -20);
+	assert.equal(balanced.grading.highlights.saturation, 65);
+	assert.equal(before.grading.balance, 0);
+});
+
+test('addresses a flat group the same way as the scalar helper', () => {
+	const before = defaultDevelopSettings();
+	assert.deepEqual(
+		withAdjustmentAt(before, { group: 'color', control: 'vibrance' }, 30),
+		withAdjustment(before, 'color', 'vibrance', 30)
+	);
 });

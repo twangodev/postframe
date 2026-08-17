@@ -5,7 +5,7 @@
 
 use crate::composite::DevelopedTileRegion;
 use crate::develop::{DetailSettings, PixelContext};
-use crate::grade::luminance;
+use crate::hue::luminance;
 use crate::light::{linear_to_srgb, srgb_to_linear};
 
 /// Stops of luminance gain each control reaches at the end of its range.

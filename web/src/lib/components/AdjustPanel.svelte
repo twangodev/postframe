@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
 	import { History, Sparkles } from '@lucide/svelte';
+	import ColorMixerSection from './ColorMixerSection.svelte';
 	import ColorSection from './ColorSection.svelte';
 	import DetailSection from './DetailSection.svelte';
 	import EffectsSection from './EffectsSection.svelte';
+	import GradingSection from './GradingSection.svelte';
 	import LightSection from './LightSection.svelte';
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
@@ -15,6 +17,8 @@
 	}
 
 	let { workspace }: Props = $props();
+
+	let mixerOpen = $state(false);
 </script>
 
 <Tabs.Content value="adjust" class="motion-tab">
@@ -33,7 +37,9 @@
 
 	<LightSection {workspace} />
 	<ToneCurveSection {workspace} />
-	<ColorSection {workspace} />
+	<ColorSection {workspace} onOpenMixer={() => (mixerOpen = true)} />
+	<ColorMixerSection {workspace} bind:open={mixerOpen} />
+	<GradingSection {workspace} />
 	<DetailSection {workspace} />
 	<EffectsSection {workspace} />
 
