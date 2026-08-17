@@ -75,17 +75,18 @@
 			bind:this={viewport.element}
 			role="application"
 			aria-label="Photo viewport"
-			class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {viewport.panning
-				? 'cursor-grabbing'
-				: activeTool === 'hand' || viewport.spaceHeld
-					? 'cursor-grab'
-					: activeTool === 'zoom'
-						? 'cursor-zoom-in'
-						: (activeTool === 'mask-refine' || activeTool === 'mask') && viewport.brushPoint
-							? 'cursor-none'
-							: activeTool === 'object-select' || activeTool.startsWith('mask')
-								? 'cursor-crosshair'
-								: 'cursor-default'}"
+			class="relative isolate min-h-0 flex-1 touch-none overflow-hidden [contain:paint] {viewport.gizmoCursor ??
+				(viewport.panning
+					? 'cursor-grabbing'
+					: activeTool === 'hand' || viewport.spaceHeld
+						? 'cursor-grab'
+						: activeTool === 'zoom'
+							? 'cursor-zoom-in'
+							: (activeTool === 'mask-refine' || activeTool === 'mask') && viewport.brushPoint
+								? 'cursor-none'
+								: activeTool === 'object-select' || activeTool.startsWith('mask')
+									? 'cursor-crosshair'
+									: 'cursor-default')}"
 			onwheel={viewport.handleWheel}
 			onpointerdown={viewport.handlePointerDown}
 			onpointermove={viewport.handlePointerMove}
@@ -189,14 +190,14 @@
 								>
 							</div>
 						{/if}
-						{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id && !viewport.pendingGradientPaint && !(viewport.gradientDrag && (activeTool === 'mask-linear' || activeTool === 'mask-radial'))}
+						{#if selectedMask?.visible && maskPreviewMode && workspace.selectedMaskRaster?.maskId === selectedMask.id && !viewport.settlingPaint && !viewport.gizmoDrag?.moved}
 							{#key maskPreviewMode}
 								<MaskOverlay raster={workspace.selectedMaskRaster} mode={maskPreviewMode} />
 							{/key}
 						{/if}
-						{#if viewport.livePaint ?? viewport.pendingGradientPaint}
+						{#if viewport.livePaint ?? viewport.settlingPaint}
 							<MaskPaintPreview
-								paint={(viewport.livePaint ?? viewport.pendingGradientPaint)!}
+								paint={(viewport.livePaint ?? viewport.settlingPaint)!}
 								imageWidth={imageSize.width}
 								imageHeight={imageSize.height}
 								mode={maskPreviewMode === 'matte' ? 'matte' : 'overlay'}
@@ -234,8 +235,8 @@
 						{#if viewport.gizmoComponent}
 							<MaskGradientGuides
 								component={viewport.gizmoComponent}
-								hover={null}
-								active={null}
+								hover={viewport.gizmoHover}
+								active={viewport.gizmoDrag?.grip ?? null}
 								imageWidth={imageSize.width}
 								imageHeight={imageSize.height}
 								viewportScale={viewport.transform.scale}

@@ -1,13 +1,6 @@
-import type {
-	EditMask,
-	MaskComponent,
-	MaskKind,
-	MaskOperation,
-	NormalizedPoint
-} from './edit-document';
+import type { EditMask, MaskComponent, MaskKind, MaskOperation } from './edit-document';
 import type { EditorCommand } from './editor-command';
 import { entityId } from './entity-id.ts';
-import { linearGeometryFromSpan } from './mask-gizmo.ts';
 import type { MaskRasterPipeline } from './mask-raster-pipeline';
 import {
 	paintRasterDimensions,
@@ -69,40 +62,6 @@ export class MaskPainting {
 			},
 			await this.brushStrokesRaster(target.paintDims, existing, stroke, strokes)
 		);
-	};
-
-	placeLinearMask = async (start: NormalizedPoint, end: NormalizedPoint) => {
-		const target = this.paintableMask('linear');
-		if (!target || (start.x === end.x && start.y === end.y)) return;
-		const existing = target.mask.components.find((component) => component.type === 'linear');
-		const geometry = linearGeometryFromSpan(start, end, target.paintDims);
-		await this.placeGradientComponent({
-			id: existing?.id ?? entityId('component'),
-			type: 'linear',
-			operation: existing?.operation ?? 'add',
-			...geometry,
-			raster: null
-		});
-	};
-
-	placeRadialMask = async (center: NormalizedPoint, radius: number) => {
-		const target = this.paintableMask('radial');
-		if (!target || radius <= 0) return;
-		const existing = target.mask.components.find(
-			(component): component is Extract<MaskComponent, { type: 'radial' }> =>
-				component.type === 'radial'
-		);
-		await this.placeGradientComponent({
-			id: existing?.id ?? entityId('component'),
-			type: 'radial',
-			operation: existing?.operation ?? 'add',
-			center,
-			radiusX: Math.min(1, radius),
-			radiusY: Math.min(1, radius),
-			rotation: 0,
-			feather: existing?.feather ?? 0.5,
-			raster: null
-		});
 	};
 
 	placeGradientComponent = async (component: GradientComponent) => {

@@ -532,12 +532,6 @@ export class WorkspaceState {
 	paintBrushMask = (stroke: MaskBrushStroke, operation: MaskOperation = 'add') =>
 		this.painting.paintBrushMask(stroke, operation);
 
-	placeLinearMask = (start: NormalizedPoint, end: NormalizedPoint) =>
-		this.painting.placeLinearMask(start, end);
-
-	placeRadialMask = (center: NormalizedPoint, radius: number) =>
-		this.painting.placeRadialMask(center, radius);
-
 	placeGradientComponent = (component: GradientComponent) =>
 		this.painting.placeGradientComponent(component);
 

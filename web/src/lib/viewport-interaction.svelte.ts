@@ -1,5 +1,15 @@
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
-import { linearGeometryFromSpan, MIN_GRADIENT_EXTENT, pixelToNormalized } from './mask-gizmo.ts';
+import { entityId } from './entity-id.ts';
+import {
+	GIZMO_DRAG_THRESHOLD_PX,
+	GIZMO_HIT_TOLERANCE_PX,
+	GIZMO_ROTATE_OFFSET_PX,
+	MIN_GRADIENT_EXTENT,
+	pixelToNormalized,
+	type GizmoHit
+} from './mask-gizmo.ts';
+import { hitTestLinear, reduceLinearDrag } from './mask-gizmo-linear.ts';
+import { hitTestRadial, reduceRadialDrag } from './mask-gizmo-radial.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
@@ -39,8 +49,6 @@ export interface ViewportContext {
 		label: 'foreground' | 'background'
 	) => Promise<unknown>;
 	paintBrushMask: (stroke: MaskBrushStroke, operation: 'add' | 'subtract') => Promise<unknown>;
-	placeLinearMask: (start: NormalizedPoint, end: NormalizedPoint) => Promise<unknown>;
-	placeRadialMask: (center: NormalizedPoint, radius: number) => Promise<unknown>;
 	placeGradientComponent: (component: GradientComponent) => Promise<unknown>;
 }
 
@@ -64,12 +72,17 @@ export class ViewportInteraction {
 		radius: number;
 	} | null>(null);
 	maskStroke = $state<{ pointerId: number; points: NormalizedPoint[] } | null>(null);
-	gradientDrag = $state<{
+	gizmoDrag = $state<{
 		pointerId: number;
-		start: NormalizedPoint;
-		current: NormalizedPoint;
+		start: GradientComponent;
+		grip: GizmoHit;
+		origin: Point;
+		originScreen: Point;
+		component: GradientComponent;
+		moved: boolean;
 	} | null>(null);
-	pendingGradientPaint = $state<LivePaint | null>(null);
+	gizmoHover = $state<GizmoHit | null>(null);
+	settlingPaint = $state<LivePaint | null>(null);
 	brushPoint = $state<NormalizedPoint | null>(null);
 
 	private drag: { pointerId: number; origin: Point; transform: ViewportTransform } | null = null;
@@ -96,6 +109,15 @@ export class ViewportInteraction {
 	);
 	maskBrushSize = $derived(Math.min(1, this.refineBrushRadius * 2));
 
+	private gizmoTolerance = $derived(GIZMO_HIT_TOLERANCE_PX / this.transform.scale);
+	private gizmoRotateOffset = $derived(GIZMO_ROTATE_OFFSET_PX / this.transform.scale);
+
+	gizmoCursor = $derived.by(() => {
+		if (this.gizmoDrag) return 'cursor-grabbing';
+		if (!this.gizmoHover) return null;
+		return this.gizmoHover.kind === 'body' ? 'cursor-move' : 'cursor-grab';
+	});
+
 	private selectedGradientComponent = $derived.by(() => {
 		const mask = this.context.selectedMask();
 		if (!mask?.visible || (mask.kind !== 'linear' && mask.kind !== 'radial')) return null;
@@ -108,66 +130,13 @@ export class ViewportInteraction {
 
 	gizmoComponent = $derived.by((): GradientComponent | null => {
 		if (!this.context.enabled()) return null;
-		const drag = this.gradientDrag;
-		if (drag) return this.dragGradientComponent(drag);
+		if (this.gizmoDrag?.moved) return this.gizmoDrag.component;
 		return this.selectedGradientComponent;
 	});
 
-	private dragGradientComponent(drag: {
-		start: NormalizedPoint;
-		current: NormalizedPoint;
-	}): GradientComponent | null {
-		const mask = this.context.selectedMask();
-		if (!mask) return null;
-		const existing = this.selectedGradientComponent;
-		const base = {
-			id: existing?.id ?? 'pending',
-			operation: existing?.operation ?? ('add' as const),
-			raster: null
-		};
-		if (mask.kind === 'linear') {
-			return {
-				...base,
-				type: 'linear',
-				...linearGeometryFromSpan(drag.start, drag.current, this.image)
-			};
-		}
-		if (mask.kind !== 'radial') return null;
-		const radius = Math.max(
-			MIN_GRADIENT_EXTENT,
-			Math.min(1, this.normalizedDistance(drag.start, drag.current))
-		);
-		return {
-			...base,
-			type: 'radial',
-			center: drag.start,
-			radiusX: radius,
-			radiusY: radius,
-			rotation: 0,
-			feather: existing?.type === 'radial' ? existing.feather : 0.5
-		};
-	}
-
 	livePaint: LivePaint | null = $derived.by(() => {
-		const component = this.gradientDrag ? this.gizmoComponent : null;
-		if (component?.type === 'linear') {
-			return {
-				kind: 'linear',
-				anchor: component.anchor,
-				rotation: component.rotation,
-				compression: component.compression
-			};
-		}
-		if (component?.type === 'radial') {
-			return {
-				kind: 'radial',
-				center: component.center,
-				radiusX: component.radiusX,
-				radiusY: component.radiusY,
-				rotation: component.rotation,
-				feather: component.feather
-			};
-		}
+		const component = this.gizmoDrag?.moved ? this.gizmoDrag.component : null;
+		if (component) return this.livePaintFor(component);
 		return this.maskStroke &&
 			this.context.tool() === 'mask' &&
 			this.context.maskBrushOperation() === 'add'
@@ -180,6 +149,24 @@ export class ViewportInteraction {
 				}
 			: null;
 	});
+
+	private livePaintFor(component: GradientComponent): LivePaint {
+		return component.type === 'linear'
+			? {
+					kind: 'linear',
+					anchor: component.anchor,
+					rotation: component.rotation,
+					compression: component.compression
+				}
+			: {
+					kind: 'radial',
+					center: component.center,
+					radiusX: component.radiusX,
+					radiusY: component.radiusY,
+					rotation: component.rotation,
+					feather: component.feather
+				};
+	}
 
 	resize = (next: Size) => {
 		this.size = next;
@@ -245,12 +232,13 @@ export class ViewportInteraction {
 
 	handlePointerDown = (event: PointerEvent) => {
 		if (!this.context.enabled() || !this.element) return;
+		if (this.tryBeginGizmoDrag(event)) return;
 		const point = this.pointFor(event);
 		const tool = this.context.tool();
 
 		if (event.pointerType === 'touch') {
 			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
+			this.capturePointer(event.pointerId);
 			this.pointers.set(event.pointerId, point);
 			if (this.pointers.size >= 2) this.beginPinch();
 			else this.beginPan(event.pointerId, point);
@@ -267,7 +255,7 @@ export class ViewportInteraction {
 			const imagePoint = this.normalizedImagePoint(point);
 			if (!imagePoint) return;
 			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
+			this.capturePointer(event.pointerId);
 			this.objectStroke = {
 				pointerId: event.pointerId,
 				label: event.altKey ? 'background' : 'foreground',
@@ -285,7 +273,7 @@ export class ViewportInteraction {
 			const imagePoint = this.normalizedImagePoint(point);
 			if (!imagePoint) return;
 			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
+			this.capturePointer(event.pointerId);
 			this.edgeRefinementStroke = {
 				pointerId: event.pointerId,
 				points: [imagePoint],
@@ -298,37 +286,152 @@ export class ViewportInteraction {
 			const imagePoint = this.normalizedImagePoint(point);
 			if (!imagePoint) return;
 			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
+			this.capturePointer(event.pointerId);
 			this.maskStroke = { pointerId: event.pointerId, points: [imagePoint] };
-			return;
-		}
-
-		if (
-			(tool === 'mask-linear' || tool === 'mask-radial') &&
-			event.button === 0 &&
-			this.context.selectedMask()?.kind === (tool === 'mask-linear' ? 'linear' : 'radial')
-		) {
-			const imagePoint = this.normalizedImagePoint(point);
-			if (!imagePoint) return;
-			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
-			this.gradientDrag = { pointerId: event.pointerId, start: imagePoint, current: imagePoint };
 			return;
 		}
 
 		if (tool === 'hand' || this.spaceHeld || event.button === 1) {
 			event.preventDefault();
-			this.element.setPointerCapture(event.pointerId);
+			this.capturePointer(event.pointerId);
 			this.beginPan(event.pointerId, point);
 		}
 	};
 
+	private tryBeginGizmoDrag(event: PointerEvent) {
+		if (event.button !== 0) return false;
+		if (this.gizmoDrag) return true; // one gesture at a time; swallow extra pointers
+		const point = this.pointFor(event);
+		const imagePoint = this.imagePixel(point);
+		const existing = this.selectedGradientComponent;
+		const grabbed = existing
+			? existing.type === 'linear'
+				? hitTestLinear(existing, imagePoint, this.image, this.gizmoTolerance)
+				: hitTestRadial(
+						existing,
+						imagePoint,
+						this.image,
+						this.gizmoTolerance,
+						this.gizmoRotateOffset
+					)
+			: null;
+		const session = grabbed
+			? { component: existing!, grip: grabbed }
+			: this.seedGizmoComponent(imagePoint);
+		if (!session) return false;
+		event.preventDefault();
+		this.capturePointer(event.pointerId);
+		this.gizmoDrag = {
+			pointerId: event.pointerId,
+			start: session.component,
+			grip: session.grip,
+			origin: imagePoint,
+			originScreen: point,
+			component: session.component,
+			moved: false
+		};
+		this.gizmoHover = session.grip;
+		return true;
+	}
+
+	private seedGizmoComponent(
+		imagePoint: Point
+	): { component: GradientComponent; grip: GizmoHit } | null {
+		const tool = this.context.tool();
+		const kind = tool === 'mask-linear' ? 'linear' : tool === 'mask-radial' ? 'radial' : null;
+		const mask = this.context.selectedMask();
+		if (!kind || mask?.kind !== kind) return null;
+		if (
+			imagePoint.x < 0 ||
+			imagePoint.y < 0 ||
+			imagePoint.x > this.image.width ||
+			imagePoint.y > this.image.height
+		) {
+			return null;
+		}
+		const existing = mask.components.find(
+			(component): component is GradientComponent => component.type === kind
+		);
+		const anchor = pixelToNormalized(imagePoint, this.image);
+		const base = {
+			id: existing?.id ?? entityId('component'),
+			operation: existing?.operation ?? ('add' as const),
+			raster: null
+		};
+		if (kind === 'linear') {
+			return {
+				component: {
+					...base,
+					type: 'linear',
+					anchor,
+					rotation: 0,
+					compression: MIN_GRADIENT_EXTENT
+				},
+				grip: { kind: 'handle', handle: 'positive' }
+			};
+		}
+		return {
+			component: {
+				...base,
+				type: 'radial',
+				center: anchor,
+				radiusX: MIN_GRADIENT_EXTENT,
+				radiusY: MIN_GRADIENT_EXTENT,
+				rotation: 0,
+				feather: existing?.type === 'radial' ? existing.feather : 0.5
+			},
+			grip: { kind: 'handle', handle: 'radius' }
+		};
+	}
+
 	handlePointerMove = (event: PointerEvent) => {
+		if (this.gizmoDrag?.pointerId === event.pointerId) {
+			event.preventDefault();
+			const drag = this.gizmoDrag;
+			const point = this.pointFor(event);
+			if (
+				!drag.moved &&
+				Math.hypot(point.x - drag.originScreen.x, point.y - drag.originScreen.y) <
+					GIZMO_DRAG_THRESHOLD_PX
+			) {
+				return;
+			}
+			const imagePoint = this.imagePixel(point);
+			const modifiers = { shift: event.shiftKey };
+			const reduced =
+				drag.start.type === 'linear'
+					? reduceLinearDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers)
+					: reduceRadialDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers);
+			this.gizmoDrag = { ...drag, moved: true, component: { ...drag.start, ...reduced } };
+			return;
+		}
 		const point = this.pointFor(event);
 		const tool = this.context.tool();
 		this.brushPoint =
 			(tool === 'mask-refine' || tool === 'mask') && event.pointerType !== 'touch'
 				? this.normalizedImagePoint(point)
+				: null;
+		this.gizmoHover =
+			!this.gizmoDrag &&
+			!this.objectStroke &&
+			!this.edgeRefinementStroke &&
+			!this.maskStroke &&
+			event.pointerType !== 'touch' &&
+			this.selectedGradientComponent
+				? this.selectedGradientComponent.type === 'linear'
+					? hitTestLinear(
+							this.selectedGradientComponent,
+							this.imagePixel(point),
+							this.image,
+							this.gizmoTolerance
+						)
+					: hitTestRadial(
+							this.selectedGradientComponent,
+							this.imagePixel(point),
+							this.image,
+							this.gizmoTolerance,
+							this.gizmoRotateOffset
+						)
 				: null;
 		if (this.objectStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
@@ -374,12 +477,6 @@ export class ViewportInteraction {
 			}
 			return;
 		}
-		if (this.gradientDrag?.pointerId === event.pointerId) {
-			event.preventDefault();
-			const imagePoint = this.normalizedImagePoint(point);
-			if (imagePoint) this.gradientDrag = { ...this.gradientDrag, current: imagePoint };
-			return;
-		}
 		if (this.pointers.has(event.pointerId)) this.pointers.set(event.pointerId, point);
 
 		if (this.pinch && this.pointers.size >= 2) {
@@ -411,6 +508,7 @@ export class ViewportInteraction {
 
 	handlePointerLeave = () => {
 		this.brushPoint = null;
+		this.gizmoHover = null;
 	};
 
 	handlePointerUp = (event: PointerEvent) => {
@@ -444,27 +542,16 @@ export class ViewportInteraction {
 			}
 			return;
 		}
-		if (this.gradientDrag?.pointerId === event.pointerId) {
-			const completed = this.gradientDrag;
-			const paint = this.livePaint;
-			this.gradientDrag = null;
-			if (
-				event.type === 'pointerup' &&
-				this.normalizedDistance(completed.start, completed.current) > 0.002
-			) {
-				this.pendingGradientPaint = paint;
-				const placed =
-					this.context.tool() === 'mask-linear'
-						? this.context.placeLinearMask(completed.start, completed.current)
-						: this.context.placeRadialMask(
-								completed.start,
-								this.normalizedDistance(completed.start, completed.current)
-							);
-				void placed.finally(() =>
-					requestAnimationFrame(() =>
-						requestAnimationFrame(() => (this.pendingGradientPaint = null))
-					)
-				);
+		if (this.gizmoDrag?.pointerId === event.pointerId) {
+			const completed = this.gizmoDrag;
+			this.gizmoDrag = null;
+			if (event.type === 'pointerup' && completed.moved) {
+				this.settlingPaint = this.livePaintFor(completed.component);
+				void this.context
+					.placeGradientComponent(completed.component)
+					.finally(() =>
+						requestAnimationFrame(() => requestAnimationFrame(() => (this.settlingPaint = null)))
+					);
 			}
 			return;
 		}
@@ -497,6 +584,11 @@ export class ViewportInteraction {
 
 	handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.context.enabled() || editableTarget(event.target)) return;
+		if (event.key === 'Escape' && this.gizmoDrag) {
+			event.preventDefault();
+			this.gizmoDrag = null;
+			return;
+		}
 		if (event.code === 'Space') {
 			event.preventDefault();
 			this.spaceHeld = true;
@@ -548,6 +640,19 @@ export class ViewportInteraction {
 		return { x: imagePoint.x / this.image.width, y: imagePoint.y / this.image.height };
 	}
 
+	private imagePixel(point: Point): Point {
+		return screenToImage(point, this.size, this.image, this.transform);
+	}
+
+	private capturePointer(pointerId: number) {
+		try {
+			this.element?.setPointerCapture(pointerId);
+		} catch {
+			// The pointer can end before capture on rapid taps; the drag then
+			// simply never receives moves.
+		}
+	}
+
 	private beginPan(pointerId: number, origin: Point) {
 		this.drag = { pointerId, origin, transform: this.transform };
 		this.pinch = null;
@@ -564,13 +669,6 @@ export class ViewportInteraction {
 			transform: this.transform
 		};
 		this.panning = true;
-	}
-
-	private normalizedDistance(from: NormalizedPoint, to: NormalizedPoint) {
-		return (
-			Math.hypot((to.x - from.x) * this.image.width, (to.y - from.y) * this.image.height) /
-			Math.max(this.image.width, this.image.height)
-		);
 	}
 }
 
