@@ -11,6 +11,7 @@ import {
 	MINIMUM_POINT_GAP,
 	REMOVE_MARGIN,
 	addCurvePoint,
+	curveSamples,
 	draggedCurve,
 	moveCurvePoint,
 	nearestCurvePoint,
@@ -89,6 +90,30 @@ test('the nearest point is only picked up within its grab radius', () => {
 	assert.equal(nearestCurvePoint(curve, { x: 0.52, y: 0.53 }, 0.05), 1);
 	assert.equal(nearestCurvePoint(curve, { x: 0.52, y: 0.53 }, 0.01), null);
 	assert.equal(nearestCurvePoint(curve, { x: 0.99, y: 0.98 }, 0.05), 2);
+});
+
+// The plot has to draw the curve the pipeline applies, so these mirror the
+// monotone-interpolation tests in src/curve.rs.
+test('the plotted curve reproduces the identity', () => {
+	assert.deepEqual(curveSamples(identityCurve(), 5), [0, 0.25, 0.5, 0.75, 1]);
+});
+
+test('the plotted curve passes through its control points without overshooting', () => {
+	const control = [
+		{ x: 0, y: 0 },
+		{ x: 0.25, y: 0.85 },
+		{ x: 0.5, y: 0.9 },
+		{ x: 1, y: 1 }
+	];
+	const samples = curveSamples(control, 401);
+	for (const { x, y } of control) {
+		assert.ok(Math.abs(samples[Math.round(x * 400)] - y) < 0.002, `missed (${x}, ${y})`);
+	}
+	assert.ok(
+		samples.every((sample, index) => index === 0 || sample >= samples[index - 1]),
+		'plotted curve reverses'
+	);
+	assert.ok(Math.max(...samples.slice(0, 101)) <= 0.85 + 0.002, 'plotted curve overshoots');
 });
 
 test('resetting an edited curve restores the identity exactly', () => {

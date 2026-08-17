@@ -1,9 +1,11 @@
 import {
+	cloneCurveSettings,
 	cloneDevelopSettings,
 	defaultDevelopSettings,
 	sameDevelopSettings,
 	scalarAdjustments,
 	type AdjustmentRecord,
+	type CurveSettings,
 	type DevelopSettings
 } from './develop-settings';
 import {
@@ -29,6 +31,7 @@ export interface EditorSessionHost {
 	imageScope: ImageScopeData | null;
 	smartMaskStatus: SmartMaskStatus;
 	adjustments: AdjustmentRecord;
+	curve: CurveSettings;
 	renderSettings: { adjustments: DevelopSettings; revision: number };
 	history: string[];
 	canUndo: boolean;
@@ -86,6 +89,7 @@ export class EditorSession {
 		this.host.selectedMaskRaster = null;
 		this.host.smartMaskStatus = { phase: 'idle', progress: null, detail: '', error: null };
 		this.host.adjustments = scalarAdjustments(adjustments);
+		this.host.curve = cloneCurveSettings(adjustments.curve);
 		this.host.renderSettings = {
 			adjustments: cloneDevelopSettings(adjustments),
 			revision: this.host.renderSettings.revision + 1
@@ -109,6 +113,7 @@ export class EditorSession {
 			this.host.selectedMaskId = this.host.masks.at(-1)?.id ?? null;
 		}
 		Object.assign(this.host.adjustments, scalarAdjustments(next.adjustments));
+		Object.assign(this.host.curve, cloneCurveSettings(next.adjustments.curve));
 
 		if (invalidation === 'render') {
 			if (globalAdjustmentsChanged) this.develop.request(next.adjustments, 'refining');

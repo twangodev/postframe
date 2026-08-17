@@ -6,7 +6,8 @@ import {
 	defaultEditDocument,
 	type MaskComponent
 } from '../src/lib/edit-document.ts';
-import { applyEditorCommand } from '../src/lib/editor-command.ts';
+import { identityCurve } from '../src/lib/develop-settings.ts';
+import { applyEditorCommand, cloneEditorCommand, curveCommand } from '../src/lib/editor-command.ts';
 
 test('applies light commands immutably with render invalidation', () => {
 	const before = defaultEditDocument('photo-one');
@@ -62,6 +63,43 @@ test('applies global color commands immutably with render invalidation', () => {
 			value: 101
 		})
 	);
+});
+
+test('applies a whole curve channel as one undoable change', () => {
+	const before = defaultEditDocument('photo-one');
+	const shaped = [
+		{ x: 0, y: 0 },
+		{ x: 0.4, y: 0.55 },
+		{ x: 1, y: 1 }
+	];
+	const result = applyEditorCommand(before, curveCommand('luminance', shaped));
+	assert.ok(result);
+	assert.deepEqual(result.document.adjustments.curve.luminance, shaped);
+	assert.deepEqual(result.document.adjustments.curve.red, identityCurve());
+	assert.equal(result.invalidation, 'render');
+	assert.equal(result.label, 'luminance curve');
+	assert.deepEqual(before.adjustments.curve.luminance, identityCurve());
+	assert.equal(applyEditorCommand(result.document, curveCommand('luminance', shaped)), null);
+	assert.throws(() =>
+		applyEditorCommand(
+			before,
+			curveCommand('red', [
+				{ x: 0, y: 0 },
+				{ x: 0.5, y: 2 }
+			])
+		)
+	);
+});
+
+test('clones a curve command rather than sharing its points', () => {
+	const points = [
+		{ x: 0, y: 0.2 },
+		{ x: 1, y: 1 }
+	];
+	const command = curveCommand('blue', points);
+	const cloned = cloneEditorCommand(command);
+	assert.deepEqual(cloned, command);
+	assert.notEqual(cloned.type === 'adjustment.set' && cloned.value, points);
 });
 
 test('creates, hides, and removes masks through deterministic commands', () => {

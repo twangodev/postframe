@@ -5,6 +5,7 @@
 	import DetailSection from './DetailSection.svelte';
 	import EffectsSection from './EffectsSection.svelte';
 	import LightSection from './LightSection.svelte';
+	import ToneCurveSection from './ToneCurveSection.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -31,6 +32,7 @@
 	</Panel>
 
 	<LightSection {workspace} />
+	<ToneCurveSection {workspace} />
 	<ColorSection {workspace} />
 	<DetailSection {workspace} />
 	<EffectsSection {workspace} />
