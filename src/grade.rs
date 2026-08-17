@@ -114,7 +114,7 @@ fn balance_gains(settings: ColorSettings) -> [f32; 3] {
     gains.map(|gain| gain / luminance)
 }
 
-fn luminance([red, green, blue]: [f32; 3]) -> f32 {
+pub(crate) fn luminance([red, green, blue]: [f32; 3]) -> f32 {
     LUMINANCE_WEIGHTS[0] * red + LUMINANCE_WEIGHTS[1] * green + LUMINANCE_WEIGHTS[2] * blue
 }
 

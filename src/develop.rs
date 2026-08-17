@@ -245,7 +245,7 @@ impl DetailSettings {
     /// Radii, in fractions of the image's larger dimension, of the blur planes
     /// this configuration needs. Empty when no spatial stage is active.
     pub fn blur_radii(&self) -> Vec<f32> {
-        if self.is_neutral() {
+        if self.texture == 0.0 && self.clarity == 0.0 && self.sharpen_amount == 0.0 {
             return Vec::new();
         }
         vec![FINE_BLUR_FRACTION, COARSE_BLUR_FRACTION]
@@ -270,6 +270,15 @@ impl Default for DetailSettings {
 
 pub const FINE_BLUR_FRACTION: f32 = 0.005;
 pub const COARSE_BLUR_FRACTION: f32 = 0.03;
+
+/// Where a pixel sits in the image, for stages that are not purely tonal.
+#[derive(Clone, Copy, Debug)]
+pub struct PixelContext {
+    pub x: usize,
+    pub y: usize,
+    pub image_width: usize,
+    pub image_height: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -592,6 +601,16 @@ mod tests {
     #[test]
     fn spatial_stages_request_blur_planes_only_when_active() {
         assert!(DetailSettings::NEUTRAL.blur_radii().is_empty());
+        assert!(
+            DetailSettings {
+                noise_luminance: 60.0,
+                dehaze: 40.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .blur_radii()
+            .is_empty(),
+            "only the unsharp stages read a blur plane"
+        );
         assert_eq!(
             DetailSettings {
                 clarity: 30.0,

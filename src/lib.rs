@@ -11,6 +11,7 @@ mod cache;
 pub mod color;
 pub mod composite;
 pub mod decode;
+pub mod detail;
 pub mod develop;
 pub mod error;
 pub mod export;
