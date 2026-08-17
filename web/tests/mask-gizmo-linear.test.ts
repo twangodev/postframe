@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ROTATION_SNAP } from '../src/lib/drag-constraints.ts';
-import { MIN_GRADIENT_EXTENT, linearGeometryFromSpan } from '../src/lib/mask-gizmo.ts';
+import { MIN_GRADIENT_EXTENT } from '../src/lib/mask-gizmo.ts';
+import { linearGeometryFromSpan } from './gizmo-fixtures.ts';
 import { hitTestLinear, linearLayout, reduceLinearDrag } from '../src/lib/mask-gizmo-linear.ts';
 
 const image = { width: 200, height: 100 };

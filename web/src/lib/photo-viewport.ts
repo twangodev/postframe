@@ -130,6 +130,10 @@ export function screenToImage(
 	};
 }
 
+export function withinImage(point: Point, image: Size) {
+	return point.x >= 0 && point.y >= 0 && point.x <= image.width && point.y <= image.height;
+}
+
 export function visibleImageRect(
 	viewport: Size,
 	image: Size,

@@ -12,11 +12,23 @@ import {
 	screenToImage,
 	visibleImageRect,
 	wheelNavigation,
+	withinImage,
 	zoomAt
 } from '../src/lib/photo-viewport.ts';
 
 const viewport = { width: 1200, height: 800 };
 const image = { width: 6000, height: 4000 };
+
+test('accepts points inside the image and on its boundary', () => {
+	assert.equal(withinImage({ x: 3000, y: 2000 }, image), true);
+	assert.equal(withinImage({ x: 0, y: 0 }, image), true);
+	assert.equal(withinImage({ x: 6000, y: 4000 }, image), true);
+});
+
+test('rejects points outside the image', () => {
+	assert.equal(withinImage({ x: -1, y: 2000 }, image), false);
+	assert.equal(withinImage({ x: 3000, y: 4001 }, image), false);
+});
 
 test('fits a photo inside the padded viewport without upscaling', () => {
 	assert.equal(fitScale(viewport, image), 0.188);

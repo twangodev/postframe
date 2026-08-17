@@ -1,3 +1,4 @@
+import { axisLockedDelta } from './drag-constraints.ts';
 import type { Point, Size } from './photo-viewport.ts';
 
 export interface LinearGizmoGeometry {
@@ -44,20 +45,14 @@ export function clampExtent(value: number) {
 	return Math.min(1, Math.max(MIN_GRADIENT_EXTENT, value));
 }
 
-export function linearGeometryFromSpan(
+export function draggedPoint(
 	start: { x: number; y: number },
-	end: { x: number; y: number },
-	aspect: Size
-): LinearGizmoGeometry {
-	const maxDim = maxDimension(aspect);
-	const axis = {
-		x: ((end.x - start.x) * aspect.width) / maxDim,
-		y: ((end.y - start.y) * aspect.height) / maxDim
-	};
-	const length = Math.hypot(axis.x, axis.y);
-	return {
-		anchor: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
-		rotation: length === 0 ? 0 : Math.atan2(axis.y, axis.x),
-		compression: clampExtent(length / 2)
-	};
+	origin: Point,
+	point: Point,
+	image: Size,
+	modifiers: GizmoModifiers
+) {
+	const delta = axisLockedDelta({ x: point.x - origin.x, y: point.y - origin.y }, modifiers.shift);
+	const pixel = normalizedToPixel(start, image);
+	return pixelToNormalized({ x: pixel.x + delta.x, y: pixel.y + delta.y }, image);
 }

@@ -1,6 +1,7 @@
-import { axisLockedDelta, snapRotation } from './drag-constraints.ts';
+import { snapRotation } from './drag-constraints.ts';
 import {
 	clampExtent,
+	draggedPoint,
 	maxDimension,
 	normalizedToPixel,
 	pixelToNormalized,
@@ -58,17 +59,7 @@ export function reduceLinearDrag(
 	modifiers: GizmoModifiers
 ): LinearGizmoGeometry {
 	if (grip.kind === 'body') {
-		const delta = axisLockedDelta(
-			{ x: point.x - origin.x, y: point.y - origin.y },
-			modifiers.shift
-		);
-		return {
-			...start,
-			anchor: pixelToNormalized(
-				{ x: start.anchor.x * image.width + delta.x, y: start.anchor.y * image.height + delta.y },
-				image
-			)
-		};
+		return { ...start, anchor: draggedPoint(start.anchor, origin, point, image, modifiers) };
 	}
 	if (grip.handle === 'span') {
 		const span = { x: point.x - origin.x, y: point.y - origin.y };

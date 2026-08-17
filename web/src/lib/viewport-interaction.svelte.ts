@@ -1,16 +1,12 @@
 import { rotationLabel } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
-import { entityId } from './entity-id.ts';
 import {
 	GIZMO_DRAG_THRESHOLD_PX,
 	GIZMO_HIT_TOLERANCE_PX,
 	GIZMO_ROTATE_OFFSET_PX,
-	MIN_GRADIENT_EXTENT,
-	pixelToNormalized,
 	type GizmoHit
 } from './mask-gizmo.ts';
-import { hitTestLinear, reduceLinearDrag } from './mask-gizmo-linear.ts';
-import { hitTestRadial, reduceRadialDrag } from './mask-gizmo-radial.ts';
+import { hitTestGizmo, reduceGizmoDrag, seedGizmoComponent } from './mask-gizmo-drag.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { MaskBrushStroke } from './mask-rasterizer.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
@@ -25,6 +21,7 @@ import {
 	surfaceTransform,
 	visibleImageRect,
 	wheelNavigation,
+	withinImage,
 	zoomAt,
 	type Point,
 	type Size,
@@ -325,19 +322,11 @@ export class ViewportInteraction {
 		const imagePoint = this.imagePixel(point);
 		const existing = this.selectedGradientComponent;
 		const grabbed = existing
-			? existing.type === 'linear'
-				? hitTestLinear(existing, imagePoint, this.image, this.gizmoTolerance)
-				: hitTestRadial(
-						existing,
-						imagePoint,
-						this.image,
-						this.gizmoTolerance,
-						this.gizmoRotateOffset
-					)
+			? hitTestGizmo(existing, imagePoint, this.image, this.gizmoTolerance, this.gizmoRotateOffset)
 			: null;
 		const session = grabbed
 			? { component: existing!, grip: grabbed }
-			: this.seedGizmoComponent(imagePoint);
+			: this.seedComponent(imagePoint);
 		if (!session) return false;
 		if (!this.capturePointer(event.pointerId)) return false;
 		event.preventDefault();
@@ -356,54 +345,12 @@ export class ViewportInteraction {
 		return true;
 	}
 
-	private seedGizmoComponent(
-		imagePoint: Point
-	): { component: GradientComponent; grip: GizmoHit } | null {
+	private seedComponent(imagePoint: Point) {
 		const tool = this.context.tool();
 		const kind = tool === 'mask-linear' ? 'linear' : tool === 'mask-radial' ? 'radial' : null;
 		const mask = this.context.selectedMask();
-		if (!kind || mask?.kind !== kind) return null;
-		if (
-			imagePoint.x < 0 ||
-			imagePoint.y < 0 ||
-			imagePoint.x > this.image.width ||
-			imagePoint.y > this.image.height
-		) {
-			return null;
-		}
-		const existing = mask.components.find(
-			(component): component is GradientComponent => component.type === kind
-		);
-		const anchor = pixelToNormalized(imagePoint, this.image);
-		const base = {
-			id: existing?.id ?? entityId('component'),
-			operation: existing?.operation ?? ('add' as const),
-			raster: null
-		};
-		if (kind === 'linear') {
-			return {
-				component: {
-					...base,
-					type: 'linear',
-					anchor,
-					rotation: 0,
-					compression: MIN_GRADIENT_EXTENT
-				},
-				grip: { kind: 'handle', handle: 'span' }
-			};
-		}
-		return {
-			component: {
-				...base,
-				type: 'radial',
-				center: anchor,
-				radiusX: MIN_GRADIENT_EXTENT,
-				radiusY: MIN_GRADIENT_EXTENT,
-				rotation: 0,
-				feather: existing?.type === 'radial' ? existing.feather : 0.5
-			},
-			grip: { kind: 'handle', handle: 'radius' }
-		};
+		if (!kind || !mask) return null;
+		return seedGizmoComponent(kind, mask, imagePoint, this.image);
 	}
 
 	handlePointerMove = (event: PointerEvent) => {
@@ -420,15 +367,18 @@ export class ViewportInteraction {
 			}
 			const imagePoint = this.imagePixel(point);
 			const modifiers = { shift: event.shiftKey };
-			const reduced =
-				drag.start.type === 'linear'
-					? reduceLinearDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers)
-					: reduceRadialDrag(drag.start, drag.grip, drag.origin, imagePoint, this.image, modifiers);
 			this.gizmoDrag = {
 				...drag,
 				moved: true,
 				screen: point,
-				component: { ...drag.start, ...reduced },
+				component: reduceGizmoDrag(
+					drag.start,
+					drag.grip,
+					drag.origin,
+					imagePoint,
+					this.image,
+					modifiers
+				),
 				snapped: modifiers.shift
 			};
 			return;
@@ -447,20 +397,13 @@ export class ViewportInteraction {
 			!this.maskStroke &&
 			event.pointerType !== 'touch' &&
 			this.selectedGradientComponent
-				? this.selectedGradientComponent.type === 'linear'
-					? hitTestLinear(
-							this.selectedGradientComponent,
-							this.imagePixel(point),
-							this.image,
-							this.gizmoTolerance
-						)
-					: hitTestRadial(
-							this.selectedGradientComponent,
-							this.imagePixel(point),
-							this.image,
-							this.gizmoTolerance,
-							this.gizmoRotateOffset
-						)
+				? hitTestGizmo(
+						this.selectedGradientComponent,
+						this.imagePixel(point),
+						this.image,
+						this.gizmoTolerance,
+						this.gizmoRotateOffset
+					)
 				: null;
 		if (this.objectStroke?.pointerId === event.pointerId) {
 			event.preventDefault();
@@ -658,14 +601,7 @@ export class ViewportInteraction {
 
 	private normalizedImagePoint(point: Point) {
 		const imagePoint = screenToImage(point, this.size, this.image, this.transform);
-		if (
-			imagePoint.x < 0 ||
-			imagePoint.y < 0 ||
-			imagePoint.x > this.image.width ||
-			imagePoint.y > this.image.height
-		) {
-			return null;
-		}
+		if (!withinImage(imagePoint, this.image)) return null;
 		return { x: imagePoint.x / this.image.width, y: imagePoint.y / this.image.height };
 	}
 

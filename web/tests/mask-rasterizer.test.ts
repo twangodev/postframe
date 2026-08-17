@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { linearGeometryFromSpan } from '../src/lib/mask-gizmo.ts';
+import { linearGeometryFromSpan } from './gizmo-fixtures.ts';
 import {
 	paintRasterDimensions,
 	rasterizeBrushStrokes,
