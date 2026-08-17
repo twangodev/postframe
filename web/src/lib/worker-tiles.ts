@@ -1,4 +1,4 @@
-import { reportError } from './diagnostics.ts';
+import { freeQuietly, reportError } from './diagnostics.ts';
 import {
 	defaultColorSettings,
 	detailTileKey,
@@ -67,7 +67,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 				active.renderer.destroy();
 				active.renderer = null;
 			} finally {
-				tile?.free();
+				if (tile) freeQuietly('linear tile', tile);
 			}
 		}
 		const tile = active.session.render_tile(
@@ -85,7 +85,7 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			context.putImageData(imageData(tile.rgba, tile.width, tile.height), 0, 0);
 			return context.canvas.transferToImageBitmap();
 		} finally {
-			tile.free();
+			freeQuietly('rendered tile', tile);
 		}
 	}
 
@@ -153,6 +153,6 @@ function rawDevelopLuts(active: RawDocument, adjustments: DevelopSettings) {
 		active.developLuts = luts;
 		return luts;
 	} finally {
-		transform.free();
+		freeQuietly('develop luts', transform);
 	}
 }

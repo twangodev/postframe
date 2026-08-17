@@ -1,5 +1,5 @@
 import { adjustMaskEdges } from './mask-edge-adjustment.ts';
-import { reportError, reportUncaught } from './diagnostics.ts';
+import { freeQuietly, reportError, reportUncaught } from './diagnostics.ts';
 import { post, type Request } from './worker-protocol.ts';
 import { ready, threadCount, threaded, wasm } from './worker-wasm.ts';
 import { measure, measureAsync, setPerformanceEnabled } from './worker-performance.ts';
@@ -174,6 +174,6 @@ function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 			[thumbnailJpeg]
 		);
 	} finally {
-		result.free();
+		freeQuietly('raw inspection', result);
 	}
 }

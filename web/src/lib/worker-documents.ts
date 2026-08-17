@@ -1,4 +1,4 @@
-import { reportError } from './diagnostics.ts';
+import { freeQuietly, reportError } from './diagnostics.ts';
 import { cloneDevelopSettings, type DevelopSettings } from './develop-settings';
 import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
@@ -139,7 +139,7 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 		await publishRawDocument(message, session);
 		scheduleRawCacheWrite(session, message.cache);
 	} catch (error) {
-		session.free();
+		freeQuietly('open-raw', session);
 		if (document?.kind === 'raw' && document.session === session) document = null;
 		throw error;
 	}
@@ -273,7 +273,7 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 			rendered.transfer
 		);
 	} catch (error) {
-		light.free();
+		freeQuietly('open-display', light);
 		bitmap.close();
 		if (document?.kind === 'display' && document.bitmap === bitmap) document = null;
 		throw error;
@@ -313,6 +313,6 @@ async function createRawRenderer(session: WasmSession) {
 		reportError('webgpu renderer unavailable; using the cpu tile path', error);
 		return null;
 	} finally {
-		profile.free();
+		freeQuietly('render profile', profile);
 	}
 }

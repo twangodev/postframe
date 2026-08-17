@@ -1,3 +1,4 @@
+import { freeQuietly } from './diagnostics.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import {
 	cropRegion,
@@ -87,7 +88,7 @@ function developExportImage(
 		}
 		return rgba;
 	} finally {
-		for (const mask of compositors) mask.compositor.free();
+		for (const mask of compositors) freeQuietly('mask compositor', mask.compositor);
 	}
 }
 
@@ -109,7 +110,7 @@ function developRawExportTile(
 	try {
 		return tile.rgba;
 	} finally {
-		tile.free();
+		freeQuietly('export tile', tile);
 	}
 }
 

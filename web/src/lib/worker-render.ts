@@ -1,3 +1,4 @@
+import { freeQuietly } from './diagnostics.ts';
 import {
 	cloneDevelopSettings,
 	sameDevelopSettings,
@@ -107,7 +108,7 @@ export function renderRawPreview(
 			transfer: [image, histogram, waveform]
 		};
 	} finally {
-		frame.free();
+		freeQuietly('preview frame', frame);
 	}
 }
 
@@ -159,7 +160,7 @@ function renderRawScope(
 			sampleCount: frame.sample_count
 		});
 	} finally {
-		frame.free();
+		freeQuietly('scope frame', frame);
 	}
 }
 
