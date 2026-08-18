@@ -12,10 +12,13 @@ import {
 	EDIT_DOCUMENT_VERSION,
 	cloneEditDocument,
 	createEditMask,
+	defaultColorRange,
 	defaultEditDocument,
+	defaultLuminanceRange,
 	editDocumentStorageName,
 	editDocumentSchema,
 	editMaskSchema,
+	maskKindSchema,
 	parseEditDocument
 } from '../src/lib/edit-document.ts';
 
@@ -180,6 +183,89 @@ test('accepts gradient components carrying their transform', () => {
 		}).success,
 		false
 	);
+});
+
+test('accepts range components and names their masks', () => {
+	const luminance = createEditMask('mask-luminance', 'luminance');
+	assert.equal(luminance.name, 'Luminance range');
+	luminance.components.push({
+		id: 'component-luminance',
+		type: 'luminance-range',
+		operation: 'add',
+		raster: null,
+		range: defaultLuminanceRange()
+	});
+	const color = createEditMask('mask-color', 'color');
+	assert.equal(color.name, 'Colour range');
+	color.components.push({
+		id: 'component-color',
+		type: 'color-range',
+		operation: 'intersect',
+		raster: {
+			storageName: 'component-color.bin',
+			width: 8,
+			height: 4,
+			digest: 'b'.repeat(64)
+		},
+		range: defaultColorRange()
+	});
+	const document = { ...defaultEditDocument('photo-one'), masks: [luminance, color] };
+	assert.deepEqual(parseEditDocument(document, 'photo-one').masks, [luminance, color]);
+	assert.deepEqual(defaultLuminanceRange(), { low: 0.5, high: 1, feather: 0.1 });
+	assert.deepEqual(defaultColorRange(), {
+		hue: 210,
+		width: 30,
+		saturationFloor: 0.2,
+		feather: 0.25
+	});
+	assert.equal(
+		editMaskSchema.safeParse({
+			...luminance,
+			components: [{ ...luminance.components[0], range: { low: 0.8, high: 0.2, feather: 0.1 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...luminance,
+			components: [{ ...luminance.components[0], range: { low: 0.2, high: 1.2, feather: 0.1 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...color,
+			components: [{ ...color.components[0], range: { ...defaultColorRange(), hue: 400 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...color,
+			components: [{ ...color.components[0], range: { ...defaultColorRange(), width: 95 } }]
+		}).success,
+		false
+	);
+	assert.equal(
+		editMaskSchema.safeParse({
+			...color,
+			components: [
+				{ ...color.components[0], range: { ...defaultColorRange(), saturationFloor: -0.1 } }
+			]
+		}).success,
+		false
+	);
+});
+
+test('every mask kind creates a named mask', () => {
+	for (const kind of maskKindSchema.options) {
+		const mask = createEditMask(`mask-${kind}`, kind);
+		assert.equal(mask.kind, kind);
+		assert.ok(mask.name.length > 0);
+		assert.equal(editMaskSchema.safeParse(mask).success, true);
+	}
+	assert.ok(maskKindSchema.options.includes('luminance'));
+	assert.ok(maskKindSchema.options.includes('color'));
 });
 
 test('rejects documents from earlier schema versions outright', () => {

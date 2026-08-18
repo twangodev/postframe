@@ -40,6 +40,6 @@ pub(super) fn tile_region(region: JsValue) -> Result<DevelopedTileRegion, JsErro
     from_value(region)
 }
 
-fn from_value<T: serde::de::DeserializeOwned>(value: JsValue) -> Result<T, JsError> {
+pub(super) fn from_value<T: serde::de::DeserializeOwned>(value: JsValue) -> Result<T, JsError> {
     serde_wasm_bindgen::from_value(value).map_err(|error| JsError::new(&error.to_string()))
 }

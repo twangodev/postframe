@@ -133,11 +133,23 @@ export class Session {
     width(): number;
 }
 
+/**
+ * One alpha byte per pixel: how far each encoded RGBA pixel's hue and chroma
+ * fall inside a colour range.
+ */
+export function color_range_mask(rgba: Uint8Array, width: number, height: number, range: any): Uint8Array;
+
 export function encode_export_jpeg(rgba: Uint8Array, width: number, height: number, quality: number, original?: Uint8Array | null): Uint8Array;
 
 export function initThreadPool(num_threads: number): Promise<any>;
 
 export function inspect_raw(raw: Uint8Array, thumbnail_dimension: number): RawInspection;
+
+/**
+ * One alpha byte per pixel: how far each encoded RGBA pixel's luma falls
+ * inside a luminance range.
+ */
+export function luminance_range_mask(rgba: Uint8Array, width: number, height: number, range: any): Uint8Array;
 
 export function supported_raw_extensions(): string[];
 
@@ -163,6 +175,7 @@ export interface InitOutput {
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
+    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_detail: (a: number) => [number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
@@ -222,6 +235,7 @@ export interface InitOutput {
     readonly validate_raw: (a: number, b: number) => [number, number];
     readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
     readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
     readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
     readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
@@ -231,7 +245,7 @@ export interface InitOutput {
     readonly displaytransform_luminance_lut: (a: number) => [number, number];
     readonly displaytransform_mixer_luts: (a: number) => [number, number];
     readonly displaytransform_new: (a: any, b: any) => [number, number, number];
-    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;

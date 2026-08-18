@@ -2,8 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import fc from 'fast-check';
+import type { z } from 'zod';
 
-import { EDIT_DOCUMENT_VERSION, parseEditDocument } from '../src/lib/edit-document.ts';
+import {
+	EDIT_DOCUMENT_VERSION,
+	maskComponentSchema,
+	maskKindSchema,
+	parseEditDocument
+} from '../src/lib/edit-document.ts';
+
+type MaskComponentType = z.infer<typeof maskComponentSchema>['type'];
 
 const bounded = (min: number, max: number) => fc.double({ min, max, noNaN: true });
 const unit = bounded(0, 1);
@@ -227,14 +235,37 @@ const radial = fc
 		feather
 	}));
 
-const componentArbitrary = fc.oneof(aiSubject, aiObject, aiInstance, brush, linear, radial);
+const luminanceRange = fc.tuple(componentBase, span, unit).map(([base, [low, high], feather]) => ({
+	...base,
+	type: 'luminance-range' as const,
+	range: { low, high, feather }
+}));
+
+const colorRange = fc
+	.tuple(componentBase, bounded(0, 360), bounded(0, 90), unit, unit)
+	.map(([base, hue, width, saturationFloor, feather]) => ({
+		...base,
+		type: 'color-range' as const,
+		range: { hue, width, saturationFloor, feather }
+	}));
+
+const componentArbitraries = {
+	'ai-subject': aiSubject,
+	'ai-object': aiObject,
+	'ai-instance': aiInstance,
+	brush,
+	linear,
+	radial,
+	'luminance-range': luminanceRange,
+	'color-range': colorRange
+} satisfies Record<MaskComponentType, fc.Arbitrary<unknown>>;
+
+const componentArbitrary = fc.oneof(...Object.values(componentArbitraries));
 
 const maskArbitrary = fc.record({
 	id: word,
 	name: word,
-	kind: fc.constantFrom<
-		'brush' | 'linear' | 'radial' | 'object' | 'subject' | 'sky' | 'background'
-	>('brush', 'linear', 'radial', 'object', 'subject', 'sky', 'background'),
+	kind: fc.constantFrom(...maskKindSchema.options),
 	visible: fc.boolean(),
 	components: fc.array(componentArbitrary, { maxLength: 3 }),
 	edge: edgeArbitrary,
@@ -261,6 +292,11 @@ const documentArbitrary = fc
 		masks: fc.uniqueArray(maskArbitrary, { selector: (mask) => mask.id, maxLength: 3 })
 	})
 	.map((document) => structuredClone(document));
+
+test('the component arbitrary covers every schema variant', () => {
+	const variants = maskComponentSchema.options.map((option) => option.shape.type.value);
+	assert.deepEqual(Object.keys(componentArbitraries).sort(), [...variants].sort());
+});
 
 test('parsing a valid v10 document returns it unchanged (seed 3301)', () => {
 	fc.assert(

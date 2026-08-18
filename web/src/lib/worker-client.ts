@@ -1,6 +1,7 @@
 import type {
 	DevelopedMaskInput,
 	MaskEdgeInput,
+	RangeComponentInput,
 	RawFrameHandleInput,
 	RenderPerformanceMeasurement,
 	RenderTileRequest,
@@ -261,6 +262,26 @@ export class PostframeWorkerClient {
 		};
 	}
 
+	async rasterizeRange(
+		component: RangeComponentInput,
+		maxDimension: number
+	): Promise<{ width: number; height: number; alpha: Uint8Array }> {
+		const response = await this.send(
+			(id) => ({
+				id,
+				type: 'rasterize-range',
+				component: copyRangeComponent(component),
+				maxDimension
+			}),
+			'range-rasterized'
+		);
+		return {
+			width: response.width,
+			height: response.height,
+			alpha: new Uint8Array(response.alpha)
+		};
+	}
+
 	async exportPhoto(request: ExportPhotoRequest, onProgress?: (progress: ExportProgress) => void) {
 		const masks = request.masks.map(copyDevelopedMask);
 		const response = await this.send(
@@ -494,6 +515,12 @@ export class PostframeWorkerClient {
 		for (const waiter of this.queuedPreview.waiters) waiter.reject(error);
 		this.queuedPreview = null;
 	}
+}
+
+function copyRangeComponent(component: RangeComponentInput): RangeComponentInput {
+	return component.type === 'luminance-range'
+		? { type: component.type, range: { ...component.range } }
+		: { type: component.type, range: { ...component.range } };
 }
 
 function copyDevelopedMask(mask: DevelopedMaskInput): DevelopedMaskInput {

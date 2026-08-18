@@ -56,6 +56,7 @@ import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
 import { entityId } from './entity-id';
 import { MaskPainting, type GradientComponent } from './mask-painting';
+import { MaskRanging, type RangeKind, type RangeSettings } from './mask-ranging';
 import { MaskRasterPipeline, type SelectedMaskRaster } from './mask-raster-pipeline';
 import { ObjectUrlRegistry } from './object-url-registry';
 import { PhotoIngest } from './photo-ingest';
@@ -100,6 +101,7 @@ export class WorkspaceState {
 	private readonly pipeline: MaskRasterPipeline;
 	private readonly smartMasks: SmartMasking;
 	private readonly painting: MaskPainting;
+	private readonly ranging: MaskRanging;
 	private readonly controls: AdjustmentControls;
 	private readonly editor: EditorSession;
 	private readonly session: DocumentSession;
@@ -214,6 +216,7 @@ export class WorkspaceState {
 		this.pipeline = new MaskRasterPipeline(this.libraryService, this.workerClient, host);
 		this.smartMasks = new SmartMasking(this.pipeline, host);
 		this.painting = new MaskPainting(this.pipeline, this.smartMasks, host);
+		this.ranging = new MaskRanging(this.workerClient, this.pipeline, host);
 		this.controls = new AdjustmentControls(this.develop, this.pipeline, host);
 		this.editor = new EditorSession(this.develop, this.pipeline, this.persistence, host);
 		this.session = new DocumentSession(
@@ -680,8 +683,20 @@ export class WorkspaceState {
 		const mask = createEditMask(entityId('mask'), kind);
 		if (this.editor.dispatch({ type: 'mask.create', mask })) {
 			this.selectMask(mask.id);
+			if (kind === 'luminance' || kind === 'color') {
+				void this.ranging.addRangeComponent(kind, 'add');
+			}
 		}
 	}
+
+	addRangeComponent = (kind: RangeKind, operation: MaskOperation) =>
+		this.ranging.addRangeComponent(kind, operation);
+
+	previewRange = (componentId: string, range: RangeSettings) =>
+		this.ranging.previewRange(componentId, range);
+
+	commitRange = (componentId: string, range: RangeSettings) =>
+		this.ranging.commitRange(componentId, range);
 
 	selectMask = (maskId: string | null) => {
 		this.selectedMaskId = maskId;
