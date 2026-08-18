@@ -54,6 +54,7 @@ import { PhotoIngest } from './photo-ingest';
 import { PhotoOrganizer } from './photo-organizer';
 import type { ColorLabel, Photo, PhotoStack } from './photo-record';
 import { SmartMasking, type SmartMaskStatus, type SubjectChoices } from './smart-masking';
+import { StorageObserver } from './storage-observer';
 import { StorageOverview } from './storage-overview';
 import { ThumbnailLoader } from './thumbnail-loader';
 import { WorkspacePersistence, type StorageStatus } from './workspace-persistence';
@@ -80,6 +81,8 @@ export class WorkspaceState {
 	private readonly ingest: PhotoIngest;
 	private readonly persistence: WorkspacePersistence;
 	private readonly storage: StorageOverview;
+	private readonly storageObserver: StorageObserver;
+	private stopStorageObserving = () => {};
 	private readonly thumbnails: ThumbnailLoader;
 	private readonly develop: DevelopPreviewController;
 	private readonly pipeline: MaskRasterPipeline;
@@ -177,6 +180,8 @@ export class WorkspaceState {
 		this.ingest = new PhotoIngest(this.workerClient, this.rawExtensions, this.objectUrls, host);
 		this.persistence = new WorkspacePersistence(this.libraryService, this.objectUrls, host);
 		this.storage = new StorageOverview(this.libraryService, host);
+		this.storageObserver = new StorageObserver(() => this.storage.refresh());
+		this.stopStorageObserving = this.observeStorageWrites();
 		this.thumbnails = new ThumbnailLoader(
 			this.libraryService,
 			this.persistence,
@@ -246,6 +251,7 @@ export class WorkspaceState {
 					this.ingestError = message;
 				},
 				clearFiles: () => this.clearFiles(),
+				storageWritten: () => this.storageObserver.wrote(),
 				resetEditState: (document: EditDocument) => this.editor.resetEditState(document),
 				dispatchEditorCommand: (command: EditorCommand) => this.editor.dispatch(command),
 				selectMask: (maskId: string | null) => this.selectMask(maskId),
@@ -353,6 +359,22 @@ export class WorkspaceState {
 	};
 
 	refreshBrowserStorage = () => this.storage.refresh();
+
+	// Writes reach storage from three places: the persistence queue, imports,
+	// and the worker's own render cache. All three end at the observer, and a
+	// tab coming back into view re-measures in case another tab wrote.
+	private observeStorageWrites() {
+		const stopWorker = this.workerClient?.onStorageWritten(() => this.storageObserver.wrote());
+		if (typeof document === 'undefined') return () => stopWorker?.();
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') this.storageObserver.wrote();
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => {
+			stopWorker?.();
+			document.removeEventListener('visibilitychange', onVisible);
+		};
+	}
 
 	cleanupLocalData = async () => {
 		const store = this.libraryService;
@@ -617,6 +639,8 @@ export class WorkspaceState {
 	};
 
 	destroy = () => {
+		this.stopStorageObserving();
+		this.storageObserver.stop();
 		this.session.invalidate();
 		this.pipeline.clearMaskRenderTimer();
 		this.develop.release();

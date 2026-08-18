@@ -17,6 +17,7 @@ export interface WorkspacePersistenceHost {
 	libraryReady: boolean;
 	libraryError: string | null;
 	clearFiles(): void;
+	storageWritten(): void;
 }
 
 export class WorkspacePersistence {
@@ -109,8 +110,10 @@ export class WorkspacePersistence {
 		this.persistence = mutation.then(
 			() => {
 				if (revision === this.revision) this.host.storageStatus = 'saved';
+				this.host.storageWritten();
 			},
 			(error: unknown) => {
+				this.host.storageWritten();
 				if (revision !== this.revision) return;
 				this.host.storageStatus = 'error';
 				this.host.storageError = error instanceof Error ? error.message : 'Unable to save changes';
@@ -154,8 +157,10 @@ export class WorkspacePersistence {
 		this.persistence = transaction.then(
 			() => {
 				if (revision === this.revision) this.host.storageStatus = 'saved';
+				this.host.storageWritten();
 			},
 			(error: unknown) => {
+				this.host.storageWritten();
 				if (revision !== this.revision) return;
 				this.host.storageStatus = 'error';
 				this.host.storageError = error instanceof Error ? error.message : 'Unable to import photos';

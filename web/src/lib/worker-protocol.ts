@@ -140,6 +140,7 @@ export type Request =
 
 export type Response =
 	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
+	| { id: 0; type: 'storage-written' }
 	| { id: number; type: 'mask-adjusted'; alpha: ArrayBuffer }
 	| ({ id: number; type: 'progress' } & DevelopProgress)
 	| {

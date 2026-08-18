@@ -70,6 +70,7 @@ export class PostframeWorkerClient {
 	private readonly pending = new Map<number, PendingRequest>();
 	private readonly progressListeners = new Set<ProgressListener>();
 	private readonly performanceListeners = new Set<PerformanceListener>();
+	private readonly storageListeners = new Set<() => void>();
 	private readonly performanceRecorder = new RenderPerformanceRecorder();
 	private performanceControls: RenderPerformanceControls | null = null;
 	private renderRuntime: RenderRuntimeSummary | null = null;
@@ -274,6 +275,12 @@ export class PostframeWorkerClient {
 		return () => this.progressListeners.delete(listener);
 	}
 
+	/** Fires after the worker writes to storage on its own, such as a render cache. */
+	onStorageWritten(listener: () => void) {
+		this.storageListeners.add(listener);
+		return () => this.storageListeners.delete(listener);
+	}
+
 	onPerformance(listener: PerformanceListener) {
 		this.performanceListeners.add(listener);
 		return () => this.performanceListeners.delete(listener);
@@ -390,6 +397,10 @@ export class PostframeWorkerClient {
 		}
 		if (response.type === 'progress') {
 			for (const listener of this.progressListeners) listener(response);
+			return;
+		}
+		if (response.type === 'storage-written') {
+			for (const listener of this.storageListeners) listener();
 			return;
 		}
 		if (response.type === 'export-progress') {
