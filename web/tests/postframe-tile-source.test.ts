@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type OpenSeadragon from 'openseadragon';
+import type { RenderTileRequest } from '../src/lib/worker.ts';
 import {
 	PYRAMID_MAX_BIN,
 	PYRAMID_TILE_OVERLAP,
@@ -150,4 +151,38 @@ test('a completed tile job publishes its bitmap exactly once', async () => {
 	await Promise.resolve();
 
 	assert.deepEqual(calls, { finish: 1, fail: 0 });
+});
+
+test('tile requests carry the clipping indicators the source was built with', async () => {
+	const requests: RenderTileRequest[] = [];
+	const bitmap = { close: () => {} } as ImageBitmap;
+	const clipping = { highlights: true, shadows: false };
+	const source = createPostframeTileSource(
+		{ TileSource: FakeTileSource } as unknown as typeof OpenSeadragon,
+		{
+			photoId: 'photo-one',
+			revision: 3,
+			image,
+			renderTile: async (_photoId, request) => {
+				requests.push(request);
+				return bitmap;
+			},
+			adjustments,
+			crop,
+			tone: true,
+			clipping
+		}
+	) as OpenSeadragon.TileSource & { downloadTileStart: (job: OpenSeadragon.ImageJob) => void };
+	const { job } = tileJob();
+	source.downloadTileStart(job);
+	await Promise.resolve();
+	assert.deepEqual(requests[0]?.clipping, clipping);
+
+	const plain = tileSource(async (_photoId, request) => {
+		requests.push(request);
+		return bitmap;
+	});
+	plain.downloadTileStart(tileJob().job);
+	await Promise.resolve();
+	assert.equal('clipping' in (requests[1] ?? {}), false);
 });

@@ -1,5 +1,6 @@
-import type { DevelopSettings, MaskAdjustments } from './develop-settings';
-import type { NormalizedCrop } from './edit-document.ts';
+import type { ClippingIndicators } from './clipping.ts';
+import type { DevelopSettings, LightSettings, MaskAdjustments } from './develop-settings';
+import type { NormalizedCrop, NormalizedPoint } from './edit-document.ts';
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
@@ -65,6 +66,7 @@ export interface RenderTileRequest {
 	adjustments: DevelopSettings;
 	crop: NormalizedCrop | null;
 	tone: boolean;
+	clipping?: ClippingIndicators;
 }
 
 export interface DevelopedMaskInput {
@@ -87,6 +89,11 @@ export interface MaskEdgeInput {
 	height: number;
 	alpha: ArrayBuffer;
 	edge: MaskEdgeSettings;
+}
+
+/** A point on the image and how far around it to read, in source-image pixels. */
+export interface WhiteBalanceSample extends NormalizedPoint {
+	radius: number;
 }
 
 export type Request =
@@ -138,7 +145,9 @@ export type Request =
 			geometry: ExportGeometry;
 			quality: number;
 	  }
-	| { id: number; type: 'close' };
+	| { id: number; type: 'close' }
+	| { id: number; type: 'auto-balance'; sample?: WhiteBalanceSample }
+	| { id: number; type: 'auto-tone' };
 
 export type Response =
 	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
@@ -178,7 +187,9 @@ export type Response =
 	| ({ id: number; type: 'export-progress' } & ExportProgress)
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }
-	| { id: number; type: 'error'; message: string };
+	| { id: number; type: 'error'; message: string }
+	| { id: number; type: 'auto-balance'; temperature: number; tint: number }
+	| { id: number; type: 'auto-tone'; light: LightSettings };
 
 export const post = (message: Response, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);

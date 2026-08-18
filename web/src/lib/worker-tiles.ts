@@ -1,3 +1,4 @@
+import { paintClipping, showsClipping, type ClippingIndicators } from './clipping.ts';
 import { freeQuietly, reportError } from './diagnostics.ts';
 import {
 	defaultColorSettings,
@@ -15,13 +16,33 @@ import type { ActiveDocument, RawDocument } from './worker-documents.ts';
 
 export async function renderTile(active: ActiveDocument, request: RenderTileRequest) {
 	const developed = await renderDevelopedTile(active, request);
-	if (!hasMaskCompositors()) return developed;
+	const composited = hasMaskCompositors() ? compositeMasks(active, developed, request) : developed;
+	return request.clipping && showsClipping(request.clipping)
+		? paintClippedTile(composited, request.clipping)
+		: composited;
+}
+
+function compositeMasks(
+	active: ActiveDocument,
+	developed: ImageBitmap,
+	request: RenderTileRequest
+) {
 	try {
 		return compositeDevelopedTile(active, developed, request);
 	} catch (error) {
 		reportError('mask compositing fell back to the developed tile', error);
 		return developed;
 	}
+}
+
+function paintClippedTile(tile: ImageBitmap, clipping: ClippingIndicators) {
+	const context = canvasContext(tile.width, tile.height, false);
+	context.drawImage(tile, 0, 0);
+	const pixels = context.getImageData(0, 0, tile.width, tile.height);
+	paintClipping(pixels.data, clipping);
+	context.putImageData(pixels, 0, 0);
+	tile.close();
+	return context.canvas.transferToImageBitmap();
 }
 
 async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRequest) {

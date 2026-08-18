@@ -6,7 +6,8 @@ import type {
 	RenderTileRequest,
 	Request,
 	Response,
-	SourceImage
+	SourceImage,
+	WhiteBalanceSample
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
 import {
@@ -163,7 +164,8 @@ export class PostframeWorkerClient {
 		const request = {
 			...tile,
 			adjustments: cloneDevelopSettings(tile.adjustments),
-			crop: cloneCrop(tile.crop)
+			crop: cloneCrop(tile.crop),
+			...(tile.clipping ? { clipping: { ...tile.clipping } } : {})
 		};
 		const response = await this.send(
 			(id) => ({ id, type: 'tile', ...request }),
@@ -259,6 +261,19 @@ export class PostframeWorkerClient {
 			height: response.height,
 			rgba: new Uint8ClampedArray(response.rgba)
 		};
+	}
+
+	async autoBalance(sample?: WhiteBalanceSample) {
+		const response = await this.send(
+			(id) => ({ id, type: 'auto-balance', ...(sample ? { sample: { ...sample } } : {}) }),
+			'auto-balance'
+		);
+		return { temperature: response.temperature, tint: response.tint };
+	}
+
+	async autoTone() {
+		const response = await this.send((id) => ({ id, type: 'auto-tone' }), 'auto-tone');
+		return { ...response.light };
 	}
 
 	async exportPhoto(request: ExportPhotoRequest, onProgress?: (progress: ExportProgress) => void) {
