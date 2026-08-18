@@ -15,6 +15,9 @@ export const WASM_BINDINGS = {
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
 	encode_export_jpeg: { rust: 'encode_export_jpeg', worker: 'export' },
+	neutralizing_balance: { rust: 'neutralizing_balance', worker: 'auto-balance' },
+	auto_white_balance: { rust: 'auto_white_balance', worker: 'auto-balance' },
+	auto_tone: { rust: 'auto_tone', worker: 'auto-tone' },
 	display_transform: {
 		rust: 'DisplayTransform::new',
 		worker: ['open-display', 'preview', 'tile', 'export']
@@ -81,6 +84,9 @@ export const WASM_BINDINGS = {
 	| 'validate_raw'
 	| 'inspect_raw'
 	| 'encode_export_jpeg'
+	| 'neutralizing_balance'
+	| 'auto_white_balance'
+	| 'auto_tone'
 	| 'display_transform'
 	| 'display_free'
 	| 'apply_display_rgba'
@@ -163,6 +169,9 @@ export const WASM_TODOS = {
 			'developed_tile_compositor',
 			'developed_tile_compositor_free',
 			'composite_developed_rgba',
+			'neutralizing_balance',
+			'auto_white_balance',
+			'auto_tone',
 			'preview_jpeg',
 			'preview_frame',
 			'preview_scope',

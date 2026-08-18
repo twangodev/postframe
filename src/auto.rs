@@ -14,7 +14,7 @@ pub const SAMPLE_TARGET: usize = 100_000;
 pub const EXPOSURE_STEP: f32 = 0.05;
 const NEUTRAL_CHROMA_LIMIT: f32 = 0.35;
 const NEUTRAL_SHARE_FLOOR: f32 = 0.01;
-const BISECTION_STEPS: usize = 12;
+const BISECTION_STEPS: usize = 10;
 const CONTROL_LIMIT: f32 = 100.0;
 
 /// Temperature and tint that render this linear sample neutral, clamped to the
@@ -86,10 +86,13 @@ struct ToneTarget {
 }
 
 impl ToneControl {
-    fn range(self) -> (f32, f32) {
+    /// The slider spans on which the developed percentile moves monotonically
+    /// with the control. Blacks and whites bend the endpoint curve the moment
+    /// they leave zero, so each side is its own span and zero stands alone.
+    fn spans(self) -> Vec<(f32, f32)> {
         match self {
-            Self::Exposure => (-AUTO_EXPOSURE_LIMIT_STOPS, AUTO_EXPOSURE_LIMIT_STOPS),
-            Self::Blacks | Self::Whites => (-CONTROL_LIMIT, CONTROL_LIMIT),
+            Self::Exposure => vec![(-AUTO_EXPOSURE_LIMIT_STOPS, AUTO_EXPOSURE_LIMIT_STOPS)],
+            Self::Blacks | Self::Whites => vec![(-CONTROL_LIMIT, -1.0), (1.0, CONTROL_LIMIT)],
         }
     }
 
@@ -127,45 +130,70 @@ impl ToneControl {
         }
     }
 
-    /// Exposure clamps to its limit when the target is out of reach; the
-    /// endpoint controls have no leverage there and stay put.
-    fn out_of_reach(self, low_side: bool) -> f32 {
-        match self {
-            Self::Exposure => {
-                let (low, high) = self.range();
-                if low_side { low } else { high }
-            }
-            Self::Blacks | Self::Whites => 0.0,
-        }
-    }
-
-    /// The developed percentile rises with each control, so the value that
-    /// lands it on target is found by bisection over the slider range.
+    /// Exposure always takes the value that lands closest to its target, its
+    /// limit included, so a night scene is lifted as far as allowed. The
+    /// endpoint controls only leave zero when doing so at least halves the
+    /// distance to their target; a nudge that barely helps is not worth
+    /// bending the curve for.
     fn solve(self, samples: &[u8], settings: LightSettings) -> Result<f32> {
         let target = self.target();
-        let (mut low, mut high) = self.range();
         let miss = |value: f32| -> Result<f32> {
             Ok(
                 percentile_luma(samples, self.with(settings, value), target.percentile)?
                     - target.luma,
             )
         };
-        if miss(low)? > 0.0 {
-            return Ok(self.out_of_reach(true));
-        }
-        if miss(high)? < 0.0 {
-            return Ok(self.out_of_reach(false));
-        }
-        for _ in 0..BISECTION_STEPS {
-            let middle = (low + high) / 2.0;
-            if miss(middle)? > 0.0 {
-                high = middle;
-            } else {
-                low = middle;
+        let mut best = Candidate::at(0.0, &miss)?;
+        for (low, high) in self.spans() {
+            let found = bisect(low, high, &miss)?;
+            let accepted = match self {
+                Self::Exposure => found.miss.abs() < best.miss.abs(),
+                Self::Blacks | Self::Whites => found.miss.abs() <= best.miss.abs() / 2.0,
+            };
+            if accepted {
+                best = found;
             }
         }
-        Ok((low + high) / 2.0)
+        Ok(best.value)
     }
+}
+
+#[derive(Clone, Copy)]
+struct Candidate {
+    value: f32,
+    miss: f32,
+}
+
+impl Candidate {
+    fn at(value: f32, miss: &impl Fn(f32) -> Result<f32>) -> Result<Self> {
+        Ok(Self {
+            value,
+            miss: miss(value)?,
+        })
+    }
+}
+
+/// The value on `[low, high]` whose miss is nearest zero, assuming the miss
+/// rises across the span: an end when the target is out of reach, otherwise
+/// the closer side of the bracket bisection narrows to.
+fn bisect(low: f32, high: f32, miss: &impl Fn(f32) -> Result<f32>) -> Result<Candidate> {
+    let mut low = Candidate::at(low, miss)?;
+    if low.miss >= 0.0 {
+        return Ok(low);
+    }
+    let mut high = Candidate::at(high, miss)?;
+    if high.miss <= 0.0 {
+        return Ok(high);
+    }
+    for _ in 0..BISECTION_STEPS {
+        let middle = Candidate::at((low.value + high.value) / 2.0, miss)?;
+        if middle.miss > 0.0 {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    Ok(if -low.miss <= high.miss { low } else { high })
 }
 
 fn percentile_luma(samples: &[u8], settings: LightSettings, percentile: f32) -> Result<f32> {
@@ -371,6 +399,17 @@ mod tests {
         assert_eq!(light.contrast, 0.0);
         assert_eq!(light.highlights, 0.0);
         assert_eq!(light.shadows, 0.0);
+    }
+
+    #[test]
+    fn auto_tone_leaves_the_endpoints_alone_when_they_would_barely_help() {
+        let mut rgba = field([70; 3], 40, 30);
+        for pixel in rgba.chunks_exact_mut(4).skip(600) {
+            pixel.copy_from_slice(&[115, 115, 115, 255]);
+        }
+        let light = auto_tone(&rgba, 40, 30).unwrap();
+        assert_eq!(light.blacks, 0.0, "{light:?}");
+        assert_eq!(light.whites, 0.0, "{light:?}");
     }
 
     #[test]
