@@ -10,6 +10,8 @@ use crate::{Error, Result};
 
 pub const AUTO_EXPOSURE_LIMIT_STOPS: f32 = 2.0;
 pub const SAMPLE_TARGET: usize = 100_000;
+/// Estimates land on the slider grids so the controls show exactly what was set.
+pub const EXPOSURE_STEP: f32 = 0.05;
 const NEUTRAL_CHROMA_LIMIT: f32 = 0.35;
 const NEUTRAL_SHARE_FLOOR: f32 = 0.01;
 const BISECTION_STEPS: usize = 12;
@@ -111,7 +113,7 @@ impl ToneControl {
     fn with(self, settings: LightSettings, value: f32) -> LightSettings {
         match self {
             Self::Exposure => LightSettings {
-                exposure: (value * 100.0).round() / 100.0,
+                exposure: (value / EXPOSURE_STEP).round() * EXPOSURE_STEP,
                 ..settings
             },
             Self::Blacks => LightSettings {
@@ -185,7 +187,9 @@ fn encoded_luma([red, green, blue]: [u8; 3]) -> f32 {
 }
 
 fn control_value(fraction: f32) -> f32 {
-    (fraction * CONTROL_LIMIT).clamp(-CONTROL_LIMIT, CONTROL_LIMIT)
+    (fraction * CONTROL_LIMIT)
+        .round()
+        .clamp(-CONTROL_LIMIT, CONTROL_LIMIT)
 }
 
 fn mean(pixels: &[[f32; 3]]) -> [f32; 3] {
@@ -277,6 +281,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn estimates_sit_on_the_slider_grids() {
+        let (temperature, tint) = neutralizing_balance([0.21, 0.2, 0.19]).unwrap();
+        assert_eq!(temperature.fract(), 0.0);
+        assert_eq!(tint.fract(), 0.0);
+        let mut ramp = Vec::new();
+        for value in 0..=255u8 {
+            ramp.extend_from_slice(&[value, value, value, 255]);
+        }
+        let light = auto_tone(&ramp, 256, 1).unwrap();
+        assert!(
+            ((light.exposure / EXPOSURE_STEP).round() * EXPOSURE_STEP - light.exposure).abs()
+                < 1e-6
+        );
+        assert_eq!(light.blacks.fract(), 0.0);
+        assert_eq!(light.whites.fract(), 0.0);
     }
 
     #[test]
