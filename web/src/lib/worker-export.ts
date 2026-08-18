@@ -11,7 +11,13 @@ import {
 } from './export.ts';
 import { wasm } from './worker-wasm.ts';
 import { post, type Request } from './worker-protocol.ts';
-import { canvasContext, displayTransform, imageData } from './worker-render.ts';
+import { displayTransform } from './worker-render.ts';
+import {
+	canvasContext,
+	developDisplayRegion,
+	imageData,
+	type ImageSize
+} from './worker-display.ts';
 import { createMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument } from './worker-documents.ts';
 
@@ -118,35 +124,10 @@ function developDisplayExportTile(
 	bitmap: ImageBitmap,
 	light: WasmDisplayTransform,
 	region: ExportRegion,
-	image: { width: number; height: number }
+	image: ImageSize
 ) {
-	const context = canvasContext(region.width, region.height);
-	context.drawImage(
-		bitmap,
-		region.x,
-		region.y,
-		region.width,
-		region.height,
-		0,
-		0,
-		region.width,
-		region.height
-	);
-	const pixels = context.getImageData(0, 0, region.width, region.height);
-	return light.apply_tile_rgba(
-		new Uint8Array(pixels.data.buffer),
-		region.width,
-		region.height,
-		{
-			imageWidth: image.width,
-			imageHeight: image.height,
-			x: region.x,
-			y: region.y,
-			width: region.width,
-			height: region.height
-		},
-		1
-	);
+	const developed = developDisplayRegion(bitmap, light, { ...region, bin: 1 }, image);
+	return new Uint8Array(developed.data.buffer);
 }
 
 function blitExportTile(

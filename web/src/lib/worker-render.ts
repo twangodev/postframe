@@ -10,17 +10,9 @@ import { imageScopeFromRgba, type ImageScopeData, type ImageScopeTransfer } from
 import type { WasmSession } from './wasm-runtime';
 import { wasm } from './worker-wasm.ts';
 import type { ActiveDocument, DisplayDocument } from './worker-documents.ts';
+import { canvasContext } from './worker-display.ts';
 
-export function canvasContext(width: number, height: number, willReadFrequently = true) {
-	const canvas = new OffscreenCanvas(width, height);
-	const context = canvas.getContext('2d', { willReadFrequently });
-	if (!context) throw new Error('Unable to create an image canvas');
-	return context;
-}
-
-export function imageData(pixels: Uint8Array, width: number, height: number) {
-	return new ImageData(new Uint8ClampedArray(pixels), width, height);
-}
+export { canvasContext, imageData } from './worker-display.ts';
 
 export function displayTransform(
 	active: DisplayDocument,
