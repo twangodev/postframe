@@ -15,12 +15,14 @@ import { renderPreviewImage, renderScope, sourceImage } from './worker-render.ts
 import { renderTile } from './worker-tiles.ts';
 import { setMaskCompositors } from './worker-masks.ts';
 import { exportDocument } from './worker-export.ts';
+import { rasterizeRange } from './worker-ranges.ts';
 
 export type {
 	DevelopedMaskInput,
 	DevelopPhase,
 	DevelopProgress,
 	MaskEdgeInput,
+	RangeComponentInput,
 	RawFrameHandleInput,
 	RawInspection,
 	RawMetadata,
@@ -146,6 +148,21 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 				closeDocument();
 				post({ id: message.id, type: 'closed' });
 				break;
+			case 'rasterize-range': {
+				const source = await sourceImage(activeDocument(), message.maxDimension);
+				const alpha = rasterizeRange(source, message.component).buffer as ArrayBuffer;
+				post(
+					{
+						id: message.id,
+						type: 'range-rasterized',
+						width: source.width,
+						height: source.height,
+						alpha
+					},
+					[alpha]
+				);
+				break;
+			}
 		}
 	} catch (error) {
 		// Stringifying for the client drops the stack, which is the only thing

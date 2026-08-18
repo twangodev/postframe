@@ -15,6 +15,8 @@ export const WASM_BINDINGS = {
 	validate_raw: { rust: 'validate_raw', worker: 'validate' },
 	inspect_raw: { rust: 'inspect_raw', worker: 'inspect' },
 	encode_export_jpeg: { rust: 'encode_export_jpeg', worker: 'export' },
+	luminance_range_mask: { rust: 'luminance_range_mask', worker: 'rasterize-range' },
+	color_range_mask: { rust: 'color_range_mask', worker: 'rasterize-range' },
 	display_transform: {
 		rust: 'DisplayTransform::new',
 		worker: ['open-display', 'preview', 'tile', 'export']
@@ -81,6 +83,8 @@ export const WASM_BINDINGS = {
 	| 'validate_raw'
 	| 'inspect_raw'
 	| 'encode_export_jpeg'
+	| 'luminance_range_mask'
+	| 'color_range_mask'
 	| 'display_transform'
 	| 'display_free'
 	| 'apply_display_rgba'
@@ -192,7 +196,9 @@ export const WASM_TODOS = {
 		bindings: [
 			'developed_tile_compositor',
 			'developed_tile_compositor_free',
-			'composite_developed_rgba'
+			'composite_developed_rgba',
+			'luminance_range_mask',
+			'color_range_mask'
 		],
 		planned: ['brush and gradient rasterizers']
 	},
