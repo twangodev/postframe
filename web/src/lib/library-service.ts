@@ -21,6 +21,7 @@ import {
 	parseEditDocument,
 	type EditDocument
 } from './edit-document.ts';
+import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
@@ -197,6 +198,18 @@ export class LibraryService {
 
 	saveStacks(stacks: readonly LibraryStack[], changedPhotos: ReadonlyMap<string, string | null>) {
 		return this.catalog.saveStacks(stacks, changedPhotos);
+	}
+
+	listPresets() {
+		return this.catalog.listPresets();
+	}
+
+	savePreset(preset: Preset) {
+		return this.catalog.savePreset(presetSchema.parse(preset));
+	}
+
+	deletePreset(presetId: string) {
+		return this.catalog.deletePreset(presetId);
 	}
 
 	async deletePhoto(photoId: string): Promise<CleanupResult> {

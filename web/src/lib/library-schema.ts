@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const LIBRARY_VERSION = 1;
 
-const identifierSchema = z.string().regex(/^[a-z0-9-]+$/);
+export const identifierSchema = z.string().regex(/^[a-z0-9-]+$/);
 export const storageNameSchema = z.string().regex(/^[a-z0-9-]+\.[a-z0-9]+$/);
 const sourceSchema = z.object({
 	kind: z.enum(['raw', 'image']),

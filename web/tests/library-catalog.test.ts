@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { LibraryCatalog } from '../src/lib/library-catalog.ts';
+import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
+import { createPreset } from '../src/lib/preset.ts';
 import { renderCacheStorageName } from '../src/lib/render-cache.ts';
 import type { LibraryManifest } from '../src/lib/library-schema.ts';
 
@@ -238,5 +240,77 @@ test('stays usable for new imports after clearing', async () => {
 		assert.equal(resolution.additions.length, 1);
 	} finally {
 		await catalog.clear();
+	}
+});
+
+test('round-trips presets newest first and deletes them by id', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const warm = createPreset(
+			'Warm',
+			defaultDevelopSettings(),
+			['light'],
+			'2026-08-18T10:00:00.000Z'
+		);
+		const cool = createPreset(
+			'Cool',
+			defaultDevelopSettings(),
+			['color'],
+			'2026-08-18T11:00:00.000Z'
+		);
+		await catalog.savePreset(warm);
+		await catalog.savePreset(cool);
+		assert.deepEqual(await catalog.listPresets(), [cool, warm]);
+
+		const touched = {
+			...warm,
+			groups: ['light' as const, 'color' as const],
+			updatedAt: '2026-08-18T12:00:00.000Z'
+		};
+		await catalog.savePreset(touched);
+		assert.deepEqual(await catalog.listPresets(), [touched, cool]);
+
+		await catalog.deletePreset(cool.id);
+		assert.deepEqual(await catalog.listPresets(), [touched]);
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('rejects a second preset with the same normalized name', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		const warm = createPreset(
+			'Warm',
+			defaultDevelopSettings(),
+			['light'],
+			'2026-08-18T10:00:00.000Z'
+		);
+		await catalog.savePreset(warm);
+		await assert.rejects(
+			catalog.savePreset(
+				createPreset(' WARM ', defaultDevelopSettings(), ['color'], '2026-08-18T11:00:00.000Z')
+			)
+		);
+		assert.deepEqual(await catalog.listPresets(), [warm]);
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('clearing the catalog empties the presets too', async () => {
+	const name = `postframe-test-${crypto.randomUUID()}`;
+	const catalog = new LibraryCatalog(name);
+	await catalog.saveLibrary(manifest());
+	await catalog.savePreset(
+		createPreset('Warm', defaultDevelopSettings(), ['light'], '2026-08-18T10:00:00.000Z')
+	);
+	await catalog.clear();
+
+	const reopened = new LibraryCatalog(name);
+	try {
+		assert.deepEqual(await reopened.listPresets(), []);
+	} finally {
+		await reopened.clear();
 	}
 });
