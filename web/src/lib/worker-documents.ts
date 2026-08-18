@@ -238,7 +238,9 @@ function flushRawCacheWrite() {
 	pendingCacheWrite = null;
 	if (!pending || document?.kind !== 'raw' || document.session !== pending.session) return;
 	const bytes = pending.session.cache_bytes();
-	void measureAsync('cache-write', () => writeFileHandle(pending.cache, bytes)).catch(() => {});
+	void measureAsync('cache-write', () => writeFileHandle(pending.cache, bytes))
+		.then(() => post({ id: 0, type: 'storage-written' }))
+		.catch(() => {});
 }
 
 export async function openDisplayDocument(message: Extract<Request, { type: 'open-display' }>) {
