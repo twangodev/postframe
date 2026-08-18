@@ -45,6 +45,29 @@ impl DetailSettings {
         vec![FINE_BLUR_FRACTION, COARSE_BLUR_FRACTION]
     }
 
+    /// Pixels of context a tile needs on every side, in its own (binned)
+    /// pixels, so its cleaning and planes match a whole-image pass: the widest
+    /// plane's reach, plus what the cleaning it reads reached itself.
+    pub fn apron(&self, image: (usize, usize), bin: usize) -> usize {
+        let planes = self
+            .blur_radii()
+            .into_iter()
+            .map(|fraction| blur_footprint(blur_radius(fraction, image, bin)))
+            .max()
+            .unwrap_or(0);
+        planes + self.noise_footprint()
+    }
+
+    /// How far `reduce_noise` reads from a pixel: each active pass reads a
+    /// neighbourhood of the previous pass's output, so the reach compounds.
+    fn noise_footprint(&self) -> usize {
+        [self.noise_luminance, self.noise_color]
+            .into_iter()
+            .filter(|amount| *amount > 0.0)
+            .count()
+            * NOISE_RADIUS
+    }
+
     pub fn validated(&self) -> Result<()> {
         let within_range = within(&[self.texture, self.clarity, self.dehaze], -100.0, 100.0)
             && within(&[self.sharpen_amount], 0.0, 150.0)
@@ -150,6 +173,32 @@ impl DetailPlanes {
     pub fn byte_len(&self) -> usize {
         (self.fine.len() + self.coarse.len()) * std::mem::size_of::<f32>()
     }
+}
+
+/// The tile-side work the spatial stages read: the tile cleaned by the noise
+/// controls, then its blur planes built from the cleaned luminance, so both
+/// depend only on the source and the noise controls.
+pub struct PreparedDetail {
+    pub cleaned: Option<Vec<[f32; 3]>>,
+    pub planes: Option<DetailPlanes>,
+}
+
+pub fn prepare(
+    rgb: &[[f32; 3]],
+    region: DevelopedTileRegion,
+    tile: (usize, usize),
+    bin: usize,
+    settings: &DetailSettings,
+) -> PreparedDetail {
+    let cleaned = reduce_noise(rgb, tile, settings);
+    let planes = DetailPlanes::build(
+        cleaned.as_deref().unwrap_or(rgb),
+        region,
+        tile,
+        bin,
+        settings,
+    );
+    PreparedDetail { cleaned, planes }
 }
 
 /// The presence and detail stages compiled from their controls.
@@ -342,6 +391,17 @@ fn local_contrast(base: &[f32], size: (usize, usize), radius: usize) -> Vec<f32>
 pub fn blur_radius(fraction: f32, image: (usize, usize), bin: usize) -> usize {
     let extent = image.0.max(image.1) as f32 / bin.max(1) as f32;
     ((fraction * extent).round().max(1.0)) as usize
+}
+
+/// How far one blurred plane value reads from its own position: the kernel's
+/// radius, or, once the blur runs on a decimated grid, the two coarse cells the
+/// magnified value interpolates between and everything their own blur touched.
+pub fn blur_footprint(radius: usize) -> usize {
+    let stride = radius.div_ceil(MAX_DIRECT_BLUR_RADIUS);
+    if stride <= 1 {
+        return radius;
+    }
+    (radius.div_ceil(stride) + 2) * stride
 }
 
 fn gaussian_kernel(radius: usize) -> Vec<f32> {
@@ -839,6 +899,178 @@ mod tests {
                 "luminance moved from {source} to {cleaned}"
             );
         }
+    }
+
+    #[test]
+    fn preparing_a_tile_cleans_it_before_building_its_planes() {
+        let size = (24, 18);
+        let tile = noisy_tile(size);
+        let region = DevelopedTileRegion {
+            image_width: 240,
+            image_height: 180,
+            x: 24,
+            y: 36,
+            width: 24,
+            height: 18,
+        };
+        let settings = DetailSettings {
+            clarity: 50.0,
+            noise_luminance: 80.0,
+            ..DetailSettings::NEUTRAL
+        };
+        let prepared = prepare(&tile, region, size, 1, &settings);
+        let cleaned = reduce_noise(&tile, size, &settings).unwrap();
+        assert_eq!(prepared.cleaned.as_deref(), Some(cleaned.as_slice()));
+        let planes = DetailPlanes::build(&cleaned, region, size, 1, &settings).unwrap();
+        let prepared_planes = prepared.planes.unwrap();
+        assert_eq!(prepared_planes.fine, planes.fine);
+        assert_eq!(prepared_planes.coarse, planes.coarse);
+        let unprepared = DetailPlanes::build(&tile, region, size, 1, &settings).unwrap();
+        assert_ne!(
+            prepared_planes.fine, unprepared.fine,
+            "the planes should read the cleaned tile"
+        );
+
+        let untouched = prepare(&tile, region, size, 1, &DetailSettings::NEUTRAL);
+        assert!(untouched.cleaned.is_none() && untouched.planes.is_none());
+    }
+
+    #[test]
+    fn a_blurred_value_reads_no_further_than_its_footprint() {
+        let (width, height) = (1200, 3);
+        for radius in [1usize, 3, 24, 25, 48, 100, 180] {
+            let footprint = blur_footprint(radius);
+            for spike in [0usize, 493, 600, 1199] {
+                let mut plane = vec![0.0; width * height];
+                for y in 0..height {
+                    plane[y * width + spike] = 1.0;
+                }
+                let blurred = blur_plane(&plane, (width, height), radius);
+                let row = &blurred[width..2 * width];
+                for (x, value) in row.iter().enumerate() {
+                    if x.abs_diff(spike) > footprint {
+                        assert_eq!(
+                            *value,
+                            0.0,
+                            "radius {radius} reached {} past its footprint {footprint}",
+                            x.abs_diff(spike)
+                        );
+                    }
+                }
+                let reach = row
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, value)| **value != 0.0)
+                    .map(|(x, _)| x.abs_diff(spike))
+                    .max()
+                    .unwrap();
+                assert!(
+                    reach + radius.div_ceil(MAX_DIRECT_BLUR_RADIUS) >= footprint,
+                    "radius {radius} at {spike} reached only {reach} of footprint {footprint}"
+                );
+            }
+            assert!(footprint >= radius);
+        }
+    }
+
+    #[test]
+    fn cleaning_a_padded_window_matches_the_whole_tile_inside_the_footprint() {
+        let size = (40, 30);
+        let tile = noisy_tile(size);
+        let window = (10..30, 8..22);
+        let excerpt = |tile: &[[f32; 3]], pad: usize| {
+            let columns = window.0.start - pad..window.0.end + pad;
+            let rows = window.1.start - pad..window.1.end + pad;
+            let width = columns.len();
+            let pixels: Vec<[f32; 3]> = rows
+                .clone()
+                .flat_map(|y| tile[y * size.0 + columns.start..y * size.0 + columns.end].to_vec())
+                .collect();
+            (pixels, (width, rows.len()))
+        };
+        let inside = |cleaned: &[[f32; 3]], stride: usize, origin: (usize, usize)| {
+            (window.1.clone())
+                .flat_map(|y| {
+                    let start = (y - origin.1) * stride + window.0.start - origin.0;
+                    cleaned[start..start + window.0.len()].to_vec()
+                })
+                .collect::<Vec<_>>()
+        };
+        for settings in [
+            DetailSettings {
+                noise_luminance: 100.0,
+                ..DetailSettings::NEUTRAL
+            },
+            DetailSettings {
+                noise_color: 100.0,
+                ..DetailSettings::NEUTRAL
+            },
+            DetailSettings {
+                noise_luminance: 60.0,
+                noise_color: 80.0,
+                ..DetailSettings::NEUTRAL
+            },
+        ] {
+            let whole = inside(
+                &reduce_noise(&tile, size, &settings).unwrap(),
+                size.0,
+                (0, 0),
+            );
+            let padded_by = |pad: usize| {
+                let (excerpt, excerpt_size) = excerpt(&tile, pad);
+                let cleaned = reduce_noise(&excerpt, excerpt_size, &settings).unwrap();
+                inside(
+                    &cleaned,
+                    excerpt_size.0,
+                    (window.0.start - pad, window.1.start - pad),
+                )
+            };
+            assert_eq!(padded_by(settings.noise_footprint()), whole);
+            assert_ne!(padded_by(NOISE_RADIUS - 1), whole);
+        }
+        assert_eq!(DetailSettings::NEUTRAL.noise_footprint(), 0);
+    }
+
+    #[test]
+    fn the_apron_covers_the_widest_plane_and_the_cleaning_it_reads() {
+        let clarity = DetailSettings {
+            clarity: 40.0,
+            ..DetailSettings::NEUTRAL
+        };
+        assert_eq!(DetailSettings::NEUTRAL.apron((6000, 4000), 1), 0);
+        assert_eq!(
+            DetailSettings {
+                dehaze: 60.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .apron((6000, 4000), 1),
+            0,
+            "dehaze reads no neighbourhood"
+        );
+        assert_eq!(clarity.apron((6000, 4000), 1), blur_footprint(180));
+        assert_eq!(clarity.apron((3000, 2000), 1), blur_footprint(90));
+        assert_eq!(clarity.apron((6000, 4000), 4), blur_footprint(45));
+        assert_eq!(clarity.apron((6000, 4000), 8), 23);
+        assert!(clarity.apron((6000, 4000), 1) > clarity.apron((3000, 2000), 1));
+        assert!(clarity.apron((6000, 4000), 1) > clarity.apron((6000, 4000), 4));
+        assert_eq!(
+            DetailSettings {
+                noise_luminance: 30.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .apron((6000, 4000), 1),
+            NOISE_RADIUS
+        );
+        assert_eq!(
+            DetailSettings {
+                noise_luminance: 30.0,
+                noise_color: 30.0,
+                sharpen_amount: 50.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .apron((6000, 4000), 1),
+            blur_footprint(180) + 2 * NOISE_RADIUS
+        );
     }
 
     #[test]

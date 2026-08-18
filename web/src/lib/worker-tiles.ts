@@ -9,7 +9,8 @@ import type { WasmSession } from './wasm-runtime';
 import type { LinearTileSource } from './webgpu-renderer.ts';
 import { wasm } from './worker-wasm.ts';
 import type { RenderTileRequest } from './worker-protocol.ts';
-import { canvasContext, displayTransform, imageData } from './worker-render.ts';
+import { canvasContext, developDisplayRegion, imageData } from './worker-display.ts';
+import { displayTransform } from './worker-render.ts';
 import { compositeDevelopedTile, hasMaskCompositors } from './worker-masks.ts';
 import type { ActiveDocument, RawDocument } from './worker-documents.ts';
 
@@ -89,37 +90,14 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 		}
 	}
 
-	const width = Math.ceil(request.width / request.bin);
-	const height = Math.ceil(request.height / request.bin);
-	const context = canvasContext(width, height);
-	context.imageSmoothingEnabled = request.bin > 1;
-	context.imageSmoothingQuality = 'high';
-	context.drawImage(
+	const developed = developDisplayRegion(
 		active.bitmap,
-		request.x,
-		request.y,
-		request.width,
-		request.height,
-		0,
-		0,
-		width,
-		height
+		displayTransform(active, request.adjustments, request.crop),
+		request,
+		{ width: active.bitmap.width, height: active.bitmap.height }
 	);
-	const pixels = context.getImageData(0, 0, width, height);
-	const adjusted = displayTransform(active, request.adjustments, request.crop).apply_tile_rgba(
-		new Uint8Array(pixels.data),
-		width,
-		height,
-		{
-			imageWidth: active.bitmap.width,
-			imageHeight: active.bitmap.height,
-			x: request.x,
-			y: request.y,
-			width: request.width,
-			height: request.height
-		}
-	);
-	context.putImageData(imageData(adjusted, width, height), 0, 0);
+	const context = canvasContext(developed.width, developed.height, false);
+	context.putImageData(developed, 0, 0);
 	return context.canvas.transferToImageBitmap();
 }
 

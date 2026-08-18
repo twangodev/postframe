@@ -1,6 +1,6 @@
 use crate::composite::DevelopedTileRegion;
 use crate::curve::{CHANNEL_CURVE_SAMPLES, CurvePoints, CurveSettings, ToneCurve};
-use crate::detail::{DetailPlanes, DetailSettings, DetailTransform};
+use crate::detail::{self, DetailPlanes, DetailSettings, DetailTransform};
 use crate::effects::{self, EffectsSettings, VignetteFrame};
 use crate::grade::{ColorSettings, ColorTransform};
 use crate::grading::{GradingSettings, GradingTransform};
@@ -215,6 +215,51 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
+    /// The display path with the spatial stages: cleans the tile, builds its
+    /// planes from the display-linear rgb, then runs the full chain over the
+    /// region of the image the tile covers. Neutral detail leaves the bytes
+    /// exactly as `apply_display_rgba8_at` would.
+    pub fn apply_display_rgba8_prepared(
+        &self,
+        rgba: &[u8],
+        tile: (usize, usize),
+        region: DevelopedTileRegion,
+        bin: usize,
+    ) -> Result<Vec<u8>> {
+        if rgba.len() != tile.0.saturating_mul(tile.1).saturating_mul(4) {
+            return Err(Error::Unsupported("RGBA buffer size mismatch"));
+        }
+        let (pixels, _) = rgba.as_chunks::<4>();
+        let linear = parallel::map_pixels(pixels, |&[red, green, blue, _]| {
+            [[red, green, blue].map(srgb_to_linear)]
+        });
+        let prepared = detail::prepare(&linear, region, tile, bin, &self.settings.detail);
+        let mut adjusted = rgba.to_vec();
+        if let Some(cleaned) = &prepared.cleaned {
+            for (pixel, cleaned) in adjusted.chunks_exact_mut(4).zip(cleaned) {
+                pixel[..3].copy_from_slice(&cleaned.map(linear_to_srgb));
+            }
+        }
+        parallel::fill_rows(&mut adjusted, tile.0 * 4, |output_y, row| {
+            for (output_x, pixel) in row.chunks_exact_mut(4).enumerate() {
+                let developed = self.apply_display_pixel_prepared(
+                    [pixel[0], pixel[1], pixel[2]],
+                    region.pixel_context((output_x, output_y), tile),
+                    prepared.planes.as_ref(),
+                );
+                pixel[..3].copy_from_slice(&developed);
+            }
+        });
+        Ok(adjusted)
+    }
+
+    /// Pixels of context a display tile needs on each side, in its own
+    /// (binned) pixels, so its spatial stages match a whole-image pass; zero
+    /// while the detail group is neutral.
+    pub fn detail_apron(&self, image: (usize, usize), bin: usize) -> usize {
+        self.settings.detail.apron(image, bin)
+    }
+
     /// The plane-free chain the masks share, which skips every stage that needs
     /// to know where a pixel is.
     pub fn apply_display_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
@@ -230,6 +275,20 @@ impl DevelopTransform {
     /// than leaving them absent from both.
     pub fn apply_display_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
         let shaded = self.vignetted(self.apply_chroma_pixel(pixel), at);
+        let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
+        self.grained(toned, at)
+    }
+
+    /// The display chain with the spatial stages in place: every stage the
+    /// tile chain runs, over the light response the display path uses.
+    fn apply_display_pixel_prepared(
+        &self,
+        pixel: [u8; 3],
+        at: PixelContext,
+        planes: Option<&DetailPlanes>,
+    ) -> [u8; 3] {
+        let presented = self.presented(self.apply_chroma_pixel(pixel), at, planes);
+        let shaded = self.vignetted(presented, at);
         let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
         self.grained(toned, at)
     }
@@ -815,6 +874,255 @@ mod tests {
                 "stage {stage} never reached the tile"
             );
         }
+    }
+
+    fn textured_display_tile(size: (usize, usize)) -> Vec<u8> {
+        (0..size.0 * size.1)
+            .flat_map(|index| {
+                let (x, y) = (index % size.0, index / size.0);
+                let edge = if x < size.0 / 2 { 60 } else { 190 };
+                let ripple = ((x * 5 + y * 3) % 7) as u8 * 6;
+                [
+                    edge + ripple,
+                    200 - edge / 2 + ripple / 2,
+                    edge / 2 + 40 + ripple,
+                    255 - (index % 3) as u8,
+                ]
+            })
+            .collect()
+    }
+
+    fn placed(
+        image: (usize, usize),
+        origin: (usize, usize),
+        size: (usize, usize),
+        bin: usize,
+    ) -> DevelopedTileRegion {
+        DevelopedTileRegion {
+            image_width: image.0,
+            image_height: image.1,
+            x: origin.0,
+            y: origin.1,
+            width: size.0 * bin,
+            height: size.1 * bin,
+        }
+    }
+
+    fn display_linear(rgba: &[u8]) -> Vec<[f32; 3]> {
+        rgba.chunks_exact(4)
+            .map(|pixel| [pixel[0], pixel[1], pixel[2]].map(srgb_to_linear))
+            .collect()
+    }
+
+    #[test]
+    fn a_neutral_detail_group_renders_the_display_tile_exactly_as_before() {
+        let size = (8, 8);
+        let region = placed((64, 48), (16, 8), size, 2);
+        let tile = textured_display_tile(size);
+        let settings = DevelopSettings {
+            effects: EffectsSettings {
+                vignette_amount: -60.0,
+                grain_amount: 40.0,
+                ..EffectsSettings::NEUTRAL
+            },
+            curve: CurveSettings {
+                red: CurvePoints(vec![
+                    CurvePoint { x: 0.0, y: 0.0 },
+                    CurvePoint { x: 0.5, y: 0.6 },
+                    CurvePoint { x: 1.0, y: 1.0 },
+                ]),
+                ..CurveSettings::neutral()
+            },
+            ..vivid()
+        };
+        let transform = DevelopTransform::new(settings).unwrap();
+        assert_eq!(
+            transform
+                .apply_display_rgba8_prepared(&tile, size, region, 2)
+                .unwrap(),
+            transform
+                .apply_display_rgba8_at(&tile, size, region)
+                .unwrap()
+        );
+        assert!(
+            transform
+                .apply_display_rgba8_prepared(&tile[..7], size, region, 2)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn the_detail_stages_run_between_color_and_light_on_the_display_chain() {
+        let size = (8, 8);
+        let region = placed((64, 48), (16, 8), size, 2);
+        let tile = textured_display_tile(size);
+        let settings = presence();
+        let transform = DevelopTransform::new(settings.clone()).unwrap();
+        let planes =
+            DetailPlanes::build(&display_linear(&tile), region, size, 2, &settings.detail).unwrap();
+        let color = ColorTransform::new(settings.color).unwrap();
+        let light = LightTransform::new(settings.light).unwrap();
+        let detail = DetailTransform::new(settings.detail);
+        let developed = transform
+            .apply_display_rgba8_prepared(&tile, size, region, 2)
+            .unwrap();
+        for (index, (developed, source)) in developed
+            .chunks_exact(4)
+            .zip(tile.chunks_exact(4))
+            .enumerate()
+        {
+            let at = region.pixel_context((index % size.0, index / size.0), size);
+            let staged = light.apply_display_pixel(detail.apply(
+                color.apply_display_pixel([source[0], source[1], source[2]]),
+                Some(planes.sample(at)),
+            ));
+            assert_eq!(
+                &developed[..3],
+                &staged,
+                "pixel {index} left the staged order"
+            );
+            assert_eq!(developed[3], source[3], "pixel {index} lost its alpha");
+        }
+    }
+
+    #[test]
+    fn every_stage_reaches_the_display_chain() {
+        let size = (4, 4);
+        let region = whole(4, 4);
+        let source: Vec<u8> = (0..16)
+            .flat_map(|index| {
+                let shade = 40 + index as u8 * 12;
+                [shade, 255 - shade, 128, 255]
+            })
+            .collect();
+        let tile = |settings: DevelopSettings| {
+            DevelopTransform::new(settings)
+                .unwrap()
+                .apply_display_rgba8_prepared(&source, size, region, 1)
+                .unwrap()
+        };
+        let neutral = tile(DevelopSettings::neutral());
+        assert_eq!(neutral, source);
+        let bent = CurvePoints(vec![
+            CurvePoint { x: 0.0, y: 0.0 },
+            CurvePoint { x: 0.5, y: 0.62 },
+            CurvePoint { x: 1.0, y: 1.0 },
+        ]);
+
+        let stages: [(&str, DevelopSettings); 11] = [
+            ("1 white balance", tweak(|s| s.color.temperature = 70.0)),
+            (
+                "2 mixer",
+                tweak(|s| {
+                    s.mixer.aqua = MixerBand {
+                        hue: 80.0,
+                        saturation: -70.0,
+                        luminance: 60.0,
+                    }
+                }),
+            ),
+            (
+                "3 grading",
+                tweak(|s| {
+                    s.grading.shadows = GradingWheel {
+                        hue: 40.0,
+                        saturation: 90.0,
+                        luminance: 50.0,
+                    }
+                }),
+            ),
+            ("4 saturation", tweak(|s| s.color.saturation = -80.0)),
+            ("5 dehaze", tweak(|s| s.detail.dehaze = 70.0)),
+            ("6 clarity", tweak(|s| s.detail.clarity = 90.0)),
+            ("7 vignette", tweak(|s| s.effects.vignette_amount = -90.0)),
+            ("8 light", tweak(|s| s.light.contrast = 60.0)),
+            (
+                "8 luminance curve",
+                tweak(|s| s.curve.luminance = bent.clone()),
+            ),
+            ("9 channel curves", tweak(|s| s.curve.red = bent.clone())),
+            ("10 grain", tweak(|s| s.effects.grain_amount = 100.0)),
+        ];
+        for (stage, settings) in stages {
+            assert_ne!(
+                tile(settings),
+                neutral,
+                "stage {stage} never reached the display tile"
+            );
+        }
+    }
+
+    #[test]
+    fn clarity_moves_a_display_tile_with_an_edge_and_spares_a_flat_one() {
+        let size = (8, 8);
+        let region = placed((64, 48), (16, 8), size, 2);
+        let clarity = DevelopTransform::new(tweak(|s| s.detail.clarity = 100.0)).unwrap();
+        let textured = textured_display_tile(size);
+        let developed = clarity
+            .apply_display_rgba8_prepared(&textured, size, region, 2)
+            .unwrap();
+        assert_ne!(developed, textured);
+        for (developed, source) in developed.chunks_exact(4).zip(textured.chunks_exact(4)) {
+            assert_eq!(developed[3], source[3]);
+        }
+        let flat: Vec<u8> = [128, 128, 128, 255].repeat(size.0 * size.1);
+        assert_eq!(
+            clarity
+                .apply_display_rgba8_prepared(&flat, size, region, 2)
+                .unwrap(),
+            flat
+        );
+    }
+
+    #[test]
+    fn noise_reduction_calms_a_display_tile() {
+        let size = (24, 18);
+        let region = placed((240, 180), (24, 36), size, 1);
+        let noisy: Vec<u8> = (0..size.0 * size.1)
+            .flat_map(|index| {
+                let (x, y) = (index % size.0, index / size.0);
+                let base = if x < size.0 / 2 { 80.0 } else { 180.0 };
+                let grain = ((x * 7 + y * 13) % 5) as f32 * 4.0 - 8.0;
+                let shade = (base + grain) as u8;
+                [shade, shade, shade, 255]
+            })
+            .collect();
+        let calmed = DevelopTransform::new(tweak(|s| s.detail.noise_luminance = 100.0))
+            .unwrap()
+            .apply_display_rgba8_prepared(&noisy, size, region, 1)
+            .unwrap();
+        let spread = |tile: &[u8]| {
+            let values: Vec<f32> = (0..size.1)
+                .flat_map(|y| (2..size.0 / 2 - 2).map(move |x| tile[(y * size.0 + x) * 4] as f32))
+                .collect();
+            let mean = values.iter().sum::<f32>() / values.len() as f32;
+            values
+                .iter()
+                .map(|value| (value - mean).powi(2))
+                .sum::<f32>()
+                / values.len() as f32
+        };
+        assert!(
+            spread(&calmed) < spread(&noisy) * 0.5,
+            "variance went {} to {}",
+            spread(&noisy),
+            spread(&calmed)
+        );
+    }
+
+    #[test]
+    fn the_detail_apron_is_zero_when_neutral_and_tracks_the_image_and_bin() {
+        let neutral = DevelopTransform::new(vivid()).unwrap();
+        assert_eq!(neutral.detail_apron((6000, 4000), 1), 0);
+        let clarity = DevelopTransform::new(tweak(|s| s.detail.clarity = 50.0)).unwrap();
+        let large = clarity.detail_apron((6000, 4000), 1);
+        let small = clarity.detail_apron((3000, 2000), 1);
+        let binned = clarity.detail_apron((6000, 4000), 4);
+        assert!(large > small && small > 0, "{large} vs {small}");
+        assert!(large > binned && binned > 0, "{large} vs {binned}");
+        assert_eq!(large, clarity.settings().detail.apron((6000, 4000), 1));
+        let cleaned = DevelopTransform::new(tweak(|s| s.detail.noise_color = 50.0)).unwrap();
+        assert!(cleaned.detail_apron((6000, 4000), 64) > 0);
     }
 
     fn tweak(change: impl FnOnce(&mut DevelopSettings)) -> DevelopSettings {
