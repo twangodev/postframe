@@ -1,3 +1,4 @@
+mod auto;
 mod compositor;
 mod export;
 mod inspect;

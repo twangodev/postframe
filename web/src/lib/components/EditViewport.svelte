@@ -59,7 +59,9 @@
 						? 'cursor-zoom-in'
 						: (activeTool === 'mask-refine' || activeTool === 'mask') && viewport.brushPoint
 							? 'cursor-none'
-							: activeTool === 'object-select' || activeTool.startsWith('mask')
+							: activeTool === 'object-select' ||
+								  activeTool === 'eyedropper' ||
+								  activeTool.startsWith('mask')
 								? 'cursor-crosshair'
 								: 'cursor-default')
 	);
@@ -142,6 +144,7 @@
 						renderRevision={workspace.renderSettings.revision}
 						adjustments={workspace.renderSettings.adjustments}
 						crop={workspace.renderSettings.crop}
+						clipping={workspace.clipping}
 						onRenderSettled={workspace.settleDevelopRender}
 					/>
 					{#if workspace.developPreview?.photoId === active.id}

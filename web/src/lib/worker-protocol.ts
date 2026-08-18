@@ -1,8 +1,10 @@
-import type { DevelopSettings, MaskAdjustments } from './develop-settings';
+import type { ClippingIndicators } from './clipping.ts';
+import type { DevelopSettings, LightSettings, MaskAdjustments } from './develop-settings';
 import type {
 	ColorRangeComponent,
 	LuminanceRangeComponent,
-	NormalizedCrop
+	NormalizedCrop,
+	NormalizedPoint
 } from './edit-document.ts';
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
@@ -69,6 +71,7 @@ export interface RenderTileRequest {
 	adjustments: DevelopSettings;
 	crop: NormalizedCrop | null;
 	tone: boolean;
+	clipping?: ClippingIndicators;
 }
 
 export interface DevelopedMaskInput {
@@ -96,6 +99,11 @@ export interface MaskEdgeInput {
 export type RangeComponentInput =
 	| { type: 'luminance-range'; range: LuminanceRangeComponent['range'] }
 	| { type: 'color-range'; range: ColorRangeComponent['range'] };
+
+/** A point on the image and how far around it to read, in source-image pixels. */
+export interface WhiteBalanceSample extends NormalizedPoint {
+	radius: number;
+}
 
 export type Request =
 	| { id: number; type: 'capabilities'; performance?: boolean }
@@ -147,7 +155,9 @@ export type Request =
 			quality: number;
 	  }
 	| { id: number; type: 'close' }
-	| { id: number; type: 'rasterize-range'; component: RangeComponentInput; maxDimension: number };
+	| { id: number; type: 'rasterize-range'; component: RangeComponentInput; maxDimension: number }
+	| { id: number; type: 'auto-balance'; sample?: WhiteBalanceSample }
+	| { id: number; type: 'auto-tone' };
 
 export type Response =
 	| { id: 0; type: 'performance'; measurement: RenderPerformanceMeasurement }
@@ -188,7 +198,9 @@ export type Response =
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }
 	| { id: number; type: 'error'; message: string }
-	| { id: number; type: 'range-rasterized'; width: number; height: number; alpha: ArrayBuffer };
+	| { id: number; type: 'range-rasterized'; width: number; height: number; alpha: ArrayBuffer }
+	| { id: number; type: 'auto-balance'; temperature: number; tint: number }
+	| { id: number; type: 'auto-tone'; light: LightSettings };
 
 export const post = (message: Response, transfer: Transferable[] = []) =>
 	(self as unknown as Worker).postMessage(message, transfer);

@@ -110,13 +110,6 @@ const toolShortcuts: Record<string, ToolShortcut> = {
 		['slice-select', 'slice selection'],
 		['frame', 'frame']
 	]),
-	j: cycle([
-		['remove', 'remove'],
-		['spot-heal', 'spot healing brush'],
-		['healing-brush', 'healing brush'],
-		['patch', 'patch'],
-		['content-aware-move', 'content-aware move']
-	]),
 	s: cycle([
 		['clone-stamp', 'clone stamp'],
 		['pattern-stamp', 'pattern stamp']

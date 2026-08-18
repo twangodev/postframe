@@ -16,6 +16,7 @@ import { renderTile } from './worker-tiles.ts';
 import { setMaskCompositors } from './worker-masks.ts';
 import { exportDocument } from './worker-export.ts';
 import { rasterizeRange } from './worker-ranges.ts';
+import { autoBalance, autoTone } from './worker-auto.ts';
 
 export type {
 	DevelopedMaskInput,
@@ -31,7 +32,8 @@ export type {
 	RenderTileRequest,
 	Request,
 	Response,
-	SourceImage
+	SourceImage,
+	WhiteBalanceSample
 } from './worker-protocol.ts';
 
 self.onmessage = async (event: MessageEvent<Request>) => {
@@ -161,6 +163,16 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 					},
 					[alpha]
 				);
+				break;
+			}
+			case 'auto-balance': {
+				const balance = await autoBalance(activeDocument(), message.sample);
+				post({ id: message.id, type: 'auto-balance', ...balance });
+				break;
+			}
+			case 'auto-tone': {
+				const light = await autoTone(activeDocument());
+				post({ id: message.id, type: 'auto-tone', light });
 				break;
 			}
 		}

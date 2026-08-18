@@ -27,7 +27,9 @@
 	<span class="shrink-0 font-medium text-text">{activeToolLabel}</span>
 	<span class="h-4 w-px shrink-0 bg-subtle"></span>
 
-	{#if activeTool === 'object-select'}
+	{#if activeTool === 'eyedropper'}
+		<span class="shrink-0">click a neutral grey or white</span>
+	{:else if activeTool === 'object-select'}
 		<span class="shrink-0">paint to include</span>
 		<span class="shrink-0 text-muted">
 			<kbd class="font-mono text-text">alt</kbd> paint to exclude
@@ -35,7 +37,7 @@
 	{:else if selectionTools.has(activeTool)}
 		<!-- TODO(WASM_TODOS.editorTools): implement remaining pixel selection tools. -->
 		<div class="flex h-6 shrink-0 rounded border border-subtle bg-surface p-0.5">
-			{#each ['new', 'add', 'subtract', 'intersect'] as mode, index}
+			{#each ['new', 'add', 'subtract', 'intersect'] as mode, index (mode)}
 				<button
 					type="button"
 					title={`${mode} selection`}

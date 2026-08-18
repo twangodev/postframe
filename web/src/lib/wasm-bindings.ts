@@ -17,6 +17,9 @@ export const WASM_BINDINGS = {
 	encode_export_jpeg: { rust: 'encode_export_jpeg', worker: 'export' },
 	luminance_range_mask: { rust: 'luminance_range_mask', worker: 'rasterize-range' },
 	color_range_mask: { rust: 'color_range_mask', worker: 'rasterize-range' },
+	neutralizing_balance: { rust: 'neutralizing_balance', worker: 'auto-balance' },
+	auto_white_balance: { rust: 'auto_white_balance', worker: 'auto-balance' },
+	auto_tone: { rust: 'auto_tone', worker: 'auto-tone' },
 	display_transform: {
 		rust: 'DisplayTransform::new',
 		worker: ['open-display', 'preview', 'tile', 'export']
@@ -85,6 +88,9 @@ export const WASM_BINDINGS = {
 	| 'encode_export_jpeg'
 	| 'luminance_range_mask'
 	| 'color_range_mask'
+	| 'neutralizing_balance'
+	| 'auto_white_balance'
+	| 'auto_tone'
 	| 'display_transform'
 	| 'display_free'
 	| 'apply_display_rgba'
@@ -167,6 +173,9 @@ export const WASM_TODOS = {
 			'developed_tile_compositor',
 			'developed_tile_compositor_free',
 			'composite_developed_rgba',
+			'neutralizing_balance',
+			'auto_white_balance',
+			'auto_tone',
 			'preview_jpeg',
 			'preview_frame',
 			'preview_scope',

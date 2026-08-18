@@ -3,6 +3,7 @@ import type { Size } from './photo-viewport.ts';
 import type { RenderTileRequest } from './worker.ts';
 import type { DevelopSettings } from './develop-settings.ts';
 import type { NormalizedCrop } from './edit-document.ts';
+import type { ClippingIndicators } from './clipping.ts';
 
 export const PYRAMID_TILE_SIZE = 512;
 export const PYRAMID_TILE_OVERLAP = 1;
@@ -43,6 +44,7 @@ interface TileSourceOptions {
 	adjustments: DevelopSettings;
 	crop: NormalizedCrop | null;
 	tone: boolean;
+	clipping?: ClippingIndicators;
 	onTileEvent?: (event: PyramidTileEvent) => void;
 }
 
@@ -146,7 +148,8 @@ export function createPostframeTileSource(
 					bin: region.bin,
 					adjustments: options.adjustments,
 					crop: options.crop,
-					tone: options.tone
+					tone: options.tone,
+					...(options.clipping ? { clipping: options.clipping } : {})
 				},
 				state.controller.signal
 			)

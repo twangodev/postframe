@@ -51,6 +51,8 @@ import {
 	type AdjustmentChange,
 	type MaskAdjustmentChange
 } from './adjustment-controls';
+import { AutoAdjustments } from './auto-adjustments';
+import { noClipping, type ClippingIndicators, type ClippingKind } from './clipping';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
@@ -103,6 +105,7 @@ export class WorkspaceState {
 	private readonly painting: MaskPainting;
 	private readonly ranging: MaskRanging;
 	private readonly controls: AdjustmentControls;
+	private readonly auto: AutoAdjustments;
 	private readonly editor: EditorSession;
 	private readonly session: DocumentSession;
 	private readonly organizer: PhotoOrganizer;
@@ -139,6 +142,7 @@ export class WorkspaceState {
 		phase: DevelopPreviewPhase;
 	} | null>(null);
 	imageScope = $state<ImageScopeData | null>(null);
+	clipping = $state<ClippingIndicators>(noClipping());
 	smartMaskStatus = $state<SmartMaskStatus>({
 		phase: 'idle',
 		progress: null,
@@ -218,6 +222,7 @@ export class WorkspaceState {
 		this.painting = new MaskPainting(this.pipeline, this.smartMasks, host);
 		this.ranging = new MaskRanging(this.workerClient, this.pipeline, host);
 		this.controls = new AdjustmentControls(this.develop, this.pipeline, host);
+		this.auto = new AutoAdjustments(this.workerClient, this.controls, host);
 		this.editor = new EditorSession(this.develop, this.pipeline, this.persistence, host);
 		this.session = new DocumentSession(
 			this.libraryService,
@@ -537,6 +542,12 @@ export class WorkspaceState {
 		}
 	};
 
+	autoWhiteBalance = () => this.auto.whiteBalance();
+
+	sampleWhiteBalance = (point: NormalizedPoint) => this.auto.sampleWhiteBalance(point);
+
+	autoTone = () => this.auto.tone();
+
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);
 
@@ -590,6 +601,20 @@ export class WorkspaceState {
 	redo = () => this.editor.redo();
 
 	settleDevelopRender = (revision: number) => this.develop.settle(revision);
+
+	// The indicators are a view over the tiles, so flipping one re-requests
+	// every tile without touching the document.
+	toggleClipping = (kind?: ClippingKind) => {
+		const both = this.clipping.highlights && this.clipping.shadows;
+		this.clipping = kind
+			? { ...this.clipping, [kind]: !this.clipping[kind] }
+			: { highlights: !both, shadows: !both };
+		this.renderSettings = {
+			adjustments: this.renderSettings.adjustments,
+			crop: this.renderSettings.crop,
+			revision: this.renderSettings.revision + 1
+		};
+	};
 
 	exportPhoto = async (
 		options: { quality: number },

@@ -449,3 +449,52 @@ test('exports through the worker with staged progress and detached masks', async
 	assert.equal((await exported).byteLength, 9);
 	client.destroy();
 });
+
+test('asks the worker for a white balance from a sample or the whole image', async () => {
+	const { client, workers } = setup();
+	const sampled = client.autoBalance({ x: 0.25, y: 0.75, radius: 5 });
+	const whole = client.autoBalance();
+
+	assert.deepEqual(workers[0]?.messages, [
+		{ id: 1, type: 'auto-balance', sample: { x: 0.25, y: 0.75, radius: 5 } },
+		{ id: 2, type: 'auto-balance' }
+	]);
+	workers[0]?.respond({ id: 1, type: 'auto-balance', temperature: 12.5, tint: -4 });
+	workers[0]?.respond({ id: 2, type: 'auto-balance', temperature: -30, tint: 8 });
+	assert.deepEqual(await sampled, { temperature: 12.5, tint: -4 });
+	assert.deepEqual(await whole, { temperature: -30, tint: 8 });
+	client.destroy();
+});
+
+test('asks the worker for auto tone light settings', async () => {
+	const { client, workers } = setup();
+	const tone = client.autoTone();
+	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'auto-tone' }]);
+	const light = { ...neutral, exposure: 0.35, blacks: -12, whites: 20 };
+	workers[0]?.respond({ id: 1, type: 'auto-tone', light });
+	assert.deepEqual(await tone, light);
+	client.destroy();
+});
+
+test('carries clipping indicators to the tile renderer as a plain copy', async () => {
+	const { client, workers } = setup();
+	const clipping = { highlights: true, shadows: false };
+	const tile = client.renderTile({
+		x: 0,
+		y: 0,
+		width: 512,
+		height: 512,
+		bin: 1,
+		adjustments: neutralAdjustments,
+		crop: null,
+		tone: true,
+		clipping
+	});
+	const message = workers[0]?.messages[0];
+	if (message?.type !== 'tile') throw new Error('expected a tile request');
+	assert.deepEqual(message.clipping, clipping);
+	assert.notEqual(message.clipping, clipping);
+	workers[0]?.respond({ id: 1, type: 'tile', bitmap: {} as ImageBitmap });
+	await tile;
+	client.destroy();
+});

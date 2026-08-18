@@ -15,16 +15,23 @@
 
 	interface Props {
 		workspace: WorkspaceState;
+		activeTool: string;
+		onPickTool: (tool: string, label?: string) => void;
 	}
 
-	let { workspace }: Props = $props();
+	let { workspace, activeTool, onPickTool }: Props = $props();
 
 	let mixerOpen = $state(false);
 </script>
 
 <Tabs.Content value="adjust" class="motion-tab">
 	<div class="border-b border-subtle p-3">
-		<ImageScope data={workspace.imageScope} loading={workspace.documentStatus.kind === 'loading'} />
+		<ImageScope
+			data={workspace.imageScope}
+			loading={workspace.documentStatus.kind === 'loading'}
+			clipping={workspace.clipping}
+			onToggleClipping={workspace.toggleClipping}
+		/>
 	</div>
 
 	<Panel title="Profile" meta="Camera look">
@@ -38,7 +45,7 @@
 
 	<LightSection {workspace} />
 	<ToneCurveSection binding={workspace.globalDevelop} scope={workspace.imageScope} />
-	<ColorSection {workspace} onOpenMixer={() => (mixerOpen = true)} />
+	<ColorSection {workspace} {activeTool} {onPickTool} onOpenMixer={() => (mixerOpen = true)} />
 	<ColorMixerSection binding={workspace.globalDevelop} bind:open={mixerOpen} />
 	<GradingSection binding={workspace.globalDevelop} />
 	<DetailSection {workspace} />
