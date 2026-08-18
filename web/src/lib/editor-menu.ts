@@ -9,7 +9,10 @@ export type EditorMenuAction =
 	| 'close-library'
 	| 'open-github'
 	| 'undo'
-	| 'redo';
+	| 'redo'
+	| 'copy-settings'
+	| 'paste-settings'
+	| 'sync-settings';
 
 export type EditorMenuEntry = MenuEntry<EditorMenuAction>;
 
@@ -43,8 +46,9 @@ export const EDITOR_MENUS: EditorMenu[] = [
 			{ kind: 'action', label: 'redo', action: 'redo', shortcut: '⇧⌘Z' },
 			separator(),
 			{ kind: 'todo', label: 'cut', todo: 'layersAndHistory', shortcut: '⌘X' },
-			{ kind: 'todo', label: 'copy', todo: 'layersAndHistory', shortcut: '⌘C' },
-			{ kind: 'todo', label: 'paste', todo: 'layersAndHistory', shortcut: '⌘V' },
+			{ kind: 'action', label: 'copy settings…', action: 'copy-settings', shortcut: '⇧⌘C' },
+			{ kind: 'action', label: 'paste settings', action: 'paste-settings', shortcut: '⇧⌘V' },
+			{ kind: 'action', label: 'sync settings…', action: 'sync-settings', shortcut: '⇧⌘S' },
 			separator(),
 			{
 				kind: 'submenu',

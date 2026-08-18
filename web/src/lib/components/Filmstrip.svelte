@@ -40,12 +40,16 @@
 					<button
 						{...props}
 						type="button"
+						aria-label={photo.name}
+						aria-pressed={workspace.selectedIds.includes(photo.id)}
 						class="motion-card group relative w-24 shrink-0 cursor-pointer overflow-hidden rounded border bg-canvas {workspace.activePhotoId ===
 						photo.id
 							? 'border-accent'
-							: 'border-subtle hover:border-muted'}"
+							: workspace.selectedIds.includes(photo.id)
+								? 'border-text/70 ring-1 ring-text/40'
+								: 'border-subtle hover:border-muted'}"
 						style={`--motion-delay: ${Math.min(index, 12) * 24}ms`}
-						onclick={() => workspace.selectPhoto(photo.id)}
+						onclick={(event) => workspace.selectPhoto(photo.id, event.metaKey || event.ctrlKey)}
 					>
 						<PhotoVisual {photo} onRequest={workspace.loadThumbnail} />
 						<span

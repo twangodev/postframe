@@ -5,9 +5,12 @@
 	import { Database, Download, Plus, Upload } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import EditorMenuBar from './EditorMenuBar.svelte';
+	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
+	import { defaultDevelopSettings } from '$lib/develop-settings';
 	import type { EditorMenuAction } from '$lib/editor-menu';
+	import { changedGroups } from '$lib/preset';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -19,7 +22,14 @@
 	let { workspace, onImport, onExport }: Props = $props();
 	let importing = $state(false);
 	let storageOpen = $state(false);
+	let copyOpen = $state(false);
+	let syncOpen = $state(false);
 	let importInput: HTMLInputElement;
+
+	const editedGroups = $derived(
+		changedGroups(workspace.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings())
+	);
+	const syncTargetCount = $derived(workspace.syncTargetIds.length);
 
 	async function importFiles(list: FileList | null) {
 		if (!list?.length) return;
@@ -56,6 +66,15 @@
 				break;
 			case 'redo':
 				workspace.redo();
+				break;
+			case 'copy-settings':
+				copyOpen = true;
+				break;
+			case 'paste-settings':
+				workspace.pasteSettings();
+				break;
+			case 'sync-settings':
+				if (workspace.canSync) syncOpen = true;
 		}
 	}
 
@@ -71,7 +90,7 @@
 		};
 	}
 
-	function editShortcut(action: 'undo' | 'redo') {
+	function editShortcut(action: EditorMenuAction) {
 		return (event: KeyboardEvent) => {
 			if (workspace.mode !== 'edit' || editableTarget(event.target)) return;
 			event.preventDefault();
@@ -97,7 +116,10 @@
 			'$mod+w': shortcut('close-library'),
 			'$mod+z': editShortcut('undo'),
 			'$mod+Shift+z': editShortcut('redo'),
-			'$mod+y': editShortcut('redo')
+			'$mod+y': editShortcut('redo'),
+			'$mod+Shift+c': editShortcut('copy-settings'),
+			'$mod+Shift+v': editShortcut('paste-settings'),
+			'$mod+Shift+s': editShortcut('sync-settings')
 		})
 	);
 </script>
@@ -227,6 +249,8 @@
 			onAction={runMenuAction}
 			canUndo={workspace.canUndo}
 			canRedo={workspace.canRedo}
+			canPaste={workspace.settingsClipboard !== null}
+			canSync={workspace.canSync}
 		/>
 	{/if}
 </header>
@@ -241,4 +265,22 @@
 	onRequestPersistence={workspace.requestPersistentStorage}
 	onCleanup={workspace.cleanupLocalData}
 	onClearLocalData={workspace.clearLocalData}
+/>
+
+<SettingsGroupDialog
+	bind:open={copyOpen}
+	title="copy settings"
+	description="choose which settings of this photograph to copy."
+	confirmLabel="copy"
+	groups={editedGroups}
+	onConfirm={workspace.copySettings}
+/>
+
+<SettingsGroupDialog
+	bind:open={syncOpen}
+	title="sync settings"
+	description={`apply the chosen settings of this photograph to the ${syncTargetCount} other selected photo${syncTargetCount === 1 ? '' : 's'}.`}
+	confirmLabel="sync"
+	groups={editedGroups}
+	onConfirm={workspace.syncSettings}
 />

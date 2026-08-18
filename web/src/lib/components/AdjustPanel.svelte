@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
-	import { History, Sparkles } from '@lucide/svelte';
+	import { History } from '@lucide/svelte';
 	import ColorMixerSection from './ColorMixerSection.svelte';
 	import ColorSection from './ColorSection.svelte';
 	import DetailSection from './DetailSection.svelte';
 	import EffectsSection from './EffectsSection.svelte';
 	import GradingSection from './GradingSection.svelte';
 	import LightSection from './LightSection.svelte';
+	import PresetsSection from './PresetsSection.svelte';
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
@@ -52,19 +53,7 @@
 		</label>
 	</Panel>
 
-	<Panel title="Presets" open={false}>
-		<div class="space-y-1">
-			{#each ['Clean color', 'Soft highlight', 'Neutral portrait', 'Cinematic dusk'] as preset (preset)}
-				<button
-					type="button"
-					class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-muted lowercase hover:bg-surface hover:text-text"
-				>
-					<Sparkles size={11} />
-					{preset}
-				</button>
-			{/each}
-		</div>
-	</Panel>
+	<PresetsSection {workspace} />
 
 	<Panel title="History" open={false} meta={`${workspace.history.length}`}>
 		<div class="space-y-2 border-l border-subtle pl-3">
