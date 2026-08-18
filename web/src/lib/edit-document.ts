@@ -19,14 +19,29 @@ export const maskKindSchema = z.enum([
 	'object',
 	'subject',
 	'sky',
-	'background'
+	'background',
+	'luminance',
+	'color'
 ]);
 export const maskOperationSchema = z.enum(['add', 'subtract', 'intersect']);
 export const maskPromptLabelSchema = z.enum(['foreground', 'background']);
 
+const unit = z.number().finite().min(0).max(1);
+
 export const normalizedPointSchema = z.object({
-	x: z.number().finite().min(0).max(1),
-	y: z.number().finite().min(0).max(1)
+	x: unit,
+	y: unit
+});
+
+export const luminanceRangeSchema = z
+	.object({ low: unit, high: unit, feather: unit })
+	.refine(({ low, high }) => low <= high, { message: 'luminance range low exceeds its high' });
+
+export const colorRangeSchema = z.object({
+	hue: z.number().finite().min(0).max(360),
+	width: z.number().finite().min(0).max(90),
+	saturationFloor: unit,
+	feather: unit
 });
 
 const boundedRegionSchema = (subject: string) =>
@@ -116,6 +131,14 @@ export const maskComponentSchema = z.discriminatedUnion('type', [
 		radiusY: z.number().finite().positive().max(1),
 		rotation: z.number().finite(),
 		feather: z.number().finite().min(0).max(1)
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('luminance-range'),
+		range: luminanceRangeSchema
+	}),
+	maskComponentBaseSchema.extend({
+		type: z.literal('color-range'),
+		range: colorRangeSchema
 	})
 ]);
 
@@ -161,6 +184,10 @@ export type MaskOperation = z.infer<typeof maskOperationSchema>;
 export type NormalizedPoint = z.infer<typeof normalizedPointSchema>;
 export type NormalizedRegion = z.infer<typeof normalizedRegionSchema>;
 export type MaskComponent = z.infer<typeof maskComponentSchema>;
+export type LuminanceRange = z.infer<typeof luminanceRangeSchema>;
+export type ColorRange = z.infer<typeof colorRangeSchema>;
+export type LuminanceRangeComponent = Extract<MaskComponent, { type: 'luminance-range' }>;
+export type ColorRangeComponent = Extract<MaskComponent, { type: 'color-range' }>;
 export type MaskRaster = z.infer<typeof maskRasterSchema>;
 export type EditMask = z.infer<typeof editMaskSchema>;
 export type NormalizedCrop = z.infer<typeof normalizedCropSchema>;
@@ -210,7 +237,9 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		object: 'object',
 		subject: 'subject',
 		sky: 'sky',
-		background: 'background'
+		background: 'background',
+		luminance: 'Luminance range',
+		color: 'Colour range'
 	};
 	return {
 		id,
@@ -221,6 +250,14 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		edge: defaultMaskEdgeSettings(),
 		adjustments: defaultMaskAdjustments()
 	};
+}
+
+export function defaultLuminanceRange(): LuminanceRange {
+	return { low: 0.5, high: 1, feather: 0.1 };
+}
+
+export function defaultColorRange(): ColorRange {
+	return { hue: 210, width: 30, saturationFloor: 0.2, feather: 0.25 };
 }
 
 export function editDocumentStorageName(photoId: string) {
