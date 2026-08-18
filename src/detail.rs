@@ -4,9 +4,66 @@
 //! pixel and its two precomputed detail signals.
 
 use crate::composite::DevelopedTileRegion;
-use crate::develop::{DetailSettings, PixelContext};
+use crate::develop::PixelContext;
+use crate::error::within;
 use crate::hue::luminance;
 use crate::light::{linear_to_srgb, srgb_to_linear};
+use crate::{Error, Result};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
+pub struct DetailSettings {
+    pub texture: f32,
+    pub clarity: f32,
+    pub dehaze: f32,
+    pub sharpen_amount: f32,
+    pub noise_luminance: f32,
+    pub noise_color: f32,
+}
+
+impl DetailSettings {
+    pub const NEUTRAL: Self = Self {
+        texture: 0.0,
+        clarity: 0.0,
+        dehaze: 0.0,
+        sharpen_amount: 0.0,
+        noise_luminance: 0.0,
+        noise_color: 0.0,
+    };
+
+    pub fn is_neutral(&self) -> bool {
+        *self == Self::NEUTRAL
+    }
+
+    /// Radii, in fractions of the image's larger dimension, of the blur planes
+    /// this configuration needs. Empty when no spatial stage is active.
+    pub fn blur_radii(&self) -> Vec<f32> {
+        if self.texture == 0.0 && self.clarity == 0.0 && self.sharpen_amount == 0.0 {
+            return Vec::new();
+        }
+        vec![FINE_BLUR_FRACTION, COARSE_BLUR_FRACTION]
+    }
+
+    pub fn validated(&self) -> Result<()> {
+        let within_range = within(&[self.texture, self.clarity, self.dehaze], -100.0, 100.0)
+            && within(&[self.sharpen_amount], 0.0, 150.0)
+            && within(&[self.noise_luminance, self.noise_color], 0.0, 100.0);
+        if !within_range {
+            return Err(Error::Unsupported("detail controls are out of range"));
+        }
+        Ok(())
+    }
+}
+
+impl Default for DetailSettings {
+    fn default() -> Self {
+        Self::NEUTRAL
+    }
+}
+
+pub const FINE_BLUR_FRACTION: f32 = 0.005;
+pub const COARSE_BLUR_FRACTION: f32 = 0.03;
 
 /// Stops of luminance gain each control reaches at the end of its range.
 pub const MAX_TEXTURE_STOPS: f32 = 0.5;
@@ -411,7 +468,6 @@ fn mix(left: f32, right: f32, weight: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::develop::{COARSE_BLUR_FRACTION, FINE_BLUR_FRACTION};
 
     fn convolve_directly(values: &[f32], width: usize, height: usize, radius: usize) -> Vec<f32> {
         let kernel = gaussian_kernel(radius);
@@ -851,5 +907,28 @@ mod tests {
         assert_eq!(blur_radius(FINE_BLUR_FRACTION, (6000, 4000), 1), 30);
         assert_eq!(blur_radius(FINE_BLUR_FRACTION, (6000, 4000), 16), 2);
         assert_eq!(blur_radius(FINE_BLUR_FRACTION, (64, 48), 1), 1);
+    }
+
+    #[test]
+    fn spatial_stages_request_blur_planes_only_when_active() {
+        assert!(DetailSettings::NEUTRAL.blur_radii().is_empty());
+        assert!(
+            DetailSettings {
+                noise_luminance: 60.0,
+                dehaze: 40.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .blur_radii()
+            .is_empty(),
+            "only the unsharp stages read a blur plane"
+        );
+        assert_eq!(
+            DetailSettings {
+                clarity: 30.0,
+                ..DetailSettings::NEUTRAL
+            }
+            .blur_radii(),
+            vec![FINE_BLUR_FRACTION, COARSE_BLUR_FRACTION]
+        );
     }
 }

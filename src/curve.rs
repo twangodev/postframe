@@ -1,4 +1,81 @@
-use crate::develop::{CurvePoint, CurvePoints};
+use crate::error::within;
+use crate::{Error, Result};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+pub struct CurvePoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Control points of a single tone curve, in ascending `x` order.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+pub struct CurvePoints(pub Vec<CurvePoint>);
+
+impl CurvePoints {
+    pub fn identity() -> Self {
+        Self(vec![
+            CurvePoint { x: 0.0, y: 0.0 },
+            CurvePoint { x: 1.0, y: 1.0 },
+        ])
+    }
+
+    pub fn is_identity(&self) -> bool {
+        *self == Self::identity()
+    }
+
+    fn validated(&self) -> Result<()> {
+        if self.0.len() < 2 {
+            return Err(Error::Unsupported("a curve needs at least two points"));
+        }
+        let mut previous = f32::NEG_INFINITY;
+        for point in &self.0 {
+            if !within(&[point.x, point.y], 0.0, 1.0) {
+                return Err(Error::Unsupported(
+                    "curve points must lie inside the unit square",
+                ));
+            }
+            if point.x <= previous {
+                return Err(Error::Unsupported("curve points must ascend in x"));
+            }
+            previous = point.x;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+pub struct CurveSettings {
+    pub luminance: CurvePoints,
+    pub red: CurvePoints,
+    pub green: CurvePoints,
+    pub blue: CurvePoints,
+}
+
+impl CurveSettings {
+    pub fn neutral() -> Self {
+        Self {
+            luminance: CurvePoints::identity(),
+            red: CurvePoints::identity(),
+            green: CurvePoints::identity(),
+            blue: CurvePoints::identity(),
+        }
+    }
+
+    pub fn is_neutral(&self) -> bool {
+        self.channels().all(CurvePoints::is_identity)
+    }
+
+    fn channels(&self) -> impl Iterator<Item = &CurvePoints> {
+        [&self.luminance, &self.red, &self.green, &self.blue].into_iter()
+    }
+
+    pub fn validated(&self) -> Result<()> {
+        self.channels().try_for_each(CurvePoints::validated)
+    }
+}
 
 /// Resolution of the per-channel curves every render path samples.
 pub const CHANNEL_CURVE_SAMPLES: usize = 1024;
@@ -232,5 +309,26 @@ mod tests {
         let curve = curve(&[(0.0, 0.2), (1.0, 0.8)], CHANNEL_CURVE_SAMPLES);
         assert_eq!(curve.eval(-1.0), curve.eval(0.0));
         assert_eq!(curve.eval(2.0), curve.eval(1.0));
+    }
+
+    #[test]
+    fn validation_rejects_malformed_curves() {
+        let curve = |points: Vec<CurvePoint>| {
+            CurveSettings {
+                luminance: CurvePoints(points),
+                ..CurveSettings::neutral()
+            }
+            .validated()
+            .is_err()
+        };
+        let point = |x: f32, y: f32| CurvePoint { x, y };
+        assert!(curve(vec![point(0.0, 0.0)]));
+        assert!(curve(vec![point(0.5, 0.0), point(0.5, 1.0)]));
+        assert!(curve(vec![point(0.0, 0.0), point(1.0, 1.5)]));
+        assert!(!curve(vec![
+            point(0.0, 0.0),
+            point(0.5, 0.6),
+            point(1.0, 1.0)
+        ]));
     }
 }

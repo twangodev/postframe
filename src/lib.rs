@@ -19,9 +19,11 @@ pub mod error;
 pub mod export;
 pub mod fit;
 pub mod grade;
+pub mod grading;
 pub mod hdr;
 pub mod hue;
 pub mod light;
+pub mod mixer;
 mod parallel;
 pub mod preview;
 pub mod scope;
@@ -31,19 +33,17 @@ mod wasm;
 pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
-pub use curve::{CHANNEL_CURVE_SAMPLES, ToneCurve};
-pub use detail::{DetailPlanes, DetailSample, DetailTransform};
-pub use develop::{
-    CurvePoint, CurvePoints, CurveSettings, DetailSettings, DevelopSettings, DevelopTransform,
-    EffectsSettings, GradingRange, GradingSettings, GradingTransform, GradingWheel, MixerBand,
-    MixerLuts, MixerSettings, PixelContext,
-};
-pub use effects::VignetteFrame;
+pub use curve::{CHANNEL_CURVE_SAMPLES, CurvePoint, CurvePoints, CurveSettings, ToneCurve};
+pub use detail::{DetailPlanes, DetailSample, DetailSettings, DetailTransform};
+pub use develop::{DevelopSettings, DevelopTransform, PixelContext};
+pub use effects::{EffectsSettings, VignetteFrame};
 pub use error::{Error, Result};
 pub use fit::transfer::{Report, Transfer};
 pub use grade::{ColorSettings, ColorTransform};
+pub use grading::{GradingRange, GradingSettings, GradingTransform, GradingWheel};
 pub use hdr::UltraHdr;
 pub use light::{LightSettings, LightTransform};
+pub use mixer::{MixerBand, MixerLuts, MixerSettings};
 pub use preview::Preview;
 pub use scope::ImageScope;
 

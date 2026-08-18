@@ -15,3 +15,9 @@ pub enum Error {
     #[error("render cache is invalid: {0}")]
     Cache(&'static str),
 }
+
+pub(crate) fn within(values: &[f32], minimum: f32, maximum: f32) -> bool {
+    values
+        .iter()
+        .all(|value| value.is_finite() && (minimum..=maximum).contains(value))
+}

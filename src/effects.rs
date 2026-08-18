@@ -1,5 +1,59 @@
-use crate::develop::EffectsSettings;
+use crate::error::within;
 use crate::{Error, Result};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
+pub struct EffectsSettings {
+    pub vignette_amount: f32,
+    pub vignette_midpoint: f32,
+    pub vignette_roundness: f32,
+    pub vignette_feather: f32,
+    pub grain_amount: f32,
+    pub grain_size: f32,
+}
+
+impl EffectsSettings {
+    pub const NEUTRAL: Self = Self {
+        vignette_amount: 0.0,
+        vignette_midpoint: 50.0,
+        vignette_roundness: 0.0,
+        vignette_feather: 50.0,
+        grain_amount: 0.0,
+        grain_size: 25.0,
+    };
+
+    pub fn is_neutral(&self) -> bool {
+        self.vignette_amount == 0.0 && self.grain_amount == 0.0
+    }
+
+    pub fn validated(&self) -> Result<()> {
+        let within_range = within(
+            &[self.vignette_amount, self.vignette_roundness],
+            -100.0,
+            100.0,
+        ) && within(
+            &[
+                self.vignette_midpoint,
+                self.vignette_feather,
+                self.grain_amount,
+                self.grain_size,
+            ],
+            0.0,
+            100.0,
+        );
+        if !within_range {
+            return Err(Error::Unsupported("effect controls are out of range"));
+        }
+        Ok(())
+    }
+}
+
+impl Default for EffectsSettings {
+    fn default() -> Self {
+        Self::NEUTRAL
+    }
+}
 
 /// The rectangle a vignette centres on, in fractions of the image.
 #[derive(Clone, Copy, Debug, PartialEq)]
