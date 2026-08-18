@@ -24,6 +24,21 @@ export interface ImageScopeData {
 
 export type ImageScopeMode = 'waveform' | 'histogram';
 
+/**
+ * One channel's bin counts as heights in [0, 1], ready to plot. Clipped tones
+ * pile into the outermost bins and would dwarf everything else, so the scale
+ * comes from the interior, and a square root keeps quiet tones visible beside
+ * a dominant peak.
+ */
+export function histogramProfile(histogram: Uint32Array, channel: number) {
+	const base = channel * HISTOGRAM_BINS;
+	const bins = histogram.subarray(base, base + HISTOGRAM_BINS);
+	const interior = bins.subarray(1, HISTOGRAM_BINS - 1);
+	const peak = interior.reduce((tallest, count) => Math.max(tallest, count), 0);
+	if (peak === 0) return Array.from(bins, () => 0);
+	return Array.from(bins, (count) => Math.min(1, Math.sqrt(count / peak)));
+}
+
 export function imageScopeFromTransfer(scope: ImageScopeTransfer): ImageScopeData {
 	const histogram = new Uint32Array(scope.histogram);
 	const waveform = new Uint16Array(scope.waveform);
