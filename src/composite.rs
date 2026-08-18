@@ -174,7 +174,10 @@ fn mix(left: f32, right: f32, weight: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ColorSettings, ColorTransform, LightSettings, LightTransform};
+    use crate::curve::{CurvePoint, CurvePoints};
+    use crate::{
+        ColorSettings, ColorTransform, GradingWheel, LightSettings, LightTransform, MixerBand,
+    };
 
     fn region(width: usize, height: usize) -> DevelopedTileRegion {
         DevelopedTileRegion {
@@ -194,6 +197,86 @@ mod tests {
             .composite(&rgba, 2, 1, region(2, 1), &[])
             .unwrap();
         assert_eq!(output, rgba);
+    }
+
+    #[test]
+    fn a_neutral_mask_preserves_every_developed_byte() {
+        let rgba = [12, 34, 56, 78, 90, 123, 210, 45, 0, 255, 128, 200];
+        let full = MaskPlane::new(3, 1, vec![255; 3]).unwrap();
+        let adjustment = LocalAdjustment::new(full, DevelopSettings::neutral()).unwrap();
+        let output = DevelopedTileCompositor
+            .composite(&rgba, 3, 1, region(3, 1), &[adjustment])
+            .unwrap();
+        assert_eq!(output, rgba);
+    }
+
+    #[test]
+    fn a_lifted_red_curve_raises_only_red_on_a_grey_tile() {
+        let rgba = [128, 128, 128, 255, 64, 64, 64, 200];
+        let mut settings = DevelopSettings::neutral();
+        settings.curve.red = CurvePoints(vec![
+            CurvePoint { x: 0.0, y: 0.0 },
+            CurvePoint { x: 0.5, y: 0.75 },
+            CurvePoint { x: 1.0, y: 1.0 },
+        ]);
+        let full = MaskPlane::new(2, 1, vec![255; 2]).unwrap();
+        let adjustment = LocalAdjustment::new(full, settings).unwrap();
+        let output = DevelopedTileCompositor
+            .composite(&rgba, 2, 1, region(2, 1), &[adjustment])
+            .unwrap();
+        for pixel in 0..2 {
+            let at = pixel * 4;
+            assert!(output[at] > rgba[at], "red was not lifted");
+            assert_eq!(&output[at + 1..at + 4], &rgba[at + 1..at + 4]);
+        }
+    }
+
+    #[test]
+    fn a_mixer_band_desaturates_a_red_pixel_through_the_mask() {
+        let rgba = [200, 40, 40, 255];
+        let mut settings = DevelopSettings::neutral();
+        settings.mixer.red = MixerBand {
+            hue: 0.0,
+            saturation: -100.0,
+            luminance: 0.0,
+        };
+        let full = MaskPlane::new(1, 1, vec![255]).unwrap();
+        let adjustment = LocalAdjustment::new(full, settings).unwrap();
+        let output = DevelopedTileCompositor
+            .composite(&rgba, 1, 1, region(1, 1), &[adjustment])
+            .unwrap();
+        let spread =
+            |pixel: &[u8]| pixel[..3].iter().max().unwrap() - pixel[..3].iter().min().unwrap();
+        assert!(
+            spread(&output) < spread(&rgba) / 4,
+            "red stayed saturated: {output:?}"
+        );
+        assert_eq!(output[3], rgba[3]);
+    }
+
+    #[test]
+    fn a_grading_shadows_wheel_tints_a_dark_pixel_through_the_mask() {
+        let rgba = [40, 40, 40, 255];
+        let mut settings = DevelopSettings::neutral();
+        settings.grading.shadows = GradingWheel {
+            hue: 240.0,
+            saturation: 100.0,
+            luminance: 0.0,
+        };
+        let full = MaskPlane::new(1, 1, vec![255]).unwrap();
+        let adjustment = LocalAdjustment::new(full, settings).unwrap();
+        let output = DevelopedTileCompositor
+            .composite(&rgba, 1, 1, region(1, 1), &[adjustment])
+            .unwrap();
+        assert!(
+            output[2] > output[0],
+            "shadows were not tinted blue: {output:?}"
+        );
+        assert!(
+            output[2] > output[1],
+            "shadows were not tinted blue: {output:?}"
+        );
+        assert_eq!(output[3], rgba[3]);
     }
 
     #[test]

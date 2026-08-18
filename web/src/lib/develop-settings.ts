@@ -339,13 +339,34 @@ export function defaultDevelopSettings(): DevelopSettings {
 
 export const maskAdjustmentsSchema = z.object({
 	light: lightSettingsSchema,
-	color: colorSettingsSchema
+	color: colorSettingsSchema,
+	curve: curveSettingsSchema,
+	mixer: mixerSettingsSchema,
+	grading: gradingSettingsSchema
 });
 
 export type MaskAdjustments = z.infer<typeof maskAdjustmentsSchema>;
 
+export const MASK_GROUP_NAMES = [
+	'light',
+	'color',
+	'curve',
+	'mixer',
+	'grading'
+] as const satisfies readonly DevelopGroupName[];
+
+export type MaskGroupName = (typeof MASK_GROUP_NAMES)[number];
+
+export type MaskAdjustmentTarget = Extract<AdjustmentTarget, { group: MaskGroupName }>;
+
 export function defaultMaskAdjustments(): MaskAdjustments {
-	return { light: defaultLightSettings(), color: defaultColorSettings() };
+	return {
+		light: defaultLightSettings(),
+		color: defaultColorSettings(),
+		curve: defaultCurveSettings(),
+		mixer: defaultMixerSettings(),
+		grading: defaultGradingSettings()
+	};
 }
 
 export function cloneMaskAdjustments(adjustments: MaskAdjustments): MaskAdjustments {
@@ -357,7 +378,29 @@ export function maskDevelopSettings(adjustments: MaskAdjustments): DevelopSettin
 }
 
 export function neutralMaskAdjustments(adjustments: MaskAdjustments): boolean {
-	return sameDevelopSettings(maskDevelopSettings(adjustments), defaultDevelopSettings());
+	return sameMaskAdjustments(adjustments, defaultMaskAdjustments());
+}
+
+export function sameMaskAdjustments(left: MaskAdjustments, right: MaskAdjustments) {
+	return canonicalKey(left) === canonicalKey(right);
+}
+
+export function withMaskAdjustmentAt(
+	adjustments: MaskAdjustments,
+	target: MaskAdjustmentTarget,
+	value: number
+): MaskAdjustments {
+	return maskAdjustmentsSchema.parse(
+		withAdjustmentAt(maskDevelopSettings(adjustments), target, value)
+	);
+}
+
+export function withMaskCurve(
+	adjustments: MaskAdjustments,
+	channel: CurveChannelName,
+	points: CurvePoints
+): MaskAdjustments {
+	return maskAdjustmentsSchema.parse(withCurve(maskDevelopSettings(adjustments), channel, points));
 }
 
 export function cloneDevelopSettings(settings: DevelopSettings): DevelopSettings {

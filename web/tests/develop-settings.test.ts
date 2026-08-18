@@ -7,10 +7,8 @@ import {
 	cloneDevelopSettings,
 	colorIdentity,
 	curvePointsSchema,
-	defaultColorSettings,
 	defaultDetailSettings,
 	defaultDevelopSettings,
-	defaultLightSettings,
 	detailIdentity,
 	effectsIdentity,
 	gradingIdentity,
@@ -21,11 +19,17 @@ import {
 	developSettingsSchema,
 	identityCurve,
 	defaultMaskAdjustments,
+	MASK_GROUP_NAMES,
 	maskDevelopSettings,
 	neutralMaskAdjustments,
+	sameMaskAdjustments,
 	withAdjustment,
 	withAdjustmentAt,
-	type DevelopSettings
+	withMaskAdjustmentAt,
+	withMaskCurve,
+	type DevelopSettings,
+	type MaskAdjustments,
+	type MaskGroupName
 } from '../src/lib/develop-settings.ts';
 
 test('the source tile key tracks the tile-side detail work and nothing else', () => {
@@ -77,7 +81,7 @@ test('rejects curves with fewer than two points', () => {
 	assert.deepEqual(curvePointsSchema.parse(identityCurve()), identityCurve());
 });
 
-test('widening tonal settings keeps light and colour and neutralizes the rest', () => {
+test('mask settings carry every mask group and neutralize detail and effects', () => {
 	const light = {
 		exposure: 1.25,
 		contrast: 20,
@@ -87,50 +91,91 @@ test('widening tonal settings keeps light and colour and neutralizes the rest', 
 		blacks: -10
 	};
 	const color = { temperature: 30, tint: -12, vibrance: 8, saturation: -4 };
-	const settings = maskDevelopSettings({ light, color });
-	assert.deepEqual(settings.light, light);
-	assert.deepEqual(settings.color, color);
+	const shaped = {
+		...defaultMaskAdjustments(),
+		light,
+		color,
+		curve: {
+			...defaultMaskAdjustments().curve,
+			red: [
+				{ x: 0, y: 0.1 },
+				{ x: 1, y: 1 }
+			]
+		},
+		mixer: { ...defaultMaskAdjustments().mixer, aqua: { hue: 20, saturation: -30, luminance: 5 } },
+		grading: {
+			...defaultMaskAdjustments().grading,
+			shadows: { hue: 200, saturation: 40, luminance: -10 }
+		}
+	};
+	const settings = maskDevelopSettings(shaped);
+	for (const group of MASK_GROUP_NAMES) assert.deepEqual(settings[group], shaped[group]);
 	const neutral = defaultDevelopSettings();
-	assert.deepEqual(settings.curve, neutral.curve);
-	assert.deepEqual(settings.mixer, neutral.mixer);
-	assert.deepEqual(settings.grading, neutral.grading);
 	assert.deepEqual(settings.detail, neutral.detail);
 	assert.deepEqual(settings.effects, neutral.effects);
 });
 
-test('widening tonal settings detaches the supplied groups', () => {
-	const light = {
-		exposure: 0,
-		contrast: 0,
-		highlights: 0,
-		shadows: 0,
-		whites: 0,
-		blacks: 0
-	};
-	const settings = maskDevelopSettings({
-		light,
-		color: { temperature: 0, tint: 0, vibrance: 0, saturation: 0 }
-	});
+test('mask settings detach the supplied groups', () => {
+	const adjustments = defaultMaskAdjustments();
+	const settings = maskDevelopSettings(adjustments);
 	settings.light.exposure = 2;
-	assert.equal(light.exposure, 0);
+	settings.curve.luminance[0].y = 0.5;
+	settings.mixer.red.hue = 10;
+	assert.equal(adjustments.light.exposure, 0);
+	assert.equal(adjustments.curve.luminance[0].y, 0);
+	assert.equal(adjustments.mixer.red.hue, 0);
 });
 
 test('mask adjustments are neutral only when every carried group is at its default', () => {
 	assert.equal(neutralMaskAdjustments(defaultMaskAdjustments()), true);
-	assert.equal(
-		neutralMaskAdjustments({
-			...defaultMaskAdjustments(),
-			light: { ...defaultLightSettings(), exposure: 0.1 }
-		}),
-		false
+	const moved: Record<MaskGroupName, (adjustments: MaskAdjustments) => void> = {
+		light: (adjustments) => (adjustments.light.exposure = 0.1),
+		color: (adjustments) => (adjustments.color.tint = 1),
+		curve: (adjustments) =>
+			(adjustments.curve.blue = [
+				{ x: 0, y: 0.05 },
+				{ x: 1, y: 1 }
+			]),
+		mixer: (adjustments) => (adjustments.mixer.orange.saturation = -1),
+		grading: (adjustments) => (adjustments.grading.midtones.saturation = 1)
+	};
+	for (const group of MASK_GROUP_NAMES) {
+		const adjustments = defaultMaskAdjustments();
+		moved[group](adjustments);
+		assert.equal(neutralMaskAdjustments(adjustments), false, `${group} moved but reads neutral`);
+	}
+});
+
+test('addresses a mask target through the same path as the document', () => {
+	const before = defaultMaskAdjustments();
+	const after = withMaskAdjustmentAt(
+		before,
+		{ group: 'mixer', band: 'blue', control: 'saturation' },
+		-100
 	);
+	assert.equal(after.mixer.blue.saturation, -100);
+	assert.equal(before.mixer.blue.saturation, 0);
+	assert.deepEqual(Object.keys(after), [...MASK_GROUP_NAMES]);
+	assert.equal(sameMaskAdjustments(before, after), false);
 	assert.equal(
-		neutralMaskAdjustments({
-			...defaultMaskAdjustments(),
-			color: { ...defaultColorSettings(), tint: 1 }
-		}),
-		false
+		sameMaskAdjustments(
+			after,
+			withMaskAdjustmentAt(after, { group: 'mixer', band: 'blue', control: 'saturation' }, -100)
+		),
+		true
 	);
+	assert.throws(() => withMaskAdjustmentAt(before, { group: 'light', control: 'exposure' }, 9));
+
+	const shaped = [
+		{ x: 0, y: 0 },
+		{ x: 0.5, y: 0.7 },
+		{ x: 1, y: 1 }
+	];
+	const curved = withMaskCurve(before, 'green', shaped);
+	assert.deepEqual(curved.curve.green, shaped);
+	assert.notEqual(curved.curve.green, shaped);
+	assert.deepEqual(before.curve.green, identityCurve());
+	assert.throws(() => withMaskCurve(before, 'red', [{ x: 0, y: 0 }]));
 });
 
 test('clones settings held behind a reactive proxy', () => {

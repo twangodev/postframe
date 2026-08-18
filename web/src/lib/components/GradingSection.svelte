@@ -13,13 +13,15 @@
 		pointToHueSaturation,
 		type DiscPoint
 	} from '$lib/grading-wheel';
-	import type { WorkspaceState } from '$lib/workspace.svelte';
+	import type { DevelopBinding } from '$lib/develop-binding';
 
 	interface Props {
-		workspace: WorkspaceState;
+		binding: DevelopBinding;
 	}
 
-	let { workspace }: Props = $props();
+	let { binding }: Props = $props();
+
+	const discCenterId = $props.id();
 
 	const DISC_MARGIN = 1.08;
 	const WEDGE_DEGREES = 6;
@@ -32,7 +34,7 @@
 
 	let range = $state<GradingRangeName>('shadows');
 
-	const wheel = $derived(workspace.grading[range]);
+	const wheel = $derived(binding.grading[range]);
 	const puck = $derived(hueSaturationToPoint(wheel.hue, wheel.saturation));
 
 	const wheelChanges = (position: DiscPoint) => {
@@ -54,33 +56,33 @@
 	}
 
 	function beginDrag(event: DiscEvent) {
-		if (!workspace.canAdjustLight) return;
+		if (binding.disabled) return;
 		event.currentTarget.setPointerCapture(event.pointerId);
-		workspace.previewAdjustmentsAt(wheelChanges(discPosition(event)));
+		binding.previewAdjustmentsAt(wheelChanges(discPosition(event)));
 	}
 
 	function dragTo(event: DiscEvent) {
 		if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-		workspace.previewAdjustmentsAt(wheelChanges(discPosition(event)));
+		binding.previewAdjustmentsAt(wheelChanges(discPosition(event)));
 	}
 
 	function endDrag(event: DiscEvent) {
 		if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
 		event.currentTarget.releasePointerCapture(event.pointerId);
-		workspace.commitAdjustmentsAt(wheelChanges(discPosition(event)));
+		binding.commitAdjustmentsAt(wheelChanges(discPosition(event)));
 	}
 
 	const blendTarget = (control: GradingBlendControlName) =>
 		({ group: 'grading', control }) as const;
 	const previewBlend = (control: GradingBlendControlName) => (value: number) =>
-		workspace.previewAdjustmentAt(blendTarget(control), value);
+		binding.previewAdjustmentAt(blendTarget(control), value);
 	const commitBlend = (control: GradingBlendControlName) => (value: number) =>
-		workspace.commitAdjustmentAt(blendTarget(control), value);
+		binding.commitAdjustmentAt(blendTarget(control), value);
 
 	const previewLuminance = (value: number) =>
-		workspace.previewAdjustmentAt({ group: 'grading', range, control: 'luminance' }, value);
+		binding.previewAdjustmentAt({ group: 'grading', range, control: 'luminance' }, value);
 	const commitLuminance = (value: number) =>
-		workspace.commitAdjustmentAt({ group: 'grading', range, control: 'luminance' }, value);
+		binding.commitAdjustmentAt({ group: 'grading', range, control: 'luminance' }, value);
 </script>
 
 <Panel title="Color grading" open={false}>
@@ -111,15 +113,15 @@
 			aria-valuemin={0}
 			aria-valuemax={360}
 			class="size-24 shrink-0 touch-none transition-opacity"
-			class:opacity-40={!workspace.canAdjustLight}
-			class:cursor-grab={workspace.canAdjustLight}
+			class:opacity-40={binding.disabled}
+			class:cursor-grab={!binding.disabled}
 			onpointerdown={beginDrag}
 			onpointermove={dragTo}
 			onpointerup={endDrag}
 			onpointercancel={endDrag}
 		>
 			<defs>
-				<radialGradient id="grading-disc-center">
+				<radialGradient id={discCenterId}>
 					<stop offset="0%" stop-color="#23221e" />
 					<stop offset="100%" stop-color="#23221e" stop-opacity="0" />
 				</radialGradient>
@@ -127,7 +129,7 @@
 			{#each WEDGES as wedge (wedge.hue)}
 				<path d={wedge.path} fill={`hsl(${wedge.hue} 70% 50%)`} />
 			{/each}
-			<circle r="1" fill="url(#grading-disc-center)" />
+			<circle r="1" fill="url(#{discCenterId})" />
 			<circle r="1" fill="none" stroke="var(--color-subtle)" stroke-width="0.03" />
 			<circle
 				cx={puck.x}
@@ -141,10 +143,10 @@
 		<div class="min-w-0 flex-1">
 			<AdjustmentSlider
 				label="Luminance"
-				bind:value={workspace.grading[range].luminance}
+				bind:value={binding.grading[range].luminance}
 				min={-100}
 				max={100}
-				disabled={!workspace.canAdjustLight}
+				disabled={binding.disabled}
 				onValueChange={previewLuminance}
 				onValueCommit={commitLuminance}
 			/>
@@ -154,12 +156,12 @@
 		{#each GRADING_BLEND_CONTROL_NAMES as control (control)}
 			<AdjustmentSlider
 				label={control}
-				bind:value={workspace.grading[control]}
+				bind:value={binding.grading[control]}
 				min={control === 'balance' ? -100 : 0}
 				max={100}
 				defaultValue={control === 'balance' ? 0 : 50}
 				signed={control === 'balance'}
-				disabled={!workspace.canAdjustLight}
+				disabled={binding.disabled}
 				onValueChange={previewBlend(control)}
 				onValueCommit={commitBlend(control)}
 			/>

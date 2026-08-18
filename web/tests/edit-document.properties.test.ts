@@ -238,7 +238,13 @@ const maskArbitrary = fc.record({
 	visible: fc.boolean(),
 	components: fc.array(componentArbitrary, { maxLength: 3 }),
 	edge: edgeArbitrary,
-	adjustments: fc.record({ light: lightArbitrary, color: colorArbitrary })
+	adjustments: fc.record({
+		light: lightArbitrary,
+		color: colorArbitrary,
+		curve: curveSettingsArbitrary,
+		mixer: mixerArbitrary,
+		grading: gradingArbitrary
+	})
 });
 
 const documentArbitrary = fc

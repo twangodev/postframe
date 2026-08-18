@@ -8,15 +8,16 @@
 		type CurvePoint,
 		type CurvePoints
 	} from '$lib/develop-settings';
-	import { histogramProfile } from '$lib/image-scope';
+	import type { DevelopBinding } from '$lib/develop-binding';
+	import { histogramProfile, type ImageScopeData } from '$lib/image-scope';
 	import { addCurvePoint, curveSamples, draggedCurve, nearestCurvePoint } from '$lib/tone-curve';
-	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
-		workspace: WorkspaceState;
+		binding: DevelopBinding;
+		scope?: ImageScopeData | null;
 	}
 
-	let { workspace }: Props = $props();
+	let { binding, scope = null }: Props = $props();
 
 	const GRAB_RADIUS = 0.06;
 	const PLOT_SAMPLES = 97;
@@ -45,10 +46,10 @@
 	let channel = $state<CurveChannelName>('luminance');
 	let drag = $state<{ index: number; from: CurvePoints } | null>(null);
 
-	const points = $derived(workspace.curve[channel]);
-	const disabled = $derived(!workspace.canAdjustLight);
+	const points = $derived(binding.curve[channel]);
+	const disabled = $derived(binding.disabled);
 	const shaped = $derived(
-		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(workspace.curve[name]))
+		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(binding.curve[name]))
 	);
 	// Every shaped channel stays on the plot; the chip only decides which one
 	// takes the next drag.
@@ -58,9 +59,7 @@
 		)
 	);
 	const histogram = $derived(
-		workspace.imageScope
-			? histogramProfile(workspace.imageScope.histogram, CHANNEL_BIN[channel])
-			: null
+		scope ? histogramProfile(scope.histogram, CHANNEL_BIN[channel]) : null
 	);
 	const backdrop = $derived(
 		histogram
@@ -71,7 +70,7 @@
 	);
 
 	function trace(name: CurveChannelName) {
-		return curveSamples(workspace.curve[name], PLOT_SAMPLES)
+		return curveSamples(binding.curve[name], PLOT_SAMPLES)
 			.map((y, index) => `${(index / (PLOT_SAMPLES - 1)) * 100},${(1 - y) * 100}`)
 			.join(' ');
 	}
@@ -95,25 +94,25 @@
 		if (index === null) return;
 		drag = { index, from: next.map(({ x, y }) => ({ x, y })) };
 		event.currentTarget.setPointerCapture(event.pointerId);
-		if (next !== points) workspace.previewCurve(channel, drag.from);
+		if (next !== points) binding.previewCurve(channel, drag.from);
 	}
 
 	function move(event: PlotEvent) {
 		if (!drag) return;
-		workspace.previewCurve(channel, draggedCurve(drag.from, drag.index, positionOf(event)));
+		binding.previewCurve(channel, draggedCurve(drag.from, drag.index, positionOf(event)));
 	}
 
 	function release(event: PlotEvent) {
 		if (!drag) return;
 		const next = draggedCurve(drag.from, drag.index, positionOf(event));
 		drag = null;
-		workspace.commitCurve(channel, next);
+		binding.commitCurve(channel, next);
 	}
 
 	function reset() {
 		if (disabled) return;
 		drag = null;
-		workspace.commitCurve(channel, identityCurve());
+		binding.commitCurve(channel, identityCurve());
 	}
 </script>
 

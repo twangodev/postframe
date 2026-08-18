@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
 	defaultDevelopSettings,
+	defaultMaskAdjustments,
 	withAdjustment,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -249,7 +250,11 @@ test('copies and transfers persistent masks without detaching document state', a
 		height: 2,
 		alpha: alpha.buffer,
 		edge: neutralEdge,
-		settings: { light: { ...neutral, exposure: 0.5 }, color: { ...neutralColor, tint: -20 } }
+		settings: {
+			...defaultMaskAdjustments(),
+			light: { ...neutral, exposure: 0.5 },
+			color: { ...neutralColor, tint: -20 }
+		}
 	};
 	const updated = client.setMasks([mask]);
 
@@ -410,7 +415,10 @@ test('exports through the worker with staged progress and detached masks', async
 					height: 2,
 					alpha,
 					edge: { ...neutralEdge },
-					settings: { light: { ...neutral }, color: { ...neutralColor, saturation: 25 } }
+					settings: {
+						...defaultMaskAdjustments(),
+						color: { ...neutralColor, saturation: 25 }
+					}
 				}
 			],
 			geometry,

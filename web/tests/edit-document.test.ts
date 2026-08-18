@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	DEVELOP_GROUP_NAMES,
+	MASK_GROUP_NAMES,
 	defaultGradingSettings,
 	defaultMixerSettings,
 	identityCurve
@@ -106,18 +108,33 @@ test('round-trips a document carrying every develop group', () => {
 	);
 });
 
-test('keeps mask adjustments tonal while the document carries every group', () => {
+test('masks carry every group but detail and effects, and round-trip them', () => {
 	const mask = createEditMask('mask-one', 'brush');
-	assert.deepEqual(Object.keys(mask.adjustments), ['light', 'color']);
+	assert.deepEqual(Object.keys(mask.adjustments), [...MASK_GROUP_NAMES]);
 	assert.deepEqual(Object.keys(defaultEditDocument('photo-one').adjustments), [
-		'light',
-		'color',
-		'curve',
-		'mixer',
-		'grading',
-		'detail',
-		'effects'
+		...DEVELOP_GROUP_NAMES
 	]);
+	mask.adjustments.curve.red = [
+		{ x: 0, y: 0.2 },
+		{ x: 0.5, y: 0.5 },
+		{ x: 1, y: 1 }
+	];
+	mask.adjustments.mixer.aqua.hue = 33;
+	mask.adjustments.grading.highlights = { hue: 45, saturation: 60, luminance: 10 };
+	const document = { ...defaultEditDocument('photo-one'), masks: [mask] };
+	const cloned = cloneEditDocument(document);
+	assert.deepEqual(cloned, document);
+	assert.notEqual(cloned.masks[0]?.adjustments.curve.red, mask.adjustments.curve.red);
+	assert.notEqual(cloned.masks[0]?.adjustments.mixer, mask.adjustments.mixer);
+});
+
+test('rejects current documents whose masks lack a mask group', () => {
+	for (const group of MASK_GROUP_NAMES) {
+		const mask = createEditMask('mask-one', 'radial');
+		const { [group]: _dropped, ...adjustments } = mask.adjustments;
+		const document = { ...defaultEditDocument('photo-one'), masks: [{ ...mask, adjustments }] };
+		assert.equal(editDocumentSchema.safeParse(document).success, false, `${group} was optional`);
+	}
 });
 
 test('rejects current documents lacking global color adjustments', () => {
@@ -129,15 +146,6 @@ test('rejects current documents lacking global color adjustments', () => {
 		}).success,
 		false
 	);
-});
-
-test('rejects current documents whose masks lack color adjustments', () => {
-	const mask = createEditMask('mask-one', 'radial');
-	const document = {
-		...defaultEditDocument('photo-one'),
-		masks: [{ ...mask, adjustments: { light: mask.adjustments.light } }]
-	};
-	assert.equal(editDocumentSchema.safeParse(document).success, false);
 });
 
 test('accepts gradient components carrying their transform', () => {

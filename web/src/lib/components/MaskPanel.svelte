@@ -16,7 +16,10 @@
 		Trash2,
 		UserRound
 	} from '@lucide/svelte';
+	import ColorMixerSection from './ColorMixerSection.svelte';
+	import GradingSection from './GradingSection.svelte';
 	import SubjectPicker from './SubjectPicker.svelte';
+	import ToneCurveSection from './ToneCurveSection.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
 	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
@@ -148,7 +151,7 @@
 						sideOffset={4}
 						class="motion-menu z-50 min-w-28 rounded border border-subtle bg-bg p-1 shadow-2xl"
 					>
-						{#each MASK_PREVIEW_MODES as mode}
+						{#each MASK_PREVIEW_MODES as mode (mode)}
 							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
 								<span class="w-3 text-accent">{maskPreviewMode === mode ? '•' : ''}</span>
 								<span>{mode}</span>
@@ -435,6 +438,12 @@
 				onValueCommit={commitMaskColor('saturation')}
 			/>
 		</Panel>
+		{#if workspace.selectedMaskDevelop}
+			{@const binding = workspace.selectedMaskDevelop}
+			<ToneCurveSection {binding} />
+			<ColorMixerSection {binding} />
+			<GradingSection {binding} />
+		{/if}
 	{/if}
 </Tabs.Content>
 
