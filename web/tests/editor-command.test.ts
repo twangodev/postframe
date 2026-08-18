@@ -10,7 +10,8 @@ import {
 	defaultColorSettings,
 	defaultDevelopSettings,
 	defaultLightSettings,
-	identityCurve
+	identityCurve,
+	neutralMaskAdjustments
 } from '../src/lib/develop-settings.ts';
 import { applyEditorCommand, cloneEditorCommand, curveCommand } from '../src/lib/editor-command.ts';
 
@@ -374,4 +375,118 @@ test('replaces every adjustment at once under one label', () => {
 			label: 'out of range'
 		})
 	);
+});
+
+test('sets a mask adjustment on the addressed mask only, through one path for every group', () => {
+	const document = defaultEditDocument('photo-one');
+	document.masks.push(createEditMask('mask-one', 'brush'), createEditMask('mask-two', 'radial'));
+	const targets = [
+		{ target: { group: 'light', control: 'exposure' }, value: 0.5, label: 'exposure +0.5 EV' },
+		{ target: { group: 'color', control: 'tint' }, value: -12, label: 'tint -12' },
+		{
+			target: { group: 'mixer', band: 'aqua', control: 'saturation' },
+			value: -100,
+			label: 'aqua saturation -100'
+		},
+		{
+			target: { group: 'grading', range: 'shadows', control: 'hue' },
+			value: 200,
+			label: 'shadows hue +200'
+		},
+		{ target: { group: 'grading', control: 'balance' }, value: 30, label: 'balance +30' }
+	] as const;
+	for (const { target, value, label } of targets) {
+		const changed = applyEditorCommand(document, {
+			type: 'mask.adjustment.set',
+			maskId: 'mask-two',
+			target,
+			value
+		});
+		assert.ok(changed, `${label} did not apply`);
+		assert.equal(changed.invalidation, 'render');
+		assert.equal(changed.label, `mask ${label}`);
+		assert.deepEqual(changed.document.masks[0], document.masks[0]);
+		assert.deepEqual(changed.document.adjustments, document.adjustments);
+		assert.equal(
+			neutralMaskAdjustments(changed.document.masks[1]!.adjustments),
+			false,
+			`${label} left the mask neutral`
+		);
+		assert.equal(neutralMaskAdjustments(document.masks[1]!.adjustments), true);
+		assert.equal(
+			applyEditorCommand(changed.document, {
+				type: 'mask.adjustment.set',
+				maskId: 'mask-two',
+				target,
+				value
+			}),
+			null
+		);
+	}
+	const mixed = applyEditorCommand(document, {
+		type: 'mask.adjustment.set',
+		maskId: 'mask-two',
+		target: { group: 'mixer', band: 'aqua', control: 'saturation' },
+		value: -100
+	});
+	assert.equal(mixed?.document.masks[1]?.adjustments.mixer.aqua.saturation, -100);
+	assert.equal(mixed?.document.masks[1]?.adjustments.mixer.aqua.hue, 0);
+	assert.throws(() =>
+		applyEditorCommand(document, {
+			type: 'mask.adjustment.set',
+			maskId: 'mask-two',
+			target: { group: 'mixer', band: 'aqua', control: 'saturation' },
+			value: 101
+		})
+	);
+	assert.equal(
+		applyEditorCommand(document, {
+			type: 'mask.adjustment.set',
+			maskId: 'mask-nine',
+			target: { group: 'mixer', band: 'aqua', control: 'saturation' },
+			value: -100
+		}),
+		null
+	);
+});
+
+test('sets a whole mask curve channel as one undoable change', () => {
+	const document = defaultEditDocument('photo-one');
+	document.masks.push(createEditMask('mask-one', 'brush'), createEditMask('mask-two', 'radial'));
+	const shaped = [
+		{ x: 0, y: 0 },
+		{ x: 0.4, y: 0.55 },
+		{ x: 1, y: 1 }
+	];
+	const command = {
+		type: 'mask.curve.set',
+		maskId: 'mask-one',
+		channel: 'red',
+		value: shaped
+	} as const;
+	const changed = applyEditorCommand(document, command);
+	assert.ok(changed);
+	assert.equal(changed.invalidation, 'render');
+	assert.equal(changed.label, 'mask red curve');
+	assert.deepEqual(changed.document.masks[0]?.adjustments.curve.red, shaped);
+	assert.deepEqual(changed.document.masks[0]?.adjustments.curve.luminance, identityCurve());
+	assert.deepEqual(changed.document.masks[1], document.masks[1]);
+	assert.deepEqual(changed.document.adjustments.curve.red, identityCurve());
+	assert.deepEqual(document.masks[0]?.adjustments.curve.red, identityCurve());
+	assert.equal(applyEditorCommand(changed.document, command), null);
+	assert.equal(applyEditorCommand(document, { ...command, maskId: 'mask-nine' }), null);
+	assert.throws(() =>
+		applyEditorCommand(document, {
+			...command,
+			value: [
+				{ x: 0, y: 0 },
+				{ x: 0.5, y: 2 }
+			]
+		})
+	);
+
+	const cloned = cloneEditorCommand(command);
+	assert.deepEqual(cloned, command);
+	assert.notEqual(cloned.type === 'mask.curve.set' && cloned.value, shaped);
+	assert.notEqual(cloned.type === 'mask.curve.set' && cloned.value[1], shaped[1]);
 });

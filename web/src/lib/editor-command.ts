@@ -15,14 +15,19 @@ import {
 	developSettingsSchema,
 	lightSettingsSchema,
 	sameDevelopSettings,
+	sameMaskAdjustments,
 	withAdjustmentAt,
 	withCurve,
+	withMaskAdjustmentAt,
+	withMaskCurve,
 	type AdjustmentTarget,
 	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
 	type DevelopSettings,
-	type LightControlName
+	type LightControlName,
+	type MaskAdjustments,
+	type MaskAdjustmentTarget
 } from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
@@ -50,6 +55,8 @@ export type EditorCommand =
 	| { type: 'adjustment.replace'; adjustments: DevelopSettings; label: string }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
+	| { type: 'mask.adjustment.set'; maskId: string; target: MaskAdjustmentTarget; value: number }
+	| { type: 'mask.curve.set'; maskId: string; channel: CurveChannelName; value: CurvePoints }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
 	| { type: 'mask.create'; mask: EditMask }
 	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
@@ -74,6 +81,10 @@ export function cloneEditorCommand(command: EditorCommand): EditorCommand {
 				: { ...command };
 		case 'adjustment.replace':
 			return { ...command, adjustments: developSettingsSchema.parse(command.adjustments) };
+		case 'mask.adjustment.set':
+			return { ...command, target: { ...command.target } };
+		case 'mask.curve.set':
+			return { ...command, value: curvePointsSchema.parse(command.value) };
 		case 'mask.create':
 			return { ...command, mask: editMaskSchema.parse(command.mask) };
 		case 'mask.component.set':
@@ -104,7 +115,7 @@ export function applyEditorCommand(
 			);
 			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
 			next.adjustments = adjustments;
-			const label = curved ? `${command.control} curve` : targetLabel(command);
+			const label = curved ? `${command.control} curve` : targetLabel(command, command.value);
 			return transition(command, label, 'render', next);
 		}
 		case 'adjustment.replace': {
@@ -135,6 +146,20 @@ export function applyEditorCommand(
 			mask.adjustments.color = color;
 			return transition(command, controlLabel(command.control, command.value), 'render', next);
 		}
+		case 'mask.adjustment.set':
+			return maskAdjustmentTransition(
+				next,
+				command,
+				(adjustments) => withMaskAdjustmentAt(adjustments, command.target, command.value),
+				`mask ${targetLabel(command.target, command.value)}`
+			);
+		case 'mask.curve.set':
+			return maskAdjustmentTransition(
+				next,
+				command,
+				(adjustments) => withMaskCurve(adjustments, command.channel, command.value),
+				`mask ${command.channel} curve`
+			);
 		case 'mask.edge.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);
 			if (!mask) return null;
@@ -198,6 +223,20 @@ export function applyEditorCommand(
 	}
 }
 
+function maskAdjustmentTransition(
+	next: EditDocument,
+	command: EditorCommand & { maskId: string },
+	adjust: (adjustments: MaskAdjustments) => MaskAdjustments,
+	label: string
+) {
+	const mask = next.masks.find(({ id }) => id === command.maskId);
+	if (!mask) return null;
+	const adjustments = adjust(mask.adjustments);
+	if (sameMaskAdjustments(mask.adjustments, adjustments)) return null;
+	mask.adjustments = adjustments;
+	return transition(command, label, 'render', next);
+}
+
 function transition(
 	command: EditorCommand,
 	label: string,
@@ -207,9 +246,9 @@ function transition(
 	return { command, label, invalidation, document: editDocumentSchema.parse(document) };
 }
 
-function targetLabel(target: AdjustmentTarget & { value: number }) {
+function targetLabel(target: AdjustmentTarget, value: number) {
 	const section = 'band' in target ? target.band : 'range' in target ? target.range : null;
-	return controlLabel(section ? `${section} ${target.control}` : target.control, target.value);
+	return controlLabel(section ? `${section} ${target.control}` : target.control, value);
 }
 
 function controlLabel(control: string, value: number) {
