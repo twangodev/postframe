@@ -133,9 +133,25 @@ export class Session {
     width(): number;
 }
 
+/**
+ * Light settings that bring an encoded RGBA image's tones to their targets.
+ */
+export function auto_tone(rgba: Uint8Array, width: number, height: number): any;
+
+/**
+ * The grey-world temperature and tint for an encoded RGBA image.
+ */
+export function auto_white_balance(rgba: Uint8Array, width: number, height: number): Float32Array;
+
 export function encode_export_jpeg(rgba: Uint8Array, width: number, height: number, quality: number, original?: Uint8Array | null): Uint8Array;
 
 export function inspect_raw(raw: Uint8Array, thumbnail_dimension: number): RawInspection;
+
+/**
+ * The temperature and tint that neutralise an encoded sRGB colour, or nothing
+ * when a channel is empty.
+ */
+export function neutralizing_balance(red: number, green: number, blue: number): Float32Array | undefined;
 
 export function supported_raw_extensions(): string[];
 
@@ -147,6 +163,8 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
     readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
     readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
     readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
@@ -156,6 +174,7 @@ export interface InitOutput {
     readonly displaytransform_luminance_lut: (a: number) => [number, number];
     readonly displaytransform_mixer_luts: (a: number) => [number, number];
     readonly displaytransform_new: (a: any, b: any) => [number, number, number];
+    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;

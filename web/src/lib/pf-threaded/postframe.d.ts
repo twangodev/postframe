@@ -133,11 +133,27 @@ export class Session {
     width(): number;
 }
 
+/**
+ * Light settings that bring an encoded RGBA image's tones to their targets.
+ */
+export function auto_tone(rgba: Uint8Array, width: number, height: number): any;
+
+/**
+ * The grey-world temperature and tint for an encoded RGBA image.
+ */
+export function auto_white_balance(rgba: Uint8Array, width: number, height: number): Float32Array;
+
 export function encode_export_jpeg(rgba: Uint8Array, width: number, height: number, quality: number, original?: Uint8Array | null): Uint8Array;
 
 export function initThreadPool(num_threads: number): Promise<any>;
 
 export function inspect_raw(raw: Uint8Array, thumbnail_dimension: number): RawInspection;
+
+/**
+ * The temperature and tint that neutralise an encoded sRGB colour, or nothing
+ * when a channel is empty.
+ */
+export function neutralizing_balance(red: number, green: number, blue: number): Float32Array | undefined;
 
 export function supported_raw_extensions(): string[];
 
@@ -157,6 +173,23 @@ export function wbg_rayon_start_worker(receiver: number): void;
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
+    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
+    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
+    readonly rawinspection_camera_make: (a: number) => [number, number];
+    readonly rawinspection_camera_model: (a: number) => [number, number];
+    readonly rawinspection_captured_at: (a: number) => [number, number];
+    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
+    readonly rawinspection_f_number: (a: number) => [number, number];
+    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
+    readonly rawinspection_height: (a: number) => number;
+    readonly rawinspection_iso: (a: number) => number;
+    readonly rawinspection_lens: (a: number) => [number, number];
+    readonly rawinspection_orientation: (a: number) => number;
+    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
+    readonly rawinspection_width: (a: number) => number;
+    readonly supported_raw_extensions: () => [number, number];
+    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;
@@ -204,22 +237,6 @@ export interface InitOutput {
     readonly scopeframe_sample_count: (a: number) => number;
     readonly scopeframe_waveform_height: (a: number) => number;
     readonly scopeframe_waveform_width: (a: number) => number;
-    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
-    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
-    readonly rawinspection_camera_make: (a: number) => [number, number];
-    readonly rawinspection_camera_model: (a: number) => [number, number];
-    readonly rawinspection_captured_at: (a: number) => [number, number];
-    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
-    readonly rawinspection_f_number: (a: number) => [number, number];
-    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
-    readonly rawinspection_height: (a: number) => number;
-    readonly rawinspection_iso: (a: number) => number;
-    readonly rawinspection_lens: (a: number) => [number, number];
-    readonly rawinspection_orientation: (a: number) => number;
-    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
-    readonly rawinspection_width: (a: number) => number;
-    readonly supported_raw_extensions: () => [number, number];
-    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
     readonly __wbg_displaytransform_free: (a: number, b: number) => void;
     readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
@@ -231,7 +248,9 @@ export interface InitOutput {
     readonly displaytransform_luminance_lut: (a: number) => [number, number];
     readonly displaytransform_mixer_luts: (a: number) => [number, number];
     readonly displaytransform_new: (a: any, b: any) => [number, number, number];
-    readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;

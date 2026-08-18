@@ -6,6 +6,7 @@
 //! computed from the raw — merged HDR radiance first — be rendered the way the
 //! camera would have rendered it.
 
+pub mod auto;
 pub mod bracket;
 mod cache;
 pub mod color;
@@ -30,6 +31,7 @@ pub mod scope;
 #[cfg(feature = "wasm")]
 mod wasm;
 
+pub use auto::{auto_tone, auto_white_balance, neutralizing_balance};
 pub use bracket::{FrameData, MergeReport, Merged, Rendered};
 pub use color::WorkingSpace;
 pub use composite::{DevelopedTileCompositor, DevelopedTileRegion, LocalAdjustment, MaskPlane};
