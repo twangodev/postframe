@@ -23,37 +23,61 @@ impl DisplayTransform {
 
     pub fn apply_rgba(&self, rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>, JsError> {
         let (width, height) = (width as usize, height as usize);
-        self.develop
-            .apply_display_rgba8_at(
-                &rgba,
-                (width, height),
-                DevelopedTileRegion {
-                    image_width: width,
-                    image_height: height,
-                    x: 0,
-                    y: 0,
-                    width,
-                    height,
-                },
-            )
-            .map_err(err)
+        self.develop_display(
+            &rgba,
+            (width, height),
+            DevelopedTileRegion {
+                image_width: width,
+                image_height: height,
+                x: 0,
+                y: 0,
+                width,
+                height,
+            },
+            1,
+        )
     }
 
-    /// Develop one tile of a display document, told where in the image it sits.
+    /// Develop one tile of a display document, told where in the image it sits
+    /// and how many image pixels each of its own pixels spans.
     pub fn apply_tile_rgba(
         &self,
         rgba: Vec<u8>,
         tile_width: u32,
         tile_height: u32,
         region: JsValue,
+        bin: u32,
     ) -> Result<Vec<u8>, JsError> {
+        self.develop_display(
+            &rgba,
+            (tile_width as usize, tile_height as usize),
+            tile_region(region)?,
+            bin as usize,
+        )
+    }
+
+    /// Pixels of context a tile needs on each side so its planes match a
+    /// whole-image blur, in output (binned) pixels; 0 when detail is neutral.
+    pub fn detail_apron(&self, image_width: u32, image_height: u32, bin: u32) -> u32 {
         self.develop
-            .apply_display_rgba8_at(
-                &rgba,
-                (tile_width as usize, tile_height as usize),
-                tile_region(region)?,
-            )
-            .map_err(err)
+            .detail_apron((image_width as usize, image_height as usize), bin as usize)
+            as u32
+    }
+
+    fn develop_display(
+        &self,
+        rgba: &[u8],
+        tile: (usize, usize),
+        region: DevelopedTileRegion,
+        bin: usize,
+    ) -> Result<Vec<u8>, JsError> {
+        if self.develop.settings().detail.is_neutral() {
+            self.develop.apply_display_rgba8_at(rgba, tile, region)
+        } else {
+            self.develop
+                .apply_display_rgba8_prepared(rgba, tile, region, bin)
+        }
+        .map_err(err)
     }
 
     #[wasm_bindgen(getter)]

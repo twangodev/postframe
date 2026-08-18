@@ -7,7 +7,7 @@ use crate::{
 };
 
 #[cfg(any(test, feature = "wasm"))]
-use crate::{DetailSettings, detail::reduce_noise};
+use crate::{DetailSettings, detail};
 
 #[cfg(feature = "wasm")]
 use crate::decode::linear::Linear;
@@ -110,10 +110,11 @@ impl PreparedRegion {
     #[cfg(any(test, feature = "wasm"))]
     pub(crate) fn detailed(mut self, settings: &DetailSettings, bin: usize) -> Self {
         let tile = (self.width, self.height);
-        if let Some(cleaned) = reduce_noise(&self.rgb, tile, settings) {
+        let prepared = detail::prepare(&self.rgb, self.placement, tile, bin, settings);
+        if let Some(cleaned) = prepared.cleaned {
             self.rgb = cleaned;
         }
-        self.planes = DetailPlanes::build(&self.rgb, self.placement, tile, bin, settings);
+        self.planes = prepared.planes;
         self
     }
 

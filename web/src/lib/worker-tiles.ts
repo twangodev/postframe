@@ -117,7 +117,8 @@ async function renderDevelopedTile(active: ActiveDocument, request: RenderTileRe
 			y: request.y,
 			width: request.width,
 			height: request.height
-		}
+		},
+		request.bin
 	);
 	context.putImageData(imageData(adjusted, width, height), 0, 0);
 	return context.canvas.transferToImageBitmap();

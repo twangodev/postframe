@@ -133,14 +133,20 @@ function developDisplayExportTile(
 		region.height
 	);
 	const pixels = context.getImageData(0, 0, region.width, region.height);
-	return light.apply_tile_rgba(new Uint8Array(pixels.data.buffer), region.width, region.height, {
-		imageWidth: image.width,
-		imageHeight: image.height,
-		x: region.x,
-		y: region.y,
-		width: region.width,
-		height: region.height
-	});
+	return light.apply_tile_rgba(
+		new Uint8Array(pixels.data.buffer),
+		region.width,
+		region.height,
+		{
+			imageWidth: image.width,
+			imageHeight: image.height,
+			x: region.x,
+			y: region.y,
+			width: region.width,
+			height: region.height
+		},
+		1
+	);
 }
 
 function blitExportTile(
