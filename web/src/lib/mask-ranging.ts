@@ -23,7 +23,7 @@ export type RangeKind = 'luminance' | 'color';
 export type RangeComponent = LuminanceRangeComponent | ColorRangeComponent;
 export type RangeSettings = LuminanceRange | ColorRange;
 
-export const RANGE_PREVIEW_DEBOUNCE_MS = 80;
+const RANGE_PREVIEW_DEBOUNCE_MS = 80;
 
 export interface MaskRangingHost {
 	readonly selectedPhoto: Photo | null;

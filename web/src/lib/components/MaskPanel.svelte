@@ -11,8 +11,10 @@
 		EyeOff,
 		Minus,
 		Mountain,
+		Palette,
 		Plus,
 		Scan,
+		SunMedium,
 		Trash2,
 		UserRound
 	} from '@lucide/svelte';
@@ -20,8 +22,16 @@
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
 	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
-	import type { MaskComponent, NormalizedRegion } from '$lib/edit-document';
+	import {
+		maskOperationSchema,
+		type ColorRangeComponent,
+		type LuminanceRangeComponent,
+		type MaskComponent,
+		type MaskOperation,
+		type NormalizedRegion
+	} from '$lib/edit-document';
 	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
+	import { rangeComponents, type RangeKind } from '$lib/mask-ranging';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 	import type { Mask, MaskKind, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
 
@@ -71,6 +81,42 @@
 		workspace.previewMaskEdge(control, value);
 	const commitMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
 		workspace.commitMaskEdge(control, value);
+
+	let rangeOperation = $state<MaskOperation>('add');
+	const selectedRanges = $derived(rangeComponents(selectedMask));
+	const percent = (fraction: number) => Math.round(fraction * 100);
+
+	type LuminanceControl = keyof LuminanceRangeComponent['range'];
+	type ColorControl = keyof ColorRangeComponent['range'];
+
+	function luminanceRange(
+		component: LuminanceRangeComponent,
+		control: LuminanceControl,
+		value: number
+	) {
+		const range = { ...component.range, [control]: value / 100 };
+		if (control === 'low') range.high = Math.max(range.high, range.low);
+		if (control === 'high') range.low = Math.min(range.low, range.high);
+		return range;
+	}
+
+	function colorRange(component: ColorRangeComponent, control: ColorControl, value: number) {
+		const degrees = control === 'hue' || control === 'width';
+		return { ...component.range, [control]: degrees ? value : value / 100 };
+	}
+
+	const previewLuminance =
+		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
+			workspace.previewRange(component.id, luminanceRange(component, control, value));
+	const commitLuminance =
+		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
+			void workspace.commitRange(component.id, luminanceRange(component, control, value));
+	const previewColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
+		workspace.previewRange(component.id, colorRange(component, control, value));
+	const commitColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
+		void workspace.commitRange(component.id, colorRange(component, control, value));
+	const addRange = (kind: RangeKind) => () =>
+		void workspace.addRangeComponent(kind, rangeOperation);
 
 	const candidateComponent = $derived(
 		selectedMask?.components.find(
@@ -128,6 +174,12 @@
 			<button type="button" class="mask-choice" onclick={onBeginObjectMask}
 				><Scan size={15} /><span>object</span></button
 			>
+			<button type="button" class="mask-choice" onclick={() => onAddMask('luminance')}
+				><SunMedium size={15} /><span>luminance</span></button
+			>
+			<button type="button" class="mask-choice" onclick={() => onAddMask('color')}
+				><Palette size={15} /><span>colour</span></button
+			>
 		</div>
 	</div>
 
@@ -148,7 +200,7 @@
 						sideOffset={4}
 						class="motion-menu z-50 min-w-28 rounded border border-subtle bg-bg p-1 shadow-2xl"
 					>
-						{#each MASK_PREVIEW_MODES as mode}
+						{#each MASK_PREVIEW_MODES as mode (mode)}
 							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
 								<span class="w-3 text-accent">{maskPreviewMode === mode ? '•' : ''}</span>
 								<span>{mode}</span>
@@ -279,6 +331,126 @@
 					/>
 				</div>
 			{/if}
+			<div class="my-2 h-px bg-subtle"></div>
+			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">range</p>
+			{#each selectedRanges as component (component.id)}
+				<div
+					role="group"
+					aria-label={component.type === 'luminance-range' ? 'luminance range' : 'colour range'}
+					class="mb-1.5 rounded border border-subtle px-2 pt-1.5 pb-0.5"
+				>
+					<p class="text-[10px] text-muted lowercase">
+						{component.type === 'luminance-range' ? 'luminance' : 'colour'} · {component.operation}
+					</p>
+					{#if component.type === 'luminance-range'}
+						<AdjustmentSlider
+							label="Low"
+							value={percent(component.range.low)}
+							min={0}
+							max={100}
+							defaultValue={50}
+							signed={false}
+							onValueChange={previewLuminance(component, 'low')}
+							onValueCommit={commitLuminance(component, 'low')}
+						/>
+						<AdjustmentSlider
+							label="High"
+							value={percent(component.range.high)}
+							min={0}
+							max={100}
+							defaultValue={100}
+							signed={false}
+							onValueChange={previewLuminance(component, 'high')}
+							onValueCommit={commitLuminance(component, 'high')}
+						/>
+						<AdjustmentSlider
+							label="Feather"
+							value={percent(component.range.feather)}
+							min={0}
+							max={100}
+							defaultValue={10}
+							signed={false}
+							onValueChange={previewLuminance(component, 'feather')}
+							onValueCommit={commitLuminance(component, 'feather')}
+						/>
+					{:else}
+						<AdjustmentSlider
+							label="Hue"
+							value={Math.round(component.range.hue)}
+							min={0}
+							max={360}
+							defaultValue={210}
+							suffix="°"
+							signed={false}
+							onValueChange={previewColor(component, 'hue')}
+							onValueCommit={commitColor(component, 'hue')}
+						/>
+						<AdjustmentSlider
+							label="Width"
+							value={Math.round(component.range.width)}
+							min={0}
+							max={90}
+							defaultValue={30}
+							suffix="°"
+							signed={false}
+							onValueChange={previewColor(component, 'width')}
+							onValueCommit={commitColor(component, 'width')}
+						/>
+						<AdjustmentSlider
+							label="Saturation floor"
+							value={percent(component.range.saturationFloor)}
+							min={0}
+							max={100}
+							defaultValue={20}
+							signed={false}
+							onValueChange={previewColor(component, 'saturationFloor')}
+							onValueCommit={commitColor(component, 'saturationFloor')}
+						/>
+						<AdjustmentSlider
+							label="Feather"
+							value={percent(component.range.feather)}
+							min={0}
+							max={100}
+							defaultValue={25}
+							signed={false}
+							onValueChange={previewColor(component, 'feather')}
+							onValueCommit={commitColor(component, 'feather')}
+						/>
+					{/if}
+				</div>
+			{/each}
+			<div class="mb-1.5 flex gap-1" role="tablist" aria-label="Range operation">
+				{#each maskOperationSchema.options as operation (operation)}
+					<button
+						type="button"
+						role="tab"
+						aria-selected={rangeOperation === operation}
+						onclick={() => (rangeOperation = operation)}
+						class="h-6 flex-1 cursor-pointer rounded border text-[11px] lowercase transition-colors {rangeOperation ===
+						operation
+							? 'border-control-edge bg-surface text-text'
+							: 'border-subtle text-muted hover:text-text'}"
+					>
+						{operation}
+					</button>
+				{/each}
+			</div>
+			<div class="grid grid-cols-2 gap-1.5">
+				<button
+					type="button"
+					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
+					onclick={addRange('luminance')}
+				>
+					<Plus size={12} /> luminance range
+				</button>
+				<button
+					type="button"
+					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
+					onclick={addRange('color')}
+				>
+					<Plus size={12} /> colour range
+				</button>
+			</div>
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">edge</p>
 			<AdjustmentSlider
