@@ -26,6 +26,7 @@ pub mod light;
 pub mod mixer;
 mod parallel;
 pub mod preview;
+pub mod range;
 pub mod scope;
 #[cfg(feature = "wasm")]
 mod wasm;
@@ -45,6 +46,7 @@ pub use hdr::UltraHdr;
 pub use light::{LightSettings, LightTransform};
 pub use mixer::{MixerBand, MixerLuts, MixerSettings};
 pub use preview::Preview;
+pub use range::{ColorRange, LuminanceRange};
 pub use scope::ImageScope;
 
 #[cfg(all(feature = "wasm-threads", target_arch = "wasm32"))]
