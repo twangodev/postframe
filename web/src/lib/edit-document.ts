@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import {
-	colorSettingsSchema,
-	defaultColorSettings,
 	defaultDevelopSettings,
 	defaultLightSettings,
+	defaultMaskAdjustments,
 	developSettingsSchema,
 	lightSettingsSchema,
+	maskAdjustmentsSchema,
 	type LightSettings
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
 
-export const EDIT_DOCUMENT_VERSION = 10;
+export const EDIT_DOCUMENT_VERSION = 11;
 
 export const maskKindSchema = z.enum([
 	'brush',
@@ -126,7 +126,7 @@ export const editMaskSchema = z.object({
 	visible: z.boolean(),
 	components: z.array(maskComponentSchema),
 	edge: maskEdgeSettingsSchema,
-	adjustments: z.object({ light: lightSettingsSchema, color: colorSettingsSchema })
+	adjustments: maskAdjustmentsSchema
 });
 
 export const editDocumentSchema = z
@@ -219,7 +219,7 @@ export function createEditMask(id: string, kind: MaskKind): EditMask {
 		visible: true,
 		components: [],
 		edge: defaultMaskEdgeSettings(),
-		adjustments: { light: defaultLightSettings(), color: defaultColorSettings() }
+		adjustments: defaultMaskAdjustments()
 	};
 }
 

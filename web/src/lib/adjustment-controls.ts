@@ -7,6 +7,7 @@ import {
 	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
+	type DevelopSettings,
 	type LightControlName,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -81,6 +82,11 @@ export class AdjustmentControls {
 			.map(({ target, value }) => this.host.dispatchEditorCommand(adjustmentCommand(target, value)))
 			.some(Boolean);
 		if (!applied) this.releaseUnchangedPreview();
+	}
+
+	commitAdjustments(adjustments: DevelopSettings, label: string) {
+		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return false;
+		return this.host.dispatchEditorCommand({ type: 'adjustment.replace', adjustments, label });
 	}
 
 	previewCurve(channel: CurveChannelName, points: CurvePoints) {

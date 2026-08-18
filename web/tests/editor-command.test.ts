@@ -6,7 +6,12 @@ import {
 	defaultEditDocument,
 	type MaskComponent
 } from '../src/lib/edit-document.ts';
-import { identityCurve } from '../src/lib/develop-settings.ts';
+import {
+	defaultColorSettings,
+	defaultDevelopSettings,
+	defaultLightSettings,
+	identityCurve
+} from '../src/lib/develop-settings.ts';
 import { applyEditorCommand, cloneEditorCommand, curveCommand } from '../src/lib/editor-command.ts';
 
 test('applies light commands immutably with render invalidation', () => {
@@ -333,6 +338,40 @@ test('applies grading commands for both a range and the shared sliders', () => {
 			range: 'shadows',
 			control: 'saturation',
 			value: -1
+		})
+	);
+});
+
+test('replaces every adjustment at once under one label', () => {
+	const before = defaultEditDocument('photo-one');
+	const adjustments = {
+		...defaultDevelopSettings(),
+		light: { ...defaultLightSettings(), exposure: 0.5, contrast: 20 },
+		color: { ...defaultColorSettings(), temperature: -15 }
+	};
+	const result = applyEditorCommand(before, {
+		type: 'adjustment.replace',
+		adjustments,
+		label: 'auto tone'
+	});
+	assert.ok(result);
+	assert.equal(result.label, 'auto tone');
+	assert.equal(result.invalidation, 'render');
+	assert.deepEqual(result.document.adjustments, adjustments);
+	assert.equal(before.adjustments.light.exposure, 0);
+	assert.equal(
+		applyEditorCommand(result.document, {
+			type: 'adjustment.replace',
+			adjustments,
+			label: 'again'
+		}),
+		null
+	);
+	assert.throws(() =>
+		applyEditorCommand(before, {
+			type: 'adjustment.replace',
+			adjustments: { ...adjustments, light: { ...adjustments.light, exposure: 9 } },
+			label: 'out of range'
 		})
 	);
 });

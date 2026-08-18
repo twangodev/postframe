@@ -47,6 +47,7 @@ export function curveCommand(channel: CurveChannelName, points: CurvePoints): Ad
 
 export type EditorCommand =
 	| AdjustmentCommand
+	| { type: 'adjustment.replace'; adjustments: DevelopSettings; label: string }
 	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
 	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
@@ -71,6 +72,8 @@ export function cloneEditorCommand(command: EditorCommand): EditorCommand {
 			return command.group === 'curve'
 				? { ...command, value: curvePointsSchema.parse(command.value) }
 				: { ...command };
+		case 'adjustment.replace':
+			return { ...command, adjustments: developSettingsSchema.parse(command.adjustments) };
 		case 'mask.create':
 			return { ...command, mask: editMaskSchema.parse(command.mask) };
 		case 'mask.component.set':
@@ -103,6 +106,12 @@ export function applyEditorCommand(
 			next.adjustments = adjustments;
 			const label = curved ? `${command.control} curve` : targetLabel(command);
 			return transition(command, label, 'render', next);
+		}
+		case 'adjustment.replace': {
+			const adjustments = developSettingsSchema.parse(command.adjustments);
+			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
+			next.adjustments = adjustments;
+			return transition(command, command.label, 'render', next);
 		}
 		case 'mask.light.set': {
 			const mask = next.masks.find(({ id }) => id === command.maskId);

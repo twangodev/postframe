@@ -113,6 +113,16 @@ export type DevelopSettings = z.infer<typeof developSettingsSchema>;
 
 export type DevelopGroupName = keyof DevelopSettings;
 
+export const DEVELOP_GROUP_NAMES = [
+	'light',
+	'color',
+	'curve',
+	'mixer',
+	'grading',
+	'detail',
+	'effects'
+] as const satisfies readonly DevelopGroupName[];
+
 export type ScalarGroupName = {
 	[Group in DevelopGroupName]: DevelopSettings[Group] extends Record<string, number>
 		? Group
@@ -327,8 +337,27 @@ export function defaultDevelopSettings(): DevelopSettings {
 	};
 }
 
-export function tonalDevelopSettings(light: LightSettings, color: ColorSettings): DevelopSettings {
-	return { ...defaultDevelopSettings(), light: { ...light }, color: { ...color } };
+export const maskAdjustmentsSchema = z.object({
+	light: lightSettingsSchema,
+	color: colorSettingsSchema
+});
+
+export type MaskAdjustments = z.infer<typeof maskAdjustmentsSchema>;
+
+export function defaultMaskAdjustments(): MaskAdjustments {
+	return { light: defaultLightSettings(), color: defaultColorSettings() };
+}
+
+export function cloneMaskAdjustments(adjustments: MaskAdjustments): MaskAdjustments {
+	return maskAdjustmentsSchema.parse(adjustments);
+}
+
+export function maskDevelopSettings(adjustments: MaskAdjustments): DevelopSettings {
+	return { ...defaultDevelopSettings(), ...cloneMaskAdjustments(adjustments) };
+}
+
+export function neutralMaskAdjustments(adjustments: MaskAdjustments): boolean {
+	return sameDevelopSettings(maskDevelopSettings(adjustments), defaultDevelopSettings());
 }
 
 export function cloneDevelopSettings(settings: DevelopSettings): DevelopSettings {

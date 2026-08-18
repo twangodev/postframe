@@ -5,10 +5,15 @@ import type {
 	RenderPerformanceMeasurement,
 	RenderTileRequest,
 	Request,
-	Response
+	Response,
+	SourceImage
 } from './worker';
 import { imageScopeFromTransfer } from './image-scope.ts';
-import { cloneDevelopSettings, type DevelopSettings } from './develop-settings.ts';
+import {
+	cloneDevelopSettings,
+	cloneMaskAdjustments,
+	type DevelopSettings
+} from './develop-settings.ts';
 import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
 import {
@@ -242,6 +247,18 @@ export class PostframeWorkerClient {
 	async ultraPreview() {
 		const response = await this.send((id) => ({ id, type: 'ultra' }), 'ultra');
 		return response.jpeg;
+	}
+
+	async sourceImage(maxDimension: number): Promise<SourceImage> {
+		const response = await this.send(
+			(id) => ({ id, type: 'source-image', maxDimension }),
+			'source-image'
+		);
+		return {
+			width: response.width,
+			height: response.height,
+			rgba: new Uint8ClampedArray(response.rgba)
+		};
 	}
 
 	async exportPhoto(request: ExportPhotoRequest, onProgress?: (progress: ExportProgress) => void) {
@@ -483,7 +500,7 @@ function copyDevelopedMask(mask: DevelopedMaskInput): DevelopedMaskInput {
 	return {
 		...mask,
 		edge: { ...mask.edge },
-		settings: { light: { ...mask.settings.light }, color: { ...mask.settings.color } },
+		settings: cloneMaskAdjustments(mask.settings),
 		alpha: mask.alpha.slice(0)
 	};
 }

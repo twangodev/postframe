@@ -1,5 +1,5 @@
 use crate::develop::PixelContext;
-use crate::{ColorSettings, DevelopSettings, DevelopTransform, Error, LightSettings, Result};
+use crate::{DevelopSettings, DevelopTransform, Error, Result};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MaskPlane {
@@ -100,10 +100,10 @@ pub struct LocalAdjustment {
 }
 
 impl LocalAdjustment {
-    pub fn new(mask: MaskPlane, light: LightSettings, color: ColorSettings) -> Result<Self> {
+    pub fn new(mask: MaskPlane, settings: DevelopSettings) -> Result<Self> {
         Ok(Self {
             mask,
-            develop: DevelopTransform::new(DevelopSettings::tonal(light, color))?,
+            develop: DevelopTransform::new(settings)?,
         })
     }
 
@@ -174,7 +174,7 @@ fn mix(left: f32, right: f32, weight: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ColorTransform, LightTransform};
+    use crate::{ColorSettings, ColorTransform, LightSettings, LightTransform};
 
     fn region(width: usize, height: usize) -> DevelopedTileRegion {
         DevelopedTileRegion {
@@ -202,11 +202,13 @@ mod tests {
         let mask = MaskPlane::new(2, 1, vec![0, 255]).unwrap();
         let adjustment = LocalAdjustment::new(
             mask,
-            LightSettings {
-                exposure: 1.0,
-                ..LightSettings::NEUTRAL
-            },
-            ColorSettings::NEUTRAL,
+            DevelopSettings::tonal(
+                LightSettings {
+                    exposure: 1.0,
+                    ..LightSettings::NEUTRAL
+                },
+                ColorSettings::NEUTRAL,
+            ),
         )
         .unwrap();
         let output = DevelopedTileCompositor
@@ -223,20 +225,24 @@ mod tests {
         let mask = MaskPlane::new(1, 1, vec![128]).unwrap();
         let brighter = LocalAdjustment::new(
             mask.clone(),
-            LightSettings {
-                exposure: 1.0,
-                ..LightSettings::NEUTRAL
-            },
-            ColorSettings::NEUTRAL,
+            DevelopSettings::tonal(
+                LightSettings {
+                    exposure: 1.0,
+                    ..LightSettings::NEUTRAL
+                },
+                ColorSettings::NEUTRAL,
+            ),
         )
         .unwrap();
         let darker = LocalAdjustment::new(
             mask,
-            LightSettings {
-                exposure: -1.0,
-                ..LightSettings::NEUTRAL
-            },
-            ColorSettings::NEUTRAL,
+            DevelopSettings::tonal(
+                LightSettings {
+                    exposure: -1.0,
+                    ..LightSettings::NEUTRAL
+                },
+                ColorSettings::NEUTRAL,
+            ),
         )
         .unwrap();
         let once = DevelopedTileCompositor
@@ -260,7 +266,9 @@ mod tests {
             saturation: 30.0,
         };
         let full = MaskPlane::new(3, 1, vec![255; 3]).unwrap();
-        let adjustment = LocalAdjustment::new(full, LightSettings::NEUTRAL, color).unwrap();
+        let adjustment =
+            LocalAdjustment::new(full, DevelopSettings::tonal(LightSettings::NEUTRAL, color))
+                .unwrap();
         let masked = DevelopedTileCompositor
             .composite(&rgba, 3, 1, region(3, 1), &[adjustment])
             .unwrap();
@@ -277,11 +285,13 @@ mod tests {
         let mask = MaskPlane::new(2, 1, vec![0, 255]).unwrap();
         let adjustment = LocalAdjustment::new(
             mask,
-            LightSettings::NEUTRAL,
-            ColorSettings {
-                saturation: -100.0,
-                ..ColorSettings::NEUTRAL
-            },
+            DevelopSettings::tonal(
+                LightSettings::NEUTRAL,
+                ColorSettings {
+                    saturation: -100.0,
+                    ..ColorSettings::NEUTRAL
+                },
+            ),
         )
         .unwrap();
         let output = DevelopedTileCompositor
@@ -302,7 +312,9 @@ mod tests {
             ..LightSettings::NEUTRAL
         };
         let full = MaskPlane::new(2, 1, vec![255; 2]).unwrap();
-        let adjustment = LocalAdjustment::new(full, light, ColorSettings::NEUTRAL).unwrap();
+        let adjustment =
+            LocalAdjustment::new(full, DevelopSettings::tonal(light, ColorSettings::NEUTRAL))
+                .unwrap();
         let masked = DevelopedTileCompositor
             .composite(&rgba, 2, 1, region(2, 1), &[adjustment])
             .unwrap();
@@ -318,14 +330,16 @@ mod tests {
         let rgba = [96, 96, 96, 255, 32, 200, 128, 137];
         let adjustment = LocalAdjustment::new(
             MaskPlane::new(1, 1, vec![255]).unwrap(),
-            LightSettings {
-                exposure: 0.5,
-                ..LightSettings::NEUTRAL
-            },
-            ColorSettings {
-                saturation: -40.0,
-                ..ColorSettings::NEUTRAL
-            },
+            DevelopSettings::tonal(
+                LightSettings {
+                    exposure: 0.5,
+                    ..LightSettings::NEUTRAL
+                },
+                ColorSettings {
+                    saturation: -40.0,
+                    ..ColorSettings::NEUTRAL
+                },
+            ),
         )
         .unwrap();
         let composited = |x: usize, y: usize| {

@@ -1,4 +1,4 @@
-import type { ColorSettings, DevelopSettings, LightSettings } from './develop-settings';
+import type { DevelopSettings, MaskAdjustments } from './develop-settings';
 import type { NormalizedCrop } from './edit-document.ts';
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
@@ -67,18 +67,19 @@ export interface RenderTileRequest {
 	tone: boolean;
 }
 
-export interface DevelopedMaskSettings {
-	light: LightSettings;
-	color: ColorSettings;
-}
-
 export interface DevelopedMaskInput {
 	id: string;
 	width: number;
 	height: number;
 	alpha: ArrayBuffer;
 	edge: MaskEdgeSettings;
-	settings: DevelopedMaskSettings;
+	settings: MaskAdjustments;
+}
+
+export interface SourceImage {
+	width: number;
+	height: number;
+	rgba: Uint8ClampedArray;
 }
 
 export interface MaskEdgeInput {
@@ -128,6 +129,7 @@ export type Request =
 			sampleTarget: number;
 	  }
 	| { id: number; type: 'ultra' }
+	| { id: number; type: 'source-image'; maxDimension: number }
 	| {
 			id: number;
 			type: 'export';
@@ -172,6 +174,7 @@ export type Response =
 	  }
 	| { id: number; type: 'scope'; scope: ImageScopeTransfer }
 	| { id: number; type: 'ultra'; jpeg: ArrayBuffer }
+	| { id: number; type: 'source-image'; width: number; height: number; rgba: ArrayBuffer }
 	| ({ id: number; type: 'export-progress' } & ExportProgress)
 	| { id: number; type: 'export'; jpeg: ArrayBuffer }
 	| { id: number; type: 'closed' }

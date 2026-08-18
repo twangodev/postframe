@@ -101,7 +101,7 @@ impl DevelopedTileCompositor {
         let settings = develop_settings(settings)?;
         Ok(Self {
             compositor: CoreDevelopedTileCompositor,
-            adjustment: LocalAdjustment::new(mask, settings.light, settings.color).map_err(err)?,
+            adjustment: LocalAdjustment::new(mask, settings).map_err(err)?,
         })
     }
 

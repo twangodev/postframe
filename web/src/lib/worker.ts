@@ -11,14 +11,13 @@ import {
 	openDisplayDocument,
 	openRawDocument
 } from './worker-documents.ts';
-import { renderPreviewImage, renderScope } from './worker-render.ts';
+import { renderPreviewImage, renderScope, sourceImage } from './worker-render.ts';
 import { renderTile } from './worker-tiles.ts';
 import { setMaskCompositors } from './worker-masks.ts';
 import { exportDocument } from './worker-export.ts';
 
 export type {
 	DevelopedMaskInput,
-	DevelopedMaskSettings,
 	DevelopPhase,
 	DevelopProgress,
 	MaskEdgeInput,
@@ -29,7 +28,8 @@ export type {
 	RenderPerformanceStage,
 	RenderTileRequest,
 	Request,
-	Response
+	Response,
+	SourceImage
 } from './worker-protocol.ts';
 
 self.onmessage = async (event: MessageEvent<Request>) => {
@@ -120,6 +120,21 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'ultra': {
 				const jpeg = activeRawDocument().preview_ultra().buffer as ArrayBuffer;
 				post({ id: message.id, type: 'ultra', jpeg }, [jpeg]);
+				break;
+			}
+			case 'source-image': {
+				const source = await sourceImage(activeDocument(), message.maxDimension);
+				const rgba = source.data.slice().buffer as ArrayBuffer;
+				post(
+					{
+						id: message.id,
+						type: 'source-image',
+						width: source.width,
+						height: source.height,
+						rgba
+					},
+					[rgba]
+				);
 				break;
 			}
 			case 'export': {

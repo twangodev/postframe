@@ -7,8 +7,10 @@ import {
 	cloneDevelopSettings,
 	colorIdentity,
 	curvePointsSchema,
+	defaultColorSettings,
 	defaultDetailSettings,
 	defaultDevelopSettings,
+	defaultLightSettings,
 	detailIdentity,
 	effectsIdentity,
 	gradingIdentity,
@@ -18,7 +20,9 @@ import {
 	detailTileKey,
 	developSettingsSchema,
 	identityCurve,
-	tonalDevelopSettings,
+	defaultMaskAdjustments,
+	maskDevelopSettings,
+	neutralMaskAdjustments,
 	withAdjustment,
 	withAdjustmentAt,
 	type DevelopSettings
@@ -83,7 +87,7 @@ test('widening tonal settings keeps light and colour and neutralizes the rest', 
 		blacks: -10
 	};
 	const color = { temperature: 30, tint: -12, vibrance: 8, saturation: -4 };
-	const settings = tonalDevelopSettings(light, color);
+	const settings = maskDevelopSettings({ light, color });
 	assert.deepEqual(settings.light, light);
 	assert.deepEqual(settings.color, color);
 	const neutral = defaultDevelopSettings();
@@ -103,14 +107,30 @@ test('widening tonal settings detaches the supplied groups', () => {
 		whites: 0,
 		blacks: 0
 	};
-	const settings = tonalDevelopSettings(light, {
-		temperature: 0,
-		tint: 0,
-		vibrance: 0,
-		saturation: 0
+	const settings = maskDevelopSettings({
+		light,
+		color: { temperature: 0, tint: 0, vibrance: 0, saturation: 0 }
 	});
 	settings.light.exposure = 2;
 	assert.equal(light.exposure, 0);
+});
+
+test('mask adjustments are neutral only when every carried group is at its default', () => {
+	assert.equal(neutralMaskAdjustments(defaultMaskAdjustments()), true);
+	assert.equal(
+		neutralMaskAdjustments({
+			...defaultMaskAdjustments(),
+			light: { ...defaultLightSettings(), exposure: 0.1 }
+		}),
+		false
+	);
+	assert.equal(
+		neutralMaskAdjustments({
+			...defaultMaskAdjustments(),
+			color: { ...defaultColorSettings(), tint: 1 }
+		}),
+		false
+	);
 });
 
 test('clones settings held behind a reactive proxy', () => {

@@ -11,6 +11,11 @@ import { fileSize, readFile, writeFileHandle } from './worker-files.ts';
 import { displayPreview, renderDisplayPreview, renderRawPreview } from './worker-render.ts';
 import { clearMaskCompositors } from './worker-masks.ts';
 
+export interface SourceImageMemo {
+	maxDimension: number;
+	image: ImageData;
+}
+
 export interface RawDocument {
 	kind: 'raw';
 	image: { width: number; height: number };
@@ -18,6 +23,7 @@ export interface RawDocument {
 	renderer: RawWebGpuRenderer | null;
 	developLuts: (DevelopLuts & { key: string }) | null;
 	metadataSource: FileSystemFileHandle | null;
+	sourceImage: SourceImageMemo | null;
 }
 
 export interface DisplayDocument {
@@ -29,6 +35,7 @@ export interface DisplayDocument {
 	crop: NormalizedCrop | null;
 	light: WasmDisplayTransform;
 	adjusted: Uint8Array | null;
+	sourceImage: SourceImageMemo | null;
 }
 
 export type ActiveDocument = RawDocument | DisplayDocument;
@@ -195,7 +202,8 @@ async function publishRawDocument(
 		session,
 		renderer: await createRawRenderer(session),
 		developLuts: null,
-		metadataSource: exportMetadataSource(message.frames)
+		metadataSource: exportMetadataSource(message.frames),
+		sourceImage: null
 	};
 	const preview = measure('preview', () =>
 		renderRawPreview(session, message.adjustments, message.crop, true)
@@ -264,7 +272,8 @@ export async function openDisplayDocument(message: Extract<Request, { type: 'ope
 			adjustments: cloneDevelopSettings(message.adjustments),
 			crop: cloneCrop(message.crop),
 			light,
-			adjusted: null
+			adjusted: null,
+			sourceImage: null
 		} satisfies DisplayDocument;
 		document = next;
 		postDisplayProgress(message, 'rendering', source.size, source.size);

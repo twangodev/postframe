@@ -1,10 +1,8 @@
 import {
 	cloneDevelopSettings,
-	COLOR_CONTROL_NAMES,
-	LIGHT_CONTROL_NAMES,
-	type ColorSettings,
-	type DevelopSettings,
-	type LightSettings
+	cloneMaskAdjustments,
+	neutralMaskAdjustments,
+	type DevelopSettings
 } from './develop-settings';
 import {
 	cloneCrop,
@@ -117,12 +115,7 @@ export class MaskRasterPipeline {
 	async renderMasks(document: EditDocument) {
 		const masks = await Promise.all(
 			document.masks.map(async (mask) => {
-				if (
-					!mask.visible ||
-					(neutralLight(mask.adjustments.light) && neutralColor(mask.adjustments.color))
-				) {
-					return null;
-				}
+				if (!mask.visible || neutralMaskAdjustments(mask.adjustments)) return null;
 				const raster = await this.composedMaskRaster(mask);
 				if (!raster) return null;
 				return {
@@ -131,10 +124,7 @@ export class MaskRasterPipeline {
 					height: raster.height,
 					alpha: raster.alpha.slice().buffer as ArrayBuffer,
 					edge: { ...mask.edge },
-					settings: {
-						light: { ...mask.adjustments.light },
-						color: { ...mask.adjustments.color }
-					}
+					settings: cloneMaskAdjustments(mask.adjustments)
 				};
 			})
 		);
@@ -245,12 +235,4 @@ export class MaskRasterPipeline {
 		this.rasterCache.clear();
 		this.adjustedRasterCache.clear();
 	}
-}
-
-function neutralLight(settings: LightSettings) {
-	return LIGHT_CONTROL_NAMES.every((control) => settings[control] === 0);
-}
-
-function neutralColor(settings: ColorSettings) {
-	return COLOR_CONTROL_NAMES.every((control) => settings[control] === 0);
 }

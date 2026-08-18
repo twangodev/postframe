@@ -97,7 +97,7 @@ test('round-trips a document carrying every develop group', () => {
 			grainSize: 35
 		}
 	};
-	assert.equal(document.version, 10);
+	assert.equal(document.version, 11);
 	assert.deepEqual(editDocumentSchema.parse(document), document);
 	assert.deepEqual(cloneEditDocument(document).adjustments, document.adjustments);
 	assert.notEqual(

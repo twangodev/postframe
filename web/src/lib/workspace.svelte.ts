@@ -447,6 +447,9 @@ export class WorkspaceState {
 	commitAdjustmentsAt = (changes: readonly AdjustmentChange[]) =>
 		this.controls.commitAdjustmentsAt(changes);
 
+	commitAdjustments = (adjustments: DevelopSettings, label: string) =>
+		this.controls.commitAdjustments(adjustments, label);
+
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);
 

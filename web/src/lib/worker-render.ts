@@ -1,6 +1,7 @@
 import { freeQuietly } from './diagnostics.ts';
 import {
 	cloneDevelopSettings,
+	defaultDevelopSettings,
 	sameDevelopSettings,
 	type DevelopSettings
 } from './develop-settings';
@@ -161,6 +162,26 @@ function renderRawScope(
 		});
 	} finally {
 		freeQuietly('scope frame', frame);
+	}
+}
+
+export async function sourceImage(active: ActiveDocument, maxDimension: number) {
+	if (active.sourceImage?.maxDimension !== maxDimension) {
+		active.sourceImage = { maxDimension, image: await renderSourceImage(active, maxDimension) };
+	}
+	return active.sourceImage.image;
+}
+
+async function renderSourceImage(active: ActiveDocument, maxDimension: number) {
+	if (active.kind === 'display') return displayPreview(active.bitmap, maxDimension);
+	const jpeg = active.session.preview_jpeg(defaultDevelopSettings(), null, true);
+	const bitmap = await createImageBitmap(
+		new Blob([jpeg.buffer as ArrayBuffer], { type: 'image/jpeg' })
+	);
+	try {
+		return displayPreview(bitmap, maxDimension);
+	} finally {
+		bitmap.close();
 	}
 }
 
