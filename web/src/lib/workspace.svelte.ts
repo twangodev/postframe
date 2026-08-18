@@ -16,8 +16,10 @@ import {
 	defaultDevelopSettings,
 	defaultGradingSettings,
 	defaultMixerSettings,
+	sameDevelopSettings,
 	scalarAdjustments,
 	type AdjustmentTarget,
+	type DevelopGroupName,
 	type DevelopSettings,
 	type ColorControlName,
 	type CurveChannelName,
@@ -53,6 +55,8 @@ import { ObjectUrlRegistry } from './object-url-registry';
 import { PhotoIngest } from './photo-ingest';
 import { PhotoOrganizer } from './photo-organizer';
 import type { ColorLabel, Photo, PhotoStack } from './photo-record';
+import { applyGroups, savedPreset, type Preset } from './preset';
+import { copiedSettings, type SettingsClipboard } from './settings-clipboard';
 import { SmartMasking, type SmartMaskStatus, type SubjectChoices } from './smart-masking';
 import { StorageObserver } from './storage-observer';
 import { StorageOverview } from './storage-overview';
@@ -68,6 +72,8 @@ export type { DevelopPreviewPhase } from './develop-preview';
 export type { SmartMaskStatus, SubjectChoices } from './smart-masking';
 export type { SelectedMaskRaster } from './mask-raster-pipeline';
 export type { DocumentStatus } from './document-session';
+export type { Preset } from './preset';
+export type { SettingsClipboard } from './settings-clipboard';
 
 export type Mask = EditMask;
 
@@ -97,6 +103,7 @@ export class WorkspaceState {
 	photos = $state<Photo[]>([]);
 	collections = $state<PhotoCollection[]>([]);
 	stacks = $state<PhotoStack[]>([]);
+	presets = $state<Preset[]>([]);
 	selectedIds = $state<string[]>([]);
 	activePhotoId = $state<string | null>(null);
 	masks = $state<Mask[]>([]);
@@ -142,6 +149,7 @@ export class WorkspaceState {
 	curve = $state(defaultCurveSettings());
 	mixer = $state(defaultMixerSettings());
 	grading = $state(defaultGradingSettings());
+	settingsClipboard = $state<SettingsClipboard | null>(null);
 	renderSettings = $state<{
 		adjustments: DevelopSettings;
 		crop: NormalizedCrop | null;
@@ -174,6 +182,8 @@ export class WorkspaceState {
 			this.documentStatus.kind === 'ready' &&
 			this.documentStatus.photoId === this.selectedPhoto.id
 	);
+	syncTargetIds = $derived(this.selectedIds.filter((id) => id !== this.activePhotoId));
+	canSync = $derived(this.syncTargetIds.length > 0);
 
 	constructor() {
 		const host = this.collaboratorHost();
@@ -214,6 +224,7 @@ export class WorkspaceState {
 				'photos',
 				'collections',
 				'stacks',
+				'presets',
 				'selectedIds',
 				'activePhotoId',
 				'mode',
@@ -343,6 +354,7 @@ export class WorkspaceState {
 			this.photos = [];
 			this.collections = [];
 			this.stacks = [];
+			this.presets = [];
 			this.selectedIds = [];
 			this.activePhotoId = null;
 			this.mode = 'welcome';
@@ -395,15 +407,17 @@ export class WorkspaceState {
 	}
 
 	selectPhoto(photoId: string, additive = false) {
-		if (additive) {
-			this.selectedIds = this.selectedIds.includes(photoId)
-				? this.selectedIds.filter((id) => id !== photoId)
-				: [...this.selectedIds, photoId];
-		} else {
+		if (!additive) {
 			this.selectedIds = [photoId];
+			this.activePhotoId = photoId;
+			if (this.mode === 'edit') void this.session.open(photoId);
+			return;
 		}
-		this.activePhotoId = photoId;
-		if (this.mode === 'edit' && !additive) void this.session.open(photoId);
+		if (this.mode === 'edit' && photoId === this.activePhotoId) return;
+		this.selectedIds = this.selectedIds.includes(photoId)
+			? this.selectedIds.filter((id) => id !== photoId)
+			: [...this.selectedIds, photoId];
+		if (this.mode !== 'edit') this.activePhotoId = photoId;
 	}
 
 	editPhoto(photoId: string) {
@@ -449,6 +463,64 @@ export class WorkspaceState {
 
 	commitAdjustments = (adjustments: DevelopSettings, label: string) =>
 		this.controls.commitAdjustments(adjustments, label);
+
+	savePreset = (name: string, groups: readonly DevelopGroupName[]) => {
+		const photo = this.selectedPhoto;
+		if (!photo || groups.length === 0) return;
+		const preset = savedPreset(
+			this.presets,
+			name,
+			photo.edit.adjustments,
+			groups,
+			new Date().toISOString()
+		);
+		this.presets = [preset, ...this.presets.filter(({ id }) => id !== preset.id)];
+		void this.persistence.queue((store) => store.savePreset(preset));
+	};
+
+	applyPreset = (presetId: string) => {
+		const photo = this.selectedPhoto;
+		const preset = this.presets.find(({ id }) => id === presetId);
+		if (!photo || !preset) return false;
+		return this.commitAdjustments(
+			applyGroups(photo.edit.adjustments, preset.settings, preset.groups),
+			`preset ${preset.name}`
+		);
+	};
+
+	deletePreset = (presetId: string) => {
+		this.presets = this.presets.filter(({ id }) => id !== presetId);
+		void this.persistence.queue((store) => store.deletePreset(presetId));
+	};
+
+	copySettings = (groups: readonly DevelopGroupName[]) => {
+		const photo = this.selectedPhoto;
+		if (!photo || groups.length === 0) return;
+		this.settingsClipboard = copiedSettings(photo.edit.adjustments, groups);
+	};
+
+	pasteSettings = () => {
+		const photo = this.selectedPhoto;
+		const clipboard = this.settingsClipboard;
+		if (!photo || !clipboard) return false;
+		return this.commitAdjustments(
+			applyGroups(photo.edit.adjustments, clipboard.settings, clipboard.groups),
+			'paste settings'
+		);
+	};
+
+	syncSettings = (groups: readonly DevelopGroupName[]) => {
+		const source = this.selectedPhoto;
+		if (!source || groups.length === 0) return;
+		for (const photo of this.photos) {
+			if (!this.syncTargetIds.includes(photo.id)) continue;
+			const adjustments = applyGroups(photo.edit.adjustments, source.edit.adjustments, groups);
+			if (sameDevelopSettings(photo.edit.adjustments, adjustments)) continue;
+			const edit = { ...photo.edit, adjustments };
+			photo.edit = edit;
+			void this.persistence.queue((store) => store.saveEditDocument(photo.id, edit));
+		}
+	};
 
 	previewLight = (control: LightControlName, value: number) =>
 		this.controls.previewLight(control, value);

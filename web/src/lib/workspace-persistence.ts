@@ -3,6 +3,7 @@ import type { PhotoCollection } from './library-schema';
 import { restoredPhoto, storedPhoto, type Photo, type PhotoStack } from './photo-record';
 import type { PhotoImport } from './photo-ingest';
 import type { ObjectUrlRegistry } from './object-url-registry';
+import type { Preset } from './preset';
 
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 
@@ -10,6 +11,7 @@ export interface WorkspacePersistenceHost {
 	photos: Photo[];
 	collections: PhotoCollection[];
 	stacks: PhotoStack[];
+	presets: Preset[];
 	selectedIds: string[];
 	activePhotoId: string | null;
 	storageStatus: StorageStatus;
@@ -49,8 +51,9 @@ export class WorkspacePersistence {
 		this.host.libraryError = null;
 		await this.persistence;
 		try {
-			const library = await store.loadLibrary();
+			const [library, presets] = await Promise.all([store.loadLibrary(), store.listPresets()]);
 			if (revision !== this.loadRevision) return;
+			this.host.presets = presets;
 			if (!library) {
 				this.libraryCreatedAt = Date.now();
 				return;

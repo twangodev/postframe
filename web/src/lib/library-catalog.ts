@@ -7,6 +7,7 @@ import {
 	type StoredPhoto
 } from './library-schema.ts';
 import { editDocumentStorageName } from './edit-document.ts';
+import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
 
 const DATABASE_NAME = 'postframe-catalog';
@@ -60,6 +61,8 @@ export interface PendingDeleteRecord {
 	queuedAt: number;
 }
 
+export type PresetRecord = Preset;
+
 export class PostframeDatabase extends Dexie {
 	library!: Table<LibraryRecord, string>;
 	photos!: Table<PhotoRecord, string>;
@@ -69,6 +72,7 @@ export class PostframeDatabase extends Dexie {
 	stacks!: Table<StackRecord, string>;
 	stackPhotos!: Table<StackPhotoRecord, [string, string]>;
 	pendingDeletes!: Table<PendingDeleteRecord, [PendingDeleteRecord['kind'], string]>;
+	presets!: Table<PresetRecord, string>;
 
 	constructor(name = DATABASE_NAME) {
 		super(name);
@@ -115,6 +119,18 @@ export class PostframeDatabase extends Dexie {
 			stacks: '&id',
 			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
 			pendingDeletes: '[kind+storageName], queuedAt'
+		});
+		this.version(5).stores({
+			library: '&id',
+			photos:
+				'&id, &fingerprint, importedAt, metadata.capturedAt, flagged, rejected, rating, stackId, [kind+importedAt]',
+			assets: '&id, &storageName, contentHash, photoId, [photoId+frameIndex], role',
+			collections: '&id, &normalizedName, updatedAt',
+			collectionPhotos: '[collectionId+photoId], photoId, [collectionId+position]',
+			stacks: '&id',
+			stackPhotos: '[stackId+photoId], photoId, [stackId+position]',
+			pendingDeletes: '[kind+storageName], queuedAt',
+			presets: '&id, &normalizedName, updatedAt'
 		});
 	}
 }
@@ -409,6 +425,19 @@ export class LibraryCatalog {
 
 	pendingDeletions() {
 		return this.database.pendingDeletes.toArray();
+	}
+
+	async listPresets(): Promise<Preset[]> {
+		const records = await this.database.presets.orderBy('updatedAt').reverse().toArray();
+		return records.map((record) => presetSchema.parse(record));
+	}
+
+	async savePreset(preset: Preset) {
+		await this.database.presets.put(presetSchema.parse(preset));
+	}
+
+	async deletePreset(presetId: string) {
+		await this.database.presets.delete(presetId);
 	}
 
 	async completeDeletions(deletions: readonly PendingDeleteRecord[]) {

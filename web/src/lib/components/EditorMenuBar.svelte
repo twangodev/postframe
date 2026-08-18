@@ -9,9 +9,11 @@
 		onAction: (action: EditorMenuAction) => void;
 		canUndo: boolean;
 		canRedo: boolean;
+		canPaste: boolean;
+		canSync: boolean;
 	}
 
-	let { onAction, canUndo, canRedo }: Props = $props();
+	let { onAction, canUndo, canRedo, canPaste, canSync }: Props = $props();
 
 	function select(entry: EditorMenuEntry) {
 		if (entry.kind === 'action') onAction(entry.action);
@@ -22,6 +24,8 @@
 		if (entry.kind !== 'action') return false;
 		if (entry.action === 'undo') return !canUndo;
 		if (entry.action === 'redo') return !canRedo;
+		if (entry.action === 'paste-settings') return !canPaste;
+		if (entry.action === 'sync-settings') return !canSync;
 		return false;
 	}
 </script>
