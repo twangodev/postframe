@@ -7,14 +7,14 @@
 		type MixerBandControlName,
 		type MixerBandName
 	} from '$lib/develop-settings';
-	import type { WorkspaceState } from '$lib/workspace.svelte';
+	import type { DevelopBinding } from '$lib/develop-binding';
 
 	interface Props {
-		workspace: WorkspaceState;
+		binding: DevelopBinding;
 		open?: boolean;
 	}
 
-	let { workspace, open = $bindable(false) }: Props = $props();
+	let { binding, open = $bindable(false) }: Props = $props();
 
 	const SWATCH_HUES: Record<MixerBandName, number> = {
 		red: 0,
@@ -30,13 +30,13 @@
 	let band = $state<MixerBandName>('red');
 
 	const moved = (name: MixerBandName) =>
-		MIXER_BAND_CONTROL_NAMES.some((control) => workspace.mixer[name][control] !== 0);
+		MIXER_BAND_CONTROL_NAMES.some((control) => binding.mixer[name][control] !== 0);
 
 	const target = (control: MixerBandControlName) => ({ group: 'mixer', band, control }) as const;
 	const preview = (control: MixerBandControlName) => (value: number) =>
-		workspace.previewAdjustmentAt(target(control), value);
+		binding.previewAdjustmentAt(target(control), value);
 	const commit = (control: MixerBandControlName) => (value: number) =>
-		workspace.commitAdjustmentAt(target(control), value);
+		binding.commitAdjustmentAt(target(control), value);
 </script>
 
 <Panel title="Color mixer" bind:open>
@@ -64,10 +64,10 @@
 	{#each MIXER_BAND_CONTROL_NAMES as control (control)}
 		<AdjustmentSlider
 			label={`Band ${control}`}
-			bind:value={workspace.mixer[band][control]}
+			bind:value={binding.mixer[band][control]}
 			min={-100}
 			max={100}
-			disabled={!workspace.canAdjustLight}
+			disabled={binding.disabled}
 			onValueChange={preview(control)}
 			onValueCommit={commit(control)}
 		/>

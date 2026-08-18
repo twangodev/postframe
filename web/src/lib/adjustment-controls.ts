@@ -2,6 +2,8 @@ import {
 	mirrorAdjustments,
 	withAdjustmentAt,
 	withCurve,
+	withMaskAdjustmentAt,
+	withMaskCurve,
 	type AdjustmentMirror,
 	type AdjustmentTarget,
 	type ColorControlName,
@@ -9,6 +11,7 @@ import {
 	type CurvePoints,
 	type DevelopSettings,
 	type LightControlName,
+	type MaskAdjustmentTarget,
 	type ScalarControlName,
 	type ScalarGroupName
 } from './develop-settings';
@@ -21,6 +24,11 @@ import type { Photo } from './photo-record';
 
 export interface AdjustmentChange {
 	target: AdjustmentTarget;
+	value: number;
+}
+
+export interface MaskAdjustmentChange {
+	target: MaskAdjustmentTarget;
 	value: number;
 }
 
@@ -148,6 +156,46 @@ export class AdjustmentControls {
 		this.commitMaskCommand((maskId) => ({ type: 'mask.color.set', maskId, control, value }));
 	}
 
+	previewMaskAdjustmentAt(target: MaskAdjustmentTarget, value: number) {
+		this.previewMaskAdjustmentsAt([{ target, value }]);
+	}
+
+	commitMaskAdjustmentAt(target: MaskAdjustmentTarget, value: number) {
+		this.commitMaskAdjustmentsAt([{ target, value }]);
+	}
+
+	previewMaskAdjustmentsAt(changes: readonly MaskAdjustmentChange[]) {
+		const document = this.previewedMaskDocument((mask) => {
+			mask.adjustments = changes.reduce(
+				(adjustments, { target, value }) => withMaskAdjustmentAt(adjustments, target, value),
+				mask.adjustments
+			);
+		});
+		if (document) this.pipeline.scheduleMaskRender(document);
+	}
+
+	commitMaskAdjustmentsAt(changes: readonly MaskAdjustmentChange[]) {
+		this.commitMaskCommands((maskId) =>
+			changes.map(({ target, value }) => ({ type: 'mask.adjustment.set', maskId, target, value }))
+		);
+	}
+
+	previewMaskCurve(channel: CurveChannelName, points: CurvePoints) {
+		const document = this.previewedMaskDocument((mask) => {
+			mask.adjustments = withMaskCurve(mask.adjustments, channel, points);
+		});
+		if (document) this.pipeline.scheduleMaskRender(document);
+	}
+
+	commitMaskCurve(channel: CurveChannelName, points: CurvePoints) {
+		this.commitMaskCommand((maskId) => ({
+			type: 'mask.curve.set',
+			maskId,
+			channel,
+			value: points
+		}));
+	}
+
 	previewMaskEdge(control: MaskEdgeControlName, value: number) {
 		const document = this.previewedMaskDocument((mask) => {
 			mask.edge = { ...mask.edge, [control]: value };
@@ -172,10 +220,15 @@ export class AdjustmentControls {
 	}
 
 	private commitMaskCommand(command: (maskId: string) => EditorCommand) {
+		this.commitMaskCommands((maskId) => [command(maskId)]);
+	}
+
+	private commitMaskCommands(commands: (maskId: string) => readonly EditorCommand[]) {
 		if (!this.host.canAdjustLight || !this.host.selectedMaskId) return;
 		this.pipeline.clearMaskRenderTimer();
-		if (!this.host.dispatchEditorCommand(command(this.host.selectedMaskId))) {
-			this.pipeline.resetPreview();
-		}
+		const applied = commands(this.host.selectedMaskId)
+			.map((command) => this.host.dispatchEditorCommand(command))
+			.some(Boolean);
+		if (!applied) this.pipeline.resetPreview();
 	}
 }

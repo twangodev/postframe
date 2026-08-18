@@ -36,10 +36,10 @@
 	</Panel>
 
 	<LightSection {workspace} />
-	<ToneCurveSection {workspace} />
+	<ToneCurveSection binding={workspace.globalDevelop} scope={workspace.imageScope} />
 	<ColorSection {workspace} onOpenMixer={() => (mixerOpen = true)} />
-	<ColorMixerSection {workspace} bind:open={mixerOpen} />
-	<GradingSection {workspace} />
+	<ColorMixerSection binding={workspace.globalDevelop} bind:open={mixerOpen} />
+	<GradingSection binding={workspace.globalDevelop} />
 	<DetailSection {workspace} />
 	<EffectsSection {workspace} />
 

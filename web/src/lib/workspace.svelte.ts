@@ -23,9 +23,11 @@ import {
 	type CurveChannelName,
 	type CurvePoints,
 	type LightControlName,
+	type MaskAdjustmentTarget,
 	type ScalarControlName,
 	type ScalarGroupName
 } from './develop-settings';
+import { globalDevelopBinding, maskDevelopBinding, type DevelopBinding } from './develop-binding';
 import {
 	cloneEditDocument,
 	createEditMask,
@@ -42,7 +44,11 @@ import type { EditorCommand } from './editor-command';
 import type { ImageScopeData } from './image-scope';
 import type { MaskEdgeStroke } from './smart-mask';
 import type { MaskEdgeControlName } from './mask-edge-settings';
-import { AdjustmentControls, type AdjustmentChange } from './adjustment-controls';
+import {
+	AdjustmentControls,
+	type AdjustmentChange,
+	type MaskAdjustmentChange
+} from './adjustment-controls';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
@@ -173,6 +179,12 @@ export class WorkspaceState {
 		this.selectedPhoto !== null &&
 			this.documentStatus.kind === 'ready' &&
 			this.documentStatus.photoId === this.selectedPhoto.id
+	);
+	selectedMask = $derived(this.masks.find((mask) => mask.id === this.selectedMaskId) ?? null);
+	globalDevelop: DevelopBinding = globalDevelopBinding(this);
+	private readonly maskDevelop: DevelopBinding = maskDevelopBinding(this);
+	selectedMaskDevelop: DevelopBinding | null = $derived(
+		this.selectedMask ? this.maskDevelop : null
 	);
 
 	constructor() {
@@ -473,6 +485,24 @@ export class WorkspaceState {
 
 	commitMaskColor = (control: ColorControlName, value: number) =>
 		this.controls.commitMaskColor(control, value);
+
+	previewMaskAdjustmentAt = (target: MaskAdjustmentTarget, value: number) =>
+		this.controls.previewMaskAdjustmentAt(target, value);
+
+	commitMaskAdjustmentAt = (target: MaskAdjustmentTarget, value: number) =>
+		this.controls.commitMaskAdjustmentAt(target, value);
+
+	previewMaskAdjustmentsAt = (changes: readonly MaskAdjustmentChange[]) =>
+		this.controls.previewMaskAdjustmentsAt(changes);
+
+	commitMaskAdjustmentsAt = (changes: readonly MaskAdjustmentChange[]) =>
+		this.controls.commitMaskAdjustmentsAt(changes);
+
+	previewMaskCurve = (channel: CurveChannelName, points: CurvePoints) =>
+		this.controls.previewMaskCurve(channel, points);
+
+	commitMaskCurve = (channel: CurveChannelName, points: CurvePoints) =>
+		this.controls.commitMaskCurve(channel, points);
 
 	previewMaskEdge = (control: MaskEdgeControlName, value: number) =>
 		this.controls.previewMaskEdge(control, value);
