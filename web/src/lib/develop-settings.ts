@@ -419,3 +419,71 @@ function canonicalKey(value: unknown): string {
 		.sort(([left], [right]) => (left < right ? -1 : 1))
 		.map(([key, nested]) => `${key}:${canonicalKey(nested)}`)}}`;
 }
+
+/**
+ * Whether a group has anything to do. The shader short-circuits on these, so
+ * they must agree with the pipeline's own neutrality — a predicate that says
+ * "neutral" for a moved control hides that edit with no error.
+ */
+export function lightIdentity(settings: LightSettings) {
+	return (
+		settings.contrast === 0 &&
+		settings.highlights === 0 &&
+		settings.shadows === 0 &&
+		settings.whites === 0 &&
+		settings.blacks === 0
+	);
+}
+
+// The luminance curve is composed into the light LUT, so it decides with the
+// light controls whether the tone stage has anything to do.
+export function luminanceIdentity({ light, curve }: DevelopSettings) {
+	return lightIdentity(light) && isIdentityCurve(curve.luminance);
+}
+
+export function channelCurvesIdentity(curve: CurveSettings) {
+	return [curve.red, curve.green, curve.blue].every(isIdentityCurve);
+}
+
+export function colorIdentity(color: ColorSettings) {
+	return (
+		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
+	);
+}
+
+export function detailIdentity(detail: DetailSettings) {
+	return (
+		detail.texture === 0 &&
+		detail.clarity === 0 &&
+		detail.dehaze === 0 &&
+		detail.sharpenAmount === 0
+	);
+}
+
+export function effectsIdentity(effects: EffectsSettings) {
+	return effects.vignetteAmount === 0 && effects.grainAmount === 0;
+}
+
+export function mixerIdentity(mixer: MixerSettings) {
+	return Object.values(mixer).every(
+		(band) => band.hue === 0 && band.saturation === 0 && band.luminance === 0
+	);
+}
+
+export function gradingIdentity(grading: GradingSettings) {
+	return [grading.shadows, grading.midtones, grading.highlights].every(
+		(wheel) => wheel.saturation === 0 && wheel.luminance === 0
+	);
+}
+
+export function adjustmentsIdentity(adjustments: DevelopSettings) {
+	return (
+		luminanceIdentity(adjustments) &&
+		colorIdentity(adjustments.color) &&
+		channelCurvesIdentity(adjustments.curve) &&
+		mixerIdentity(adjustments.mixer) &&
+		gradingIdentity(adjustments.grading) &&
+		detailIdentity(adjustments.detail) &&
+		effectsIdentity(adjustments.effects)
+	);
+}

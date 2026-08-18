@@ -2,16 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	adjustmentsIdentity,
+	channelCurvesIdentity,
+	cloneDevelopSettings,
+	colorIdentity,
 	curvePointsSchema,
 	defaultDetailSettings,
 	defaultDevelopSettings,
-	cloneDevelopSettings,
+	detailIdentity,
+	effectsIdentity,
+	gradingIdentity,
+	lightIdentity,
+	luminanceIdentity,
+	mixerIdentity,
 	detailTileKey,
 	developSettingsSchema,
 	identityCurve,
 	tonalDevelopSettings,
 	withAdjustment,
-	withAdjustmentAt
+	withAdjustmentAt,
+	type DevelopSettings
 } from '../src/lib/develop-settings.ts';
 
 test('the source tile key tracks the tile-side detail work and nothing else', () => {
@@ -147,4 +157,107 @@ test('addresses a flat group the same way as the scalar helper', () => {
 		withAdjustmentAt(before, { group: 'color', control: 'vibrance' }, 30),
 		withAdjustment(before, 'color', 'vibrance', 30)
 	);
+});
+
+test('every group reads as identity at its defaults, matching the pipeline', () => {
+	const neutral = defaultDevelopSettings();
+	assert.equal(lightIdentity(neutral.light), true);
+	assert.equal(luminanceIdentity(neutral), true);
+	assert.equal(channelCurvesIdentity(neutral.curve), true);
+	assert.equal(colorIdentity(neutral.color), true);
+	assert.equal(mixerIdentity(neutral.mixer), true);
+	assert.equal(gradingIdentity(neutral.grading), true);
+	assert.equal(detailIdentity(neutral.detail), true);
+	assert.equal(effectsIdentity(neutral.effects), true);
+	assert.equal(adjustmentsIdentity(neutral), true);
+});
+
+test('moving any control leaves identity, so a neutral short-circuit never hides an edit', () => {
+	const moved = (mutate: (settings: DevelopSettings) => void) => {
+		const settings = defaultDevelopSettings();
+		mutate(settings);
+		return adjustmentsIdentity(settings);
+	};
+	// Every scalar control, walked from the defaults so a new control cannot be
+	// forgotten here the way it could be in a predicate. The exceptions are the
+	// controls that only shape another one: exposure is a gain the shader
+	// applies outside the chain, noise reduction runs before it, and the
+	// vignette and grain shape controls do nothing until their amount moves.
+	const scalarGroups = ['light', 'color', 'detail', 'effects'] as const;
+	const shapesAnother = new Set([
+		'exposure',
+		'noiseLuminance',
+		'noiseColor',
+		'vignetteMidpoint',
+		'vignetteRoundness',
+		'vignetteFeather',
+		'grainSize'
+	]);
+	for (const group of scalarGroups) {
+		for (const control of Object.keys(defaultDevelopSettings()[group])) {
+			if (shapesAnother.has(control)) continue;
+			assert.equal(
+				moved((s) => Object.assign(s[group], { [control]: 1 })),
+				false,
+				`${group}.${control} moved but the aggregate still reads as identity`
+			);
+		}
+	}
+	assert.equal(
+		moved(
+			(s) =>
+				(s.curve.luminance = [
+					{ x: 0, y: 0 },
+					{ x: 0.5, y: 0.6 },
+					{ x: 1, y: 1 }
+				])
+		),
+		false
+	);
+	assert.equal(
+		moved(
+			(s) =>
+				(s.curve.blue = [
+					{ x: 0, y: 0.1 },
+					{ x: 1, y: 1 }
+				])
+		),
+		false
+	);
+	for (const band of Object.keys(defaultDevelopSettings().mixer)) {
+		for (const control of ['hue', 'saturation', 'luminance']) {
+			assert.equal(
+				moved((s) => Object.assign(s.mixer[band as keyof typeof s.mixer], { [control]: 1 })),
+				false,
+				`mixer.${band}.${control}`
+			);
+		}
+	}
+	for (const range of ['shadows', 'midtones', 'highlights'] as const) {
+		for (const control of ['saturation', 'luminance']) {
+			assert.equal(
+				moved((s) => Object.assign(s.grading[range], { [control]: 1 })),
+				false,
+				`grading.${range}.${control}`
+			);
+		}
+	}
+});
+
+test('a control that only shapes another is inert until that one moves', () => {
+	const hueOnly = defaultDevelopSettings();
+	hueOnly.grading.midtones.hue = 200;
+	assert.equal(gradingIdentity(hueOnly.grading), true);
+
+	const shapedVignette = defaultDevelopSettings();
+	shapedVignette.effects.vignetteMidpoint = 80;
+	shapedVignette.effects.vignetteFeather = 10;
+	assert.equal(effectsIdentity(shapedVignette.effects), true);
+	shapedVignette.effects.vignetteAmount = -30;
+	assert.equal(effectsIdentity(shapedVignette.effects), false);
+
+	const exposureOnly = defaultDevelopSettings();
+	exposureOnly.light.exposure = 1.5;
+	assert.equal(lightIdentity(exposureOnly.light), true, 'exposure is a gain, not a tone shape');
+	assert.equal(adjustmentsIdentity(exposureOnly), true);
 });

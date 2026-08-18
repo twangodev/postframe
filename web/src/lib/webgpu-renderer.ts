@@ -1,15 +1,17 @@
 import rawTileShader from './raw-tile.wgsl?raw';
 import {
+	adjustmentsIdentity,
+	channelCurvesIdentity,
+	colorIdentity,
+	detailIdentity,
 	developSettingsKey,
-	isIdentityCurve,
+	effectsIdentity,
+	gradingIdentity,
+	luminanceIdentity,
+	mixerIdentity,
 	type ColorSettings,
-	type CurveSettings,
-	type DetailSettings,
 	type DevelopSettings,
-	type EffectsSettings,
-	type GradingSettings,
-	type LightSettings,
-	type MixerSettings
+	type EffectsSettings
 } from './develop-settings.ts';
 import type { NormalizedCrop } from './edit-document.ts';
 
@@ -388,69 +390,6 @@ function floatBuffer(device: GPUDevice, values: Float32Array, usage: GPUBufferUs
 	new Float32Array(buffer.getMappedRange()).set(values);
 	buffer.unmap();
 	return buffer;
-}
-
-function lightIdentity(settings: LightSettings) {
-	return (
-		settings.contrast === 0 &&
-		settings.highlights === 0 &&
-		settings.shadows === 0 &&
-		settings.whites === 0 &&
-		settings.blacks === 0
-	);
-}
-
-// The luminance curve is composed into the light LUT, so it decides with the
-// light controls whether the tone stage has anything to do.
-function luminanceIdentity({ light, curve }: DevelopSettings) {
-	return lightIdentity(light) && isIdentityCurve(curve.luminance);
-}
-
-function channelCurvesIdentity(curve: CurveSettings) {
-	return [curve.red, curve.green, curve.blue].every(isIdentityCurve);
-}
-
-function colorIdentity(color: ColorSettings) {
-	return (
-		color.temperature === 0 && color.tint === 0 && color.vibrance === 0 && color.saturation === 0
-	);
-}
-
-function detailIdentity(detail: DetailSettings) {
-	return (
-		detail.texture === 0 &&
-		detail.clarity === 0 &&
-		detail.dehaze === 0 &&
-		detail.sharpenAmount === 0
-	);
-}
-
-function effectsIdentity(effects: EffectsSettings) {
-	return effects.vignetteAmount === 0 && effects.grainAmount === 0;
-}
-
-function mixerIdentity(mixer: MixerSettings) {
-	return Object.values(mixer).every(
-		(band) => band.hue === 0 && band.saturation === 0 && band.luminance === 0
-	);
-}
-
-function gradingIdentity(grading: GradingSettings) {
-	return [grading.shadows, grading.midtones, grading.highlights].every(
-		(wheel) => wheel.saturation === 0 && wheel.luminance === 0
-	);
-}
-
-function adjustmentsIdentity(adjustments: DevelopSettings) {
-	return (
-		luminanceIdentity(adjustments) &&
-		colorIdentity(adjustments.color) &&
-		channelCurvesIdentity(adjustments.curve) &&
-		mixerIdentity(adjustments.mixer) &&
-		gradingIdentity(adjustments.grading) &&
-		detailIdentity(adjustments.detail) &&
-		effectsIdentity(adjustments.effects)
-	);
 }
 
 const LUMINANCE_WEIGHTS = [0.2126, 0.7152, 0.0722];
