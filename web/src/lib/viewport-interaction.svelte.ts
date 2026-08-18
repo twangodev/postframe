@@ -29,6 +29,7 @@ export interface ViewportContext {
 	) => Promise<unknown>;
 	paintBrushMask: (stroke: MaskBrushStroke, operation: 'add' | 'subtract') => Promise<unknown>;
 	placeGradientComponent: (component: GradientComponent) => Promise<unknown>;
+	sampleWhiteBalance: (point: NormalizedPoint) => Promise<unknown>;
 }
 
 export class ViewportInteraction {
@@ -181,6 +182,14 @@ export class ViewportInteraction {
 			return;
 		}
 
+		if (tool === 'eyedropper' && event.button === 0) {
+			const imagePoint = this.normalizedImagePoint(point);
+			if (!imagePoint) return;
+			event.preventDefault();
+			void this.context.sampleWhiteBalance(imagePoint);
+			return;
+		}
+
 		if (tool === 'object-select' && event.button === 0) {
 			const imagePoint = this.normalizedImagePoint(point);
 			if (!imagePoint) return;
@@ -324,6 +333,7 @@ export class ViewportInteraction {
 		if (
 			!this.context.enabled() ||
 			tool === 'zoom' ||
+			tool === 'eyedropper' ||
 			tool === 'object-select' ||
 			tool.startsWith('mask')
 		) {
@@ -397,7 +407,7 @@ export class ViewportInteraction {
 	}
 }
 
-function editableTarget(target: EventTarget | null) {
+export function editableTarget(target: EventTarget | null) {
 	return (
 		target instanceof HTMLInputElement ||
 		target instanceof HTMLTextAreaElement ||

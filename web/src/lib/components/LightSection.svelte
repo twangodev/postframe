@@ -17,6 +17,15 @@
 </script>
 
 <Panel title="Light">
+	<button
+		type="button"
+		aria-label="Auto tone"
+		disabled={!workspace.canAdjustLight}
+		onclick={() => void workspace.autoTone()}
+		class="mb-3 flex h-6 w-full cursor-pointer items-center justify-center rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
+	>
+		auto
+	</button>
 	<AdjustmentSlider
 		label="Exposure"
 		bind:value={workspace.adjustments.exposure}

@@ -11,6 +11,7 @@
 	import type { RenderTileRequest } from '$lib/worker';
 	import type { DevelopSettings } from '$lib/develop-settings';
 	import type { NormalizedCrop } from '$lib/edit-document';
+	import type { ClippingIndicators } from '$lib/clipping';
 
 	interface Props {
 		photoId: string;
@@ -28,6 +29,7 @@
 		adjustments: DevelopSettings;
 		crop: NormalizedCrop | null;
 		tone?: boolean;
+		clipping?: ClippingIndicators;
 	}
 
 	interface Diagnostics {
@@ -58,7 +60,8 @@
 		onRenderSettled = () => {},
 		adjustments,
 		crop,
-		tone = true
+		tone = true,
+		clipping
 	}: Props = $props();
 	let container: HTMLDivElement;
 	let openSeadragon = $state<typeof OpenSeadragon | null>(null);
@@ -219,6 +222,7 @@
 			adjustments: settings,
 			crop: frame,
 			tone: toneMapping,
+			...(clipping ? { clipping: { ...clipping } } : {}),
 			onTileEvent: handleTileEvent
 		});
 	}

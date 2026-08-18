@@ -13,7 +13,7 @@
 	import { toolShortcutHandlers } from '$lib/editor-tools';
 	import type { NormalizedRegion } from '$lib/edit-document';
 	import { type MaskPreviewMode } from '$lib/mask-preview';
-	import { ViewportInteraction } from '$lib/viewport-interaction.svelte';
+	import { ViewportInteraction, editableTarget } from '$lib/viewport-interaction.svelte';
 	import { type MaskKind, type WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -69,7 +69,8 @@
 		refineMaskEdge: (stroke) => workspace.refineMaskEdge(stroke),
 		paintObjectMask: (points, label) => workspace.paintObjectMask(points, label),
 		paintBrushMask: (stroke, operation) => workspace.paintBrushMask(stroke, operation),
-		placeGradientComponent: (component) => workspace.placeGradientComponent(component)
+		placeGradientComponent: (component) => workspace.placeGradientComponent(component),
+		sampleWhiteBalance: (point) => workspace.sampleWhiteBalance(point)
 	});
 
 	$effect(() => {
@@ -89,10 +90,14 @@
 	}
 
 	onMount(() =>
-		tinykeys(
-			window,
-			toolShortcutHandlers(() => activeTool, chooseTool)
-		)
+		tinykeys(window, {
+			...toolShortcutHandlers(() => activeTool, chooseTool),
+			j: (event) => {
+				if (editableTarget(event.target)) return;
+				event.preventDefault();
+				workspace.toggleClipping();
+			}
+		})
 	);
 
 	onMount(() => {
@@ -227,7 +232,7 @@
 					</Tabs.Trigger>
 				</Tabs.List>
 
-				<AdjustPanel {workspace} />
+				<AdjustPanel {workspace} {activeTool} onPickTool={chooseTool} />
 
 				<MaskPanel
 					{workspace}

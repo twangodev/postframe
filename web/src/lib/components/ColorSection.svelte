@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SlidersHorizontal } from '@lucide/svelte';
+	import { Pipette, SlidersHorizontal } from '@lucide/svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
 	import type { ColorControlName } from '$lib/develop-settings';
@@ -7,10 +7,14 @@
 
 	interface Props {
 		workspace: WorkspaceState;
+		activeTool: string;
+		onPickTool: (tool: string, label?: string) => void;
 		onOpenMixer: () => void;
 	}
 
-	let { workspace, onOpenMixer }: Props = $props();
+	let { workspace, activeTool, onPickTool, onOpenMixer }: Props = $props();
+
+	const eyedropperActive = $derived(activeTool === 'eyedropper');
 
 	const preview = (control: ColorControlName) => (value: number) =>
 		workspace.previewAdjustment('color', control, value);
@@ -19,6 +23,29 @@
 </script>
 
 <Panel title="Color">
+	<div class="mb-3 flex gap-1">
+		<button
+			type="button"
+			aria-label="Auto white balance"
+			disabled={!workspace.canAdjustLight}
+			onclick={() => void workspace.autoWhiteBalance()}
+			class="h-6 flex-1 cursor-pointer rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
+		>
+			auto
+		</button>
+		<button
+			type="button"
+			aria-label="White balance eyedropper"
+			aria-pressed={eyedropperActive}
+			disabled={!workspace.canAdjustLight}
+			onclick={() => onPickTool('eyedropper')}
+			class="flex h-6 flex-1 cursor-pointer items-center justify-center rounded border transition-colors disabled:cursor-default disabled:opacity-40 {eyedropperActive
+				? 'border-control-edge bg-surface text-text'
+				: 'border-subtle text-muted hover:text-text'}"
+		>
+			<Pipette size={12} strokeWidth={1.6} />
+		</button>
+	</div>
 	<AdjustmentSlider
 		label="Temperature"
 		bind:value={workspace.adjustments.temperature}

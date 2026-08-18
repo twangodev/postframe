@@ -2,6 +2,13 @@
 	import { ToggleGroup } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import {
+		CLIPPING_KINDS,
+		clippedEnds,
+		noClipping,
+		type ClippingIndicators,
+		type ClippingKind
+	} from '$lib/clipping';
 	import type { ImageScopeData, ImageScopeMode } from '$lib/image-scope';
 	import { renderWaveformScope } from '$lib/image-scope-canvas';
 
@@ -9,9 +16,17 @@
 		data?: ImageScopeData | null;
 		loading?: boolean;
 		mode?: ImageScopeMode;
+		clipping?: ClippingIndicators | null;
+		onToggleClipping?: (kind: ClippingKind) => void;
 	}
 
-	let { data = null, loading = false, mode = $bindable('waveform') }: Props = $props();
+	let {
+		data = null,
+		loading = false,
+		mode = $bindable('waveform'),
+		clipping = null,
+		onToggleClipping
+	}: Props = $props();
 	let canvas: HTMLCanvasElement;
 	let dimensions = $state({ width: 0, height: 0 });
 	let animationFrame: number | null = null;
@@ -27,6 +42,15 @@
 			? { start: '0', center: 'waveform', end: '100' }
 			: { start: '0', center: 'histogram', end: '255' }
 	);
+	const clipped = $derived(data ? clippedEnds(data.histogram) : noClipping());
+	const indicatorLabel: Record<ClippingKind, string> = {
+		shadows: 'Show shadow clipping',
+		highlights: 'Show highlight clipping'
+	};
+	const indicatorTone: Record<ClippingKind, string> = {
+		shadows: 'bg-[#5f83ff]',
+		highlights: 'bg-[#ff5968]'
+	};
 
 	onMount(() => {
 		reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -125,29 +149,48 @@
 			</ToggleGroup.Item>
 		</ToggleGroup.Root>
 	</div>
-	<div
-		role="img"
-		aria-label={label}
-		title={data ? `${data.sampleCount.toLocaleString()} preview samples` : label}
-		class="relative h-28 overflow-hidden rounded-sm border border-subtle bg-canvas"
-	>
-		<canvas
-			bind:this={canvas}
-			aria-hidden="true"
-			class:opacity-0={histogramReady}
-			class="size-full transition-opacity duration-150"
-		></canvas>
-		{#if histogramReady && Histogram && data}
-			<div class="absolute inset-0" transition:fade={{ duration: reduceMotion ? 0 : 140 }}>
-				<Histogram {data} {reduceMotion} />
-			</div>
-		{/if}
-		{#if !data}
-			<div
-				class="pointer-events-none absolute inset-0 flex items-center justify-center text-[9px] tracking-[0.04em] text-muted/55 lowercase"
-			>
-				{loading ? 'building scope' : 'scope unavailable'}
-			</div>
+	<div class="relative">
+		<div
+			role="img"
+			aria-label={label}
+			title={data ? `${data.sampleCount.toLocaleString()} preview samples` : label}
+			class="relative h-28 overflow-hidden rounded-sm border border-subtle bg-canvas"
+		>
+			<canvas
+				bind:this={canvas}
+				aria-hidden="true"
+				class:opacity-0={histogramReady}
+				class="size-full transition-opacity duration-150"
+			></canvas>
+			{#if histogramReady && Histogram && data}
+				<div class="absolute inset-0" transition:fade={{ duration: reduceMotion ? 0 : 140 }}>
+					<Histogram {data} {reduceMotion} />
+				</div>
+			{/if}
+			{#if !data}
+				<div
+					class="pointer-events-none absolute inset-0 flex items-center justify-center text-[9px] tracking-[0.04em] text-muted/55 lowercase"
+				>
+					{loading ? 'building scope' : 'scope unavailable'}
+				</div>
+			{/if}
+		</div>
+		{#if clipping && onToggleClipping}
+			{#each CLIPPING_KINDS as kind (kind)}
+				<button
+					type="button"
+					aria-label={indicatorLabel[kind]}
+					aria-pressed={clipping[kind]}
+					title={`${indicatorLabel[kind]} (J)`}
+					onclick={() => onToggleClipping(kind)}
+					class="absolute top-1.5 size-2.5 cursor-pointer rounded-[2px] border transition-colors {kind ===
+					'shadows'
+						? 'left-1.5'
+						: 'right-1.5'} {clipped[kind] ? indicatorTone[kind] : 'bg-transparent'} {clipping[kind]
+						? 'border-text shadow-[0_0_0_1px_var(--color-text)]'
+						: 'border-muted/70 hover:border-text'}"
+				></button>
+			{/each}
 		{/if}
 	</div>
 	<div class="mt-1.5 flex items-baseline justify-between text-[9px] text-muted">
