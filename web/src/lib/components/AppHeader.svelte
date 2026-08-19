@@ -12,6 +12,7 @@
 	import { defaultDevelopSettings } from '$lib/develop-settings';
 	import type { EditorMenuAction } from '$lib/editor-menu';
 	import { changedGroups } from '$lib/preset';
+	import { editableTarget } from '$lib/viewport-interaction.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -82,15 +83,6 @@
 			event.preventDefault();
 			runMenuAction(action);
 		};
-	}
-
-	function editableTarget(target: EventTarget | null) {
-		return (
-			target instanceof HTMLInputElement ||
-			target instanceof HTMLTextAreaElement ||
-			target instanceof HTMLSelectElement ||
-			(target instanceof HTMLElement && target.isContentEditable)
-		);
 	}
 
 	onMount(() =>
