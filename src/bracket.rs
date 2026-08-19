@@ -318,6 +318,17 @@ fn upright(linear: Linear, orientation: Orientation) -> Linear {
     }
 }
 
+// A clipped pixel's channel ratios are meaningless (each channel saturates at
+// its own ceiling), so render neutral at the brightest channel's level, as the
+// camera would — the same fallback the multi-frame composite applies.
+fn neutralize_clipped(radiance: &mut Linear) {
+    for (pixel, &clipped) in radiance.rgb.iter_mut().zip(&radiance.clipped) {
+        if clipped {
+            *pixel = [pixel.iter().fold(0.0f32, |m, &v| m.max(v)); 3];
+        }
+    }
+}
+
 fn merge_radiance(
     frames: &mut [Frame],
     exposures: &[f32],
@@ -332,10 +343,11 @@ fn merge_radiance(
     }
 
     if frames.len() == 1 {
-        let radiance = frames[0]
+        let mut radiance = frames[0]
             .full
             .take()
             .unwrap_or_else(|| frames[0].camera.clone());
+        neutralize_clipped(&mut radiance);
         return Ok((vec![Shift::new(0, 0)], radiance));
     }
 
@@ -472,7 +484,11 @@ mod tests {
         assert_eq!(shifts, vec![Shift::new(0, 0)]);
         assert_eq!(radiance.width, image.width);
         assert_eq!(radiance.height, image.height);
-        assert_eq!(radiance.rgb, image.rgb);
+        assert_eq!(radiance.rgb[0], image.rgb[0]);
+        assert_eq!(
+            radiance.rgb[1], [0.6; 3],
+            "a clipped pixel renders neutral at the brightest channel's level"
+        );
         assert_eq!(radiance.clipped, image.clipped);
     }
 }
