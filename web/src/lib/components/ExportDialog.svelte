@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { Check, Download, X } from '@lucide/svelte';
-	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import { Check, Download } from '@lucide/svelte';
+	import DialogHeader from './ui/DialogHeader.svelte';
+	import DialogShell from './ui/DialogShell.svelte';
 	import { DEFAULT_EXPORT_QUALITY, exportProgressPercent, type ExportPhase } from '$lib/export';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -75,100 +76,81 @@
 	}
 </script>
 
-<Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Portal>
-		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<CenteredDialogContent>
-			<form onsubmit={finish}>
-				<div class="flex items-start justify-between border-b border-subtle p-5">
-					<div>
-						<div class="mb-2 flex items-center gap-2 text-muted">
-							<Download size={14} strokeWidth={1.4} />
-							<span class="text-[11px] tracking-[0.04em]">export</span>
-						</div>
-						<Dialog.Title class="text-sm font-medium tracking-tight">
-							{workspace.selectedPhoto?.name ?? 'photograph'}
-						</Dialog.Title>
-						<Dialog.Description class="mt-1 text-xs text-muted">
-							render the photograph at full resolution with your edits applied.
-						</Dialog.Description>
+<DialogShell bind:open onOpenChange={handleOpenChange}>
+	<form onsubmit={finish}>
+		<DialogHeader
+			class="border-b border-subtle p-5"
+			eyebrow={{ icon: Download, label: 'export' }}
+			title={workspace.selectedPhoto?.name ?? 'photograph'}
+			description="render the photograph at full resolution with your edits applied."
+		/>
+
+		<div class="space-y-5 p-5">
+			<label class="block">
+				<span class="mb-1.5 flex justify-between text-[11px] tracking-[0.04em] text-muted">
+					<span>quality</span><span class="font-mono">{quality}</span>
+				</span>
+				<input
+					type="range"
+					min="1"
+					max="100"
+					bind:value={quality}
+					disabled={exporting}
+					class="w-full accent-accent"
+				/>
+			</label>
+
+			{#if !canExport}
+				<p class="rounded border border-subtle bg-surface/45 p-3 text-[11px] text-muted">
+					open this photograph in the edit view to export it.
+				</p>
+			{:else if status.kind === 'exporting' || status.kind === 'completed'}
+				<div class="space-y-2 rounded border border-subtle bg-surface/45 p-3">
+					<div class="flex justify-between text-[11px] tracking-[0.04em] text-muted">
+						<span>{status.kind === 'completed' ? 'saved' : phaseLabels[status.phase]}</span>
+						<span class="font-mono">{status.kind === 'completed' ? 100 : status.percent}%</span>
 					</div>
-					<Dialog.Close
-						class="cursor-pointer rounded p-1 text-muted hover:text-text"
-						aria-label="Close"
-					>
-						<X size={16} />
-					</Dialog.Close>
-				</div>
-
-				<div class="space-y-5 p-5">
-					<label class="block">
-						<span class="mb-1.5 flex justify-between text-[11px] tracking-[0.04em] text-muted">
-							<span>quality</span><span class="font-mono">{quality}</span>
-						</span>
-						<input
-							type="range"
-							min="1"
-							max="100"
-							bind:value={quality}
-							disabled={exporting}
-							class="w-full accent-accent"
-						/>
-					</label>
-
-					{#if !canExport}
-						<p class="rounded border border-subtle bg-surface/45 p-3 text-[11px] text-muted">
-							open this photograph in the edit view to export it.
-						</p>
-					{:else if status.kind === 'exporting' || status.kind === 'completed'}
-						<div class="space-y-2 rounded border border-subtle bg-surface/45 p-3">
-							<div class="flex justify-between text-[11px] tracking-[0.04em] text-muted">
-								<span>{status.kind === 'completed' ? 'saved' : phaseLabels[status.phase]}</span>
-								<span class="font-mono">{status.kind === 'completed' ? 100 : status.percent}%</span>
-							</div>
-							<div class="h-1 overflow-hidden rounded-full bg-subtle">
-								<div
-									class="h-full rounded-full bg-accent transition-[width] duration-200"
-									style:width="{status.kind === 'completed' ? 100 : status.percent}%"
-								></div>
-							</div>
-							{#if status.kind === 'completed'}
-								<p class="font-mono text-[11px] text-positive">{status.fileName}</p>
-							{/if}
-						</div>
-					{:else if status.kind === 'error'}
-						<p class="rounded border border-subtle bg-surface/45 p-3 text-[11px] text-negative">
-							{status.message}
-						</p>
+					<div class="h-1 overflow-hidden rounded-full bg-subtle">
+						<div
+							class="h-full rounded-full bg-accent transition-[width] duration-200"
+							style:width="{status.kind === 'completed' ? 100 : status.percent}%"
+						></div>
+					</div>
+					{#if status.kind === 'completed'}
+						<p class="font-mono text-[11px] text-positive">{status.fileName}</p>
 					{/if}
 				</div>
+			{:else if status.kind === 'error'}
+				<p class="rounded border border-subtle bg-surface/45 p-3 text-[11px] text-negative">
+					{status.message}
+				</p>
+			{/if}
+		</div>
 
-				<div class="flex items-center justify-between border-t border-subtle p-4">
-					<p class="font-mono text-[11px] tracking-wide text-muted">
-						JPEG · quality {quality}
-					</p>
-					<div class="flex gap-2">
-						<Dialog.Close
-							class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted hover:text-text"
-						>
-							cancel
-						</Dialog.Close>
-						<button
-							type="submit"
-							disabled={!canExport || exporting}
-							class="flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded bg-text px-3 py-2 text-[11px] text-bg disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{#if status.kind === 'completed'}
-								<Check size={12} /> saved
-							{:else if exporting}
-								exporting…
-							{:else}
-								<Download size={12} /> export
-							{/if}
-						</button>
-					</div>
-				</div>
-			</form>
-		</CenteredDialogContent>
-	</Dialog.Portal>
-</Dialog.Root>
+		<div class="flex items-center justify-between border-t border-subtle p-4">
+			<p class="font-mono text-[11px] tracking-wide text-muted">
+				JPEG · quality {quality}
+			</p>
+			<div class="flex gap-2">
+				<Dialog.Close
+					class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted hover:text-text"
+				>
+					cancel
+				</Dialog.Close>
+				<button
+					type="submit"
+					disabled={!canExport || exporting}
+					class="flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded bg-text px-3 py-2 text-[11px] text-bg disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{#if status.kind === 'completed'}
+						<Check size={12} /> saved
+					{:else if exporting}
+						exporting…
+					{:else}
+						<Download size={12} /> export
+					{/if}
+				</button>
+			</div>
+		</div>
+	</form>
+</DialogShell>
