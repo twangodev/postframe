@@ -2,6 +2,7 @@
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import { GRADING_RANGE_NAMES, type GradingRangeName } from '$lib/develop-settings';
 	import { GRADING_BLEND_SLIDERS } from '$lib/develop-sliders';
 	import {
@@ -76,22 +77,12 @@
 </script>
 
 <Panel title="Color grading" open={false}>
-	<div class="mb-3 flex gap-1" role="tablist" aria-label="Tonal range">
-		{#each GRADING_RANGE_NAMES as name (name)}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={range === name}
-				onclick={() => (range = name)}
-				class="h-6 flex-1 cursor-pointer rounded border text-[11px] lowercase transition-colors {range ===
-				name
-					? 'border-control-edge bg-surface text-text'
-					: 'border-subtle text-muted hover:text-text'}"
-			>
-				{name}
-			</button>
-		{/each}
-	</div>
+	<SegmentedControl
+		options={GRADING_RANGE_NAMES}
+		bind:value={range}
+		label="Tonal range"
+		class="mb-3"
+	/>
 	<div class="flex items-center gap-3">
 		<svg
 			viewBox={`${-DISC_MARGIN} ${-DISC_MARGIN} ${2 * DISC_MARGIN} ${2 * DISC_MARGIN}`}

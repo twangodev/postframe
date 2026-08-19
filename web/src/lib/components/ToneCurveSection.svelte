@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import {
 		CURVE_CHANNEL_NAMES,
 		identityCurve,
@@ -116,33 +117,27 @@
 	}
 </script>
 
+{#snippet channelChip(name: CurveChannelName)}
+	{CHANNEL_LABEL[name]}
+{/snippet}
+
 <Panel
 	title="Curve"
 	open={false}
 	meta={shaped.length ? shaped.map((n) => CHANNEL_LABEL[n]).join('') : 'linear'}
 >
 	<div class="space-y-2">
-		<div class="flex gap-1" role="radiogroup" aria-label="Tone curve channel">
-			{#each CURVE_CHANNEL_NAMES as name (name)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={channel === name}
-					aria-label="{name} curve"
-					{disabled}
-					onclick={() => (channel = name)}
-					class="h-6 flex-1 cursor-pointer rounded border text-[11px] transition-colors disabled:cursor-default {channel ===
-					name
-						? 'border-subtle bg-surface'
-						: 'border-transparent hover:border-subtle'}"
-					style:color={channel === name || shaped.includes(name)
-						? CHANNEL_STROKE[name]
-						: 'var(--color-muted)'}
-				>
-					{CHANNEL_LABEL[name]}
-				</button>
-			{/each}
-		</div>
+		<SegmentedControl
+			options={CURVE_CHANNEL_NAMES}
+			bind:value={channel}
+			label="Tone curve channel"
+			{disabled}
+			itemLabel={(name) => `${name} curve`}
+			itemClass="border-transparent text-[11px] hover:border-subtle disabled:cursor-default data-[state=on]:border-subtle data-[state=on]:bg-surface"
+			itemStyle={(name) =>
+				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}`}
+			item={channelChip}
+		/>
 
 		<svg
 			viewBox="0 0 100 100"

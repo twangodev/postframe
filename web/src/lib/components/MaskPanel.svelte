@@ -26,6 +26,7 @@
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import IconButton from './ui/IconButton.svelte';
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
 	import { maskOperationSchema, type MaskComponent, type MaskOperation } from '$lib/edit-document';
 	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
@@ -295,22 +296,12 @@
 					{/each}
 				</div>
 			{/each}
-			<div class="mb-1.5 flex gap-1" role="tablist" aria-label="Range operation">
-				{#each maskOperationSchema.options as operation (operation)}
-					<button
-						type="button"
-						role="tab"
-						aria-selected={rangeOperation === operation}
-						onclick={() => (rangeOperation = operation)}
-						class="h-6 flex-1 cursor-pointer rounded border text-[11px] lowercase transition-colors {rangeOperation ===
-						operation
-							? 'border-control-edge bg-surface text-text'
-							: 'border-subtle text-muted hover:text-text'}"
-					>
-						{operation}
-					</button>
-				{/each}
-			</div>
+			<SegmentedControl
+				options={maskOperationSchema.options}
+				bind:value={rangeOperation}
+				label="Range operation"
+				class="mb-1.5"
+			/>
 			<div class="grid grid-cols-2 gap-1.5">
 				<button
 					type="button"
