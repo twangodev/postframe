@@ -46,6 +46,7 @@
 		WandSparkles,
 		ZoomIn
 	} from '@lucide/svelte';
+	import SelectableRow from './ui/SelectableRow.svelte';
 	import { TOOL_GROUPS, type ToolGroup, type ToolId } from '$lib/editor-tools';
 
 	type Icon = Component<Record<string, unknown>>;
@@ -183,22 +184,18 @@
 				>
 					<p class="px-2 pt-1 pb-1.5 text-[11px] tracking-[0.04em] text-muted">{group.label}</p>
 					{#each group.tools as tool (tool.id)}
-						{@const ToolIcon = iconFor(tool.id)}
-						<button
-							type="button"
+						{#snippet shortcutKey()}
+							<kbd class="font-mono text-[10px] opacity-55">{tool.shortcut}</kbd>
+						{/snippet}
+						<SelectableRow
 							role="menuitem"
-							class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {activeTool ===
-							tool.id
-								? 'bg-surface text-text'
-								: 'text-muted hover:bg-surface/60 hover:text-text'}"
+							selected={activeTool === tool.id}
+							icon={iconFor(tool.id)}
+							meta={tool.shortcut ? shortcutKey : undefined}
 							onclick={() => select(tool.id)}
 						>
-							<ToolIcon size={13} strokeWidth={1.4} />
-							<span class="flex-1">{tool.label}</span>
-							{#if tool.shortcut}
-								<kbd class="font-mono text-[10px] opacity-55">{tool.shortcut}</kbd>
-							{/if}
-						</button>
+							{tool.label}
+						</SelectableRow>
 					{/each}
 				</div>
 			{/if}
