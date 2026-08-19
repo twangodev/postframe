@@ -17,8 +17,8 @@ const LOOKUP_HIGH_BITS: u32 = 0x4280_0000;
 const LOOKUP_SHIFT: u32 = 13;
 const LOOKUP_FRACTION_MASK: u32 = (1 << LOOKUP_SHIFT) - 1;
 
-// The fitted curves cost a knot scan per pixel; a dense table over the log2
-// domain makes slider-rate re-rendering possible.
+/// The fitted curves cost a knot scan per pixel; a dense table over the log2
+/// domain makes slider-rate re-rendering possible.
 pub struct Preview {
     coded: [Vec<f32>; 3],
     mix: [[f32; 3]; 3],

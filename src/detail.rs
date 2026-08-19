@@ -1096,7 +1096,6 @@ mod tests {
         )
         .unwrap();
 
-        // Every output pixel reads back the plane entry that produced it.
         for output_y in 0..size.1 {
             for output_x in 0..size.0 {
                 let index = output_y * size.0 + output_x;

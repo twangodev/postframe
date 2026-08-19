@@ -140,8 +140,8 @@ impl MetadataSegments {
     }
 }
 
-// img-parts splices metadata at a fixed segment index and panics on JPEGs
-// too degenerate to hold it.
+/// img-parts splices metadata at a fixed segment index and panics on JPEGs
+/// too degenerate to hold it.
 fn accepts_spliced_segments(jpeg: &Jpeg) -> bool {
     jpeg.segments()
         .iter()
@@ -176,10 +176,18 @@ fn upright_exif(mut exif: Vec<u8>) -> Option<Vec<u8>> {
         order.put_u16(&mut exif, entry + 8, UPRIGHT)?;
         break;
     }
-    // The chained thumbnail IFD still pictures the unedited original.
-    let next_ifd = ifd.checked_add(2 + entries * 12)?;
-    order.put_u32(&mut exif, next_ifd, 0)?;
+    unlink_stale_thumbnail_ifd(order, &mut exif, ifd, entries)?;
     Some(exif)
+}
+
+fn unlink_stale_thumbnail_ifd(
+    order: ByteOrder,
+    exif: &mut [u8],
+    ifd: usize,
+    entries: usize,
+) -> Option<()> {
+    let next_ifd = ifd.checked_add(2 + entries * 12)?;
+    order.put_u32(exif, next_ifd, 0)
 }
 
 fn refresh_exif_dimensions(exif: &mut [u8], width: u32, height: u32) -> Option<()> {

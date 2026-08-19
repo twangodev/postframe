@@ -136,12 +136,16 @@ fn corner_distance(
     let exponent = ELLIPSE_EXPONENT
         + (settings.vignette_roundness / 100.0).max(0.0)
             * (MAX_ROUNDNESS_EXPONENT - ELLIPSE_EXPONENT);
-    // The contour's own aspect: square at roundness -100, the frame's above 0.
-    let squareness = (settings.vignette_roundness / 100.0 + 1.0).clamp(0.0, 1.0);
-    let semi_axis = (reach.0 / reach.1).powf(squareness);
+    let semi_axis = contour_aspect(reach, settings.vignette_roundness);
     let offset = ((at.0 - centre_x) * aspect / semi_axis, at.1 - centre_y);
     let corner = (reach.0 / semi_axis, reach.1);
     superellipse(offset, exponent) / superellipse(corner, exponent)
+}
+
+fn contour_aspect(reach: (f32, f32), roundness: f32) -> f32 {
+    let frame_aspect = reach.0 / reach.1;
+    let square_to_frame = (roundness / 100.0 + 1.0).clamp(0.0, 1.0);
+    frame_aspect.powf(square_to_frame)
 }
 
 fn superellipse(point: (f32, f32), exponent: f32) -> f32 {
@@ -271,11 +275,10 @@ mod tests {
 
     #[test]
     fn roundness_shapes_the_contour_from_circle_to_rectangle() {
-        // Two points at the same distance from the centre, one along the
-        // diagonal and one along an axis of a square frame.
-        let reach = 0.25 * std::f32::consts::FRAC_1_SQRT_2;
+        let centre_distance = 0.25;
+        let reach = centre_distance * std::f32::consts::FRAC_1_SQRT_2;
         let diagonal = (0.5 + reach, 0.5 - reach);
-        let axis = (0.5, 0.5 - 0.25);
+        let axis = (0.5, 0.5 - centre_distance);
         let separation = |roundness: f32| {
             let settings = effects(-100.0, 30.0, roundness, 20.0);
             vignette_gain(settings, VignetteFrame::FULL, 1.0, diagonal)
