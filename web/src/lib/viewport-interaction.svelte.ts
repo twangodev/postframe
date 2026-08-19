@@ -3,7 +3,13 @@ import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import { GizmoSession } from './gizmo-session.svelte.ts';
 import type { GradientComponent } from './mask-painting.ts';
 import type { LivePaint, MaskBrushStroke } from './mask-rasterizer.ts';
-import { screenToImage, withinImage, type Point, type Size } from './photo-viewport.ts';
+import {
+	pixelToNormalized,
+	screenToImage,
+	withinImage,
+	type Point,
+	type Size
+} from './photo-viewport.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
 import { ViewportCamera } from './viewport-camera.svelte.ts';
 
@@ -385,7 +391,7 @@ export class ViewportInteraction {
 	private normalizedImagePoint(point: Point) {
 		const imagePoint = screenToImage(point, this.size, this.image, this.transform);
 		if (!withinImage(imagePoint, this.image)) return null;
-		return { x: imagePoint.x / this.image.width, y: imagePoint.y / this.image.height };
+		return pixelToNormalized(imagePoint, this.image);
 	}
 
 	private imagePixel(point: Point): Point {
