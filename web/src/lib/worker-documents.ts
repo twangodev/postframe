@@ -85,12 +85,7 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 			await publishRawDocument(message, session);
 			return;
 		}
-		if (restore === 'failed') {
-			// A panic inside Rust leaves the session unusable, so decode into a
-			// fresh one rather than carrying the damage into every later call.
-			freeQuietly('unreadable render cache', session);
-			session = new wasm.Session();
-		}
+		if (restore === 'poisoned') session = replacePoisonedSession(session);
 		const sizes = await Promise.all(
 			message.frames.map(async (frame) => ({
 				raw: await fileSize(frame.raw),
@@ -159,7 +154,7 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 	}
 }
 
-type CacheRestore = 'restored' | 'absent' | 'failed';
+type CacheRestore = 'restored' | 'absent' | 'poisoned';
 
 async function restoreRawCache(
 	session: WasmSession,
@@ -188,8 +183,13 @@ async function restoreRawCache(
 	} catch (error) {
 		reportError('discarding a render cache this build cannot read', error);
 		await writeFileHandle(message.cache, new Uint8Array());
-		return 'failed';
+		return 'poisoned';
 	}
+}
+
+function replacePoisonedSession(poisoned: WasmSession) {
+	freeQuietly('unreadable render cache', poisoned);
+	return new wasm.Session();
 }
 
 async function publishRawDocument(

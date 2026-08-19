@@ -72,8 +72,6 @@ export class DevelopPreviewController {
 		this.refinementRevision = revision;
 	}
 
-	// Re-measures the scope at the committed settings after a preview that
-	// never became a document change.
 	refreshScope(adjustments: DevelopSettings, crop: NormalizedCrop | null) {
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
 		this.scheduleScope(adjustments, crop, this.host.selectedPhoto.id, true);

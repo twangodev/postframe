@@ -402,17 +402,16 @@ export class WorkspaceState {
 
 	refreshBrowserStorage = () => this.storage.refresh();
 
-	// Persistence, imports, and the worker's render cache all funnel here; visibility re-measures for other tabs' writes.
 	private observeStorageWrites() {
 		const stopWorker = this.workerClient?.onStorageWritten(() => this.storageObserver.wrote());
 		if (typeof document === 'undefined') return () => stopWorker?.();
-		const onVisible = () => {
+		const remeasureAfterOtherTabWrites = () => {
 			if (document.visibilityState === 'visible') this.storageObserver.wrote();
 		};
-		document.addEventListener('visibilitychange', onVisible);
+		document.addEventListener('visibilitychange', remeasureAfterOtherTabWrites);
 		return () => {
 			stopWorker?.();
-			document.removeEventListener('visibilitychange', onVisible);
+			document.removeEventListener('visibilitychange', remeasureAfterOtherTabWrites);
 		};
 	}
 
@@ -586,18 +585,21 @@ export class WorkspaceState {
 
 	settleDevelopRender = (revision: number) => this.develop.settle(revision);
 
-	// Indicators are a view over the tiles: flipping one re-requests all tiles, not the document.
 	toggleClipping = (kind?: ClippingKind) => {
 		const both = this.clipping.highlights && this.clipping.shadows;
 		this.clipping = kind
 			? { ...this.clipping, [kind]: !this.clipping[kind] }
 			: { highlights: !both, shadows: !both };
+		this.rerequestAllTiles();
+	};
+
+	private rerequestAllTiles() {
 		this.renderSettings = {
 			adjustments: this.renderSettings.adjustments,
 			crop: this.renderSettings.crop,
 			revision: this.renderSettings.revision + 1
 		};
-	};
+	}
 
 	exportPhoto = async (
 		options: { quality: number },

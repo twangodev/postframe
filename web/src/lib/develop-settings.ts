@@ -230,7 +230,6 @@ export const GRADING_BLEND_CONTROL_NAMES = [
 
 export type GradingBlendControlName = (typeof GRADING_BLEND_CONTROL_NAMES)[number];
 
-/// Where one control lives in the settings tree: group + control, plus a band or range for mixer/grading wheels.
 export type AdjustmentTarget =
 	| {
 			[Group in ScalarGroupName]: { group: Group; control: ScalarControlName<Group> };
@@ -413,7 +412,6 @@ export function scalarAdjustments(settings: DevelopSettings): AdjustmentRecord {
 	return { ...settings.light, ...settings.color, ...settings.detail, ...settings.effects };
 }
 
-/// The panel's own editable copy, detached so a slider can't write through the document without a command.
 export interface AdjustmentMirror {
 	adjustments: AdjustmentRecord;
 	curve: CurveSettings;
@@ -458,13 +456,11 @@ export function withCurve(
 	return next;
 }
 
-// Identifies the tile-side spatial work a cached source tile already carries.
-// Mirrors DetailKey in src/wasm/session.rs: cleaning a tile and building its
-// blur planes depend on the noise controls and on whether any stage reads a
-// plane, so dragging clarity keeps the cached tile and its planes.
+// Mirrors DetailKey in src/wasm/session.rs.
 export function detailTileKey(detail: DetailSettings) {
-	const planes = detail.texture !== 0 || detail.clarity !== 0 || detail.sharpenAmount !== 0;
-	return `${detail.noiseLuminance}:${detail.noiseColor}:${planes}`;
+	const buildsBlurPlanes =
+		detail.texture !== 0 || detail.clarity !== 0 || detail.sharpenAmount !== 0;
+	return `${detail.noiseLuminance}:${detail.noiseColor}:${buildsBlurPlanes}`;
 }
 
 function addressed(settings: DevelopSettings, target: AdjustmentTarget) {
@@ -489,11 +485,6 @@ function canonicalKey(value: unknown): string {
 		.map(([key, nested]) => `${key}:${canonicalKey(nested)}`)}}`;
 }
 
-/**
- * Whether a group has anything to do. The shader short-circuits on these, so
- * they must agree with the pipeline's own neutrality — a predicate that says
- * "neutral" for a moved control hides that edit with no error.
- */
 export function lightIdentity(settings: LightSettings) {
 	return (
 		settings.contrast === 0 &&
