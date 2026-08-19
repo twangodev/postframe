@@ -1,9 +1,15 @@
 <script lang="ts" generics="A">
 	import { ContextMenu } from 'bits-ui';
-	import { Check, ChevronRight } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
-	import { menuContentClass, menuItemClass, type MenuEntry, type MenuLeaf } from '$lib/menu';
-	import ShortcutHint from './ShortcutHint.svelte';
+	import {
+		menuContentClass,
+		menuItemClass,
+		menuSeparatorClass,
+		type MenuEntry,
+		type MenuLeaf
+	} from '$lib/menu';
+	import MenuLeafBody from './MenuLeafBody.svelte';
+	import MenuSubmenuLabel from './MenuSubmenuLabel.svelte';
 
 	interface Props {
 		items: MenuEntry<A>[];
@@ -27,7 +33,7 @@
 {#snippet leaves(entries: MenuLeaf<A>[], prefix: string)}
 	{#each entries as entry, index (`${prefix}-${index}`)}
 		{#if entry.kind === 'separator'}
-			<ContextMenu.Separator class="my-1 h-px bg-subtle" />
+			<ContextMenu.Separator class={menuSeparatorClass} />
 		{:else}
 			<ContextMenu.Item
 				disabled={disabled(entry)}
@@ -35,15 +41,7 @@
 				class={menuItemClass}
 				onSelect={() => select(entry)}
 			>
-				<span class="flex w-3 items-center justify-center">
-					{#if entry.checked}<Check size={10} />{/if}
-				</span>
-				<span class="flex-1">{entry.label}</span>
-				{#if entry.shortcut}
-					<kbd class="ml-5 font-mono text-[10px] text-muted"
-						><ShortcutHint shortcut={entry.shortcut} /></kbd
-					>
-				{/if}
+				<MenuLeafBody {entry} />
 			</ContextMenu.Item>
 		{/if}
 	{/each}
@@ -61,9 +59,7 @@
 				{#if entry.kind === 'submenu'}
 					<ContextMenu.Sub>
 						<ContextMenu.SubTrigger class={menuItemClass}>
-							<span class="w-3"></span>
-							<span class="flex-1">{entry.label}</span>
-							<ChevronRight size={11} class="text-muted" />
+							<MenuSubmenuLabel label={entry.label} />
 						</ContextMenu.SubTrigger>
 						<ContextMenu.Portal>
 							<ContextMenu.SubContent sideOffset={3} class={menuContentClass}>
