@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { DropdownMenu } from 'bits-ui';
 	import { Columns2, Maximize2, Minus, Plus } from '@lucide/svelte';
-	import Tooltip from './ui/Tooltip.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import { ZOOM_MENU_PRESETS } from '$lib/photo-viewport';
 	import type { ViewportInteraction } from '$lib/viewport-interaction.svelte';
 
@@ -24,30 +24,17 @@
 
 <div class="flex h-9 shrink-0 items-center justify-between border-b border-subtle bg-bg px-3">
 	<div class="flex items-center gap-1 text-muted">
-		<Tooltip text="Fit image to view">
-			{#snippet children(props)}
-				<button
-					{...props}
-					type="button"
-					aria-label="Fit image to view"
-					class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text {viewport.mode ===
-					'fit'
-						? 'text-accent'
-						: ''}"
-					onclick={viewport.fitPhoto}
-				>
-					<Maximize2 size={12} />
-				</button>
-			{/snippet}
-		</Tooltip>
-		<button
-			type="button"
-			aria-label="Zoom out"
-			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
-			onclick={viewport.zoomOut}
+		<IconButton
+			label="Fit image to view"
+			tooltip
+			active={viewport.mode === 'fit'}
+			onclick={viewport.fitPhoto}
 		>
+			<Maximize2 size={12} />
+		</IconButton>
+		<IconButton label="Zoom out" onclick={viewport.zoomOut}>
 			<Minus size={12} />
-		</button>
+		</IconButton>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger
 				aria-label="Choose zoom level"
@@ -76,7 +63,7 @@
 						<kbd class="font-mono text-[10px] text-muted">1</kbd>
 					</DropdownMenu.Item>
 					<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
-					{#each ZOOM_MENU_PRESETS as scale}
+					{#each ZOOM_MENU_PRESETS as scale (scale)}
 						<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.chooseZoom(scale)}>
 							<span class="w-3 text-accent"
 								>{viewport.mode === 'manual' && Math.abs(viewport.transform.scale - scale) < 0.0001
@@ -89,14 +76,9 @@
 				</DropdownMenu.Content>
 			</DropdownMenu.Portal>
 		</DropdownMenu.Root>
-		<button
-			type="button"
-			aria-label="Zoom in"
-			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
-			onclick={viewport.zoomIn}
-		>
+		<IconButton label="Zoom in" onclick={viewport.zoomIn}>
 			<Plus size={12} />
-		</button>
+		</IconButton>
 	</div>
 
 	{#if photoName !== null}

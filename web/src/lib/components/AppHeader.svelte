@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mergeProps, Tabs } from 'bits-ui';
+	import { Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import { Database, Download, Plus, Upload } from '@lucide/svelte';
@@ -7,6 +7,7 @@
 	import EditorMenuBar from './EditorMenuBar.svelte';
 	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import type { EditorMenuAction } from '$lib/editor-menu';
@@ -159,34 +160,26 @@
 		</Tabs.Root>
 
 		<div class="flex flex-1 items-center justify-end gap-1">
-			<Tooltip text="Create collection">
-				{#snippet children(props)}
-					<button
-						{...props}
-						type="button"
-						aria-label="Create collection"
-						class="hidden size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text sm:flex"
-						onclick={workspace.requestCollectionCreation}
-					>
-						<Plus size={14} strokeWidth={1.5} />
-					</button>
-				{/snippet}
-			</Tooltip>
+			<IconButton
+				label="Create collection"
+				tooltip
+				size={7}
+				class="hidden sm:flex"
+				onclick={workspace.requestCollectionCreation}
+			>
+				<Plus size={14} strokeWidth={1.5} />
+			</IconButton>
 			{#if workspace.localStorageAvailable}
 				<StorageManagementDialog {workspace}>
 					{#snippet trigger(triggerProps)}
-						<Tooltip text="Local storage">
-							{#snippet children(props)}
-								<button
-									{...mergeProps(props, triggerProps)}
-									type="button"
-									aria-label="Manage local storage"
-									class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
-								>
-									<Database size={13} strokeWidth={1.5} />
-								</button>
-							{/snippet}
-						</Tooltip>
+						<IconButton
+							{...triggerProps}
+							label="Manage local storage"
+							tooltip="Local storage"
+							size={7}
+						>
+							<Database size={13} strokeWidth={1.5} />
+						</IconButton>
 					{/snippet}
 				</StorageManagementDialog>
 			{/if}

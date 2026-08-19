@@ -3,6 +3,7 @@
 	import { X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CollectionDialog from './CollectionDialog.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -58,16 +59,16 @@
 </script>
 
 <main class="flex min-h-svh items-center justify-center bg-bg px-6 text-text">
-	<button
-		type="button"
-		aria-label="Enter photo library"
-		title="Enter photo library"
-		class="motion-header absolute top-5 right-5 flex size-9 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
+	<IconButton
+		label="Enter photo library"
+		tooltip
+		size={9}
+		class="motion-header absolute top-5 right-5"
 		onclick={onEnterLibrary}
 		disabled={busy}
 	>
 		<X size={17} strokeWidth={1.5} />
-	</button>
+	</IconButton>
 
 	<a
 		href="https://github.com/twangodev/postframe"

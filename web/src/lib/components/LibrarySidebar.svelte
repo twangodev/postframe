@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Clock3, Flag, Folder, FolderPlus, Image } from '@lucide/svelte';
 	import type { Component } from 'svelte';
-	import Tooltip from './ui/Tooltip.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import { sameSource, type LibrarySource, type LibrarySourceCounts } from '$lib/library-view';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -47,19 +47,9 @@
 	<div class="mx-3 my-3 h-px bg-subtle"></div>
 	<div class="flex items-center justify-between px-3 pb-2">
 		<span class="text-[11px] tracking-[0.04em] text-muted">collections</span>
-		<Tooltip text="Create collection">
-			{#snippet children(props)}
-				<button
-					{...props}
-					type="button"
-					aria-label="Create collection"
-					class="cursor-pointer rounded text-muted transition-colors hover:text-text"
-					onclick={workspace.requestCollectionCreation}
-				>
-					<FolderPlus size={13} strokeWidth={1.5} />
-				</button>
-			{/snippet}
-		</Tooltip>
+		<IconButton label="Create collection" tooltip onclick={workspace.requestCollectionCreation}>
+			<FolderPlus size={13} strokeWidth={1.5} />
+		</IconButton>
 	</div>
 	<div class="space-y-0.5 px-2">
 		{#each workspace.collections as collection (collection.id)}

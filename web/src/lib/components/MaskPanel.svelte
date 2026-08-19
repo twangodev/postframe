@@ -24,6 +24,7 @@
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import Panel from './ui/Panel.svelte';
 	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
 	import { maskOperationSchema, type MaskComponent, type MaskOperation } from '$lib/edit-document';
@@ -206,15 +207,13 @@
 		<Panel title="Mask adjustments" meta={selectedMask.name}>
 			{#if candidateComponent?.alternatives && candidateComponent.alternatives.count > 1}
 				<div class="mb-2 flex h-8 items-center justify-between rounded border border-subtle px-1">
-					<button
-						type="button"
-						aria-label="Previous mask candidate"
+					<IconButton
+						label="Previous mask candidate"
 						disabled={smartMaskWorking}
-						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(-1)}
 					>
 						<ChevronLeft size={12} />
-					</button>
+					</IconButton>
 					<span class="text-[10px] text-muted lowercase">
 						candidate
 						<span class="font-mono text-text"
@@ -222,15 +221,13 @@
 								.count}</span
 						>
 					</span>
-					<button
-						type="button"
-						aria-label="Next mask candidate"
+					<IconButton
+						label="Next mask candidate"
 						disabled={smartMaskWorking}
-						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(1)}
 					>
 						<ChevronRight size={12} />
-					</button>
+					</IconButton>
 				</div>
 			{/if}
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">brush</p>
