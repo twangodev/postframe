@@ -1,14 +1,8 @@
 <script lang="ts">
-	import { Flag, Star } from '@lucide/svelte';
+	import { Flag } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
-	import {
-		camera,
-		colorLabelChoices,
-		dimensions,
-		exposure,
-		formatDecimal,
-		labelColors
-	} from '$lib/photo-format';
+	import RatingStars from './ui/RatingStars.svelte';
+	import { colorLabelChoices, labelColors, metadataRows } from '$lib/photo-format';
 	import { formatBytes, type WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -50,20 +44,12 @@
 				</button>
 			</div>
 			<div class="mt-3 flex items-center justify-between">
-				<div class="flex gap-0.5">
-					{#each [1, 2, 3, 4, 5] as rating}
-						<button
-							type="button"
-							aria-label={`Rate ${rating} stars`}
-							class="cursor-pointer text-muted transition-colors hover:text-text"
-							onclick={() => workspace.setRating(active.id, rating)}
-						>
-							<Star size={12} class={active.rating >= rating ? 'fill-text text-text' : ''} />
-						</button>
-					{/each}
-				</div>
+				<RatingStars
+					rating={active.rating}
+					onRate={(rating) => workspace.setRating(active.id, rating)}
+				/>
 				<div class="flex gap-1.5">
-					{#each colorLabelChoices as color}
+					{#each colorLabelChoices as color (color)}
 						<button
 							type="button"
 							aria-label={`${color} label`}
@@ -82,22 +68,10 @@
 		<div class="border-b border-subtle p-3">
 			<p class="mb-3 text-[11px] tracking-[0.04em] text-muted">metadata</p>
 			<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[11px]">
-				<dt class="text-muted">captured</dt>
-				<dd class="text-right text-text/80">{active.captured}</dd>
-				<dt class="text-muted">dimensions</dt>
-				<dd class="text-right font-mono text-text/80">{dimensions(active)}</dd>
-				<dt class="text-muted">camera</dt>
-				<dd class="text-right text-text/80">{camera(active)}</dd>
-				<dt class="text-muted">lens</dt>
-				<dd class="text-right text-text/80">{active.metadata?.lens ?? '—'}</dd>
-				<dt class="text-muted">focal length</dt>
-				<dd class="text-right font-mono text-text/80">
-					{active.metadata?.focalLengthMm
-						? `${formatDecimal(active.metadata.focalLengthMm)} mm`
-						: '—'}
-				</dd>
-				<dt class="text-muted">exposure</dt>
-				<dd class="text-right font-mono text-text/80">{exposure(active)}</dd>
+				{#each metadataRows(active) as row (row.label)}
+					<dt class="text-muted">{row.label}</dt>
+					<dd class="text-right text-text/80" class:font-mono={row.mono}>{row.value}</dd>
+				{/each}
 			</dl>
 		</div>
 

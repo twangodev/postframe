@@ -14,8 +14,15 @@ export type PhotoMenuAction =
 
 export interface PhotoMenuContext {
 	targets: Photo[];
-	stack: PhotoStack | null;
-	collections: PhotoCollection[];
+	stacks: readonly PhotoStack[];
+	collections: readonly PhotoCollection[];
+}
+
+export interface PhotoLibrary {
+	photos: readonly Photo[];
+	stacks: readonly PhotoStack[];
+	collections: readonly PhotoCollection[];
+	selectedIds: readonly string[];
 }
 
 const COLOR_LABELS: ColorLabel[] = ['none', 'red', 'yellow', 'green', 'blue', 'purple'];
@@ -26,9 +33,18 @@ export function contextTargets(photoId: string, selectedIds: readonly string[]) 
 		: { targetIds: [photoId], moveSelection: true };
 }
 
+export function photoContextMenu(
+	{ photos, stacks, collections, selectedIds }: PhotoLibrary,
+	photoId: string
+) {
+	const { targetIds, moveSelection } = contextTargets(photoId, selectedIds);
+	const targets = photos.filter(({ id }) => targetIds.includes(id));
+	return { items: photoMenu({ targets, stacks, collections }), targetIds, moveSelection };
+}
+
 export function photoMenu({
 	targets,
-	stack,
+	stacks,
 	collections
 }: PhotoMenuContext): MenuEntry<PhotoMenuAction>[] {
 	return [
@@ -38,7 +54,7 @@ export function photoMenu({
 		{ kind: 'submenu', label: 'rating', items: ratingEntries(targets) },
 		{ kind: 'submenu', label: 'color label', items: labelEntries(targets) },
 		{ kind: 'submenu', label: 'add to collection', items: collectionEntries(targets, collections) },
-		stackEntry(targets, stack),
+		stackEntry(targets, stacks),
 		separator(),
 		removeEntry(targets)
 	];
@@ -73,7 +89,7 @@ function labelEntries(targets: Photo[]): MenuLeaf<PhotoMenuAction>[] {
 
 function collectionEntries(
 	targets: Photo[],
-	collections: PhotoCollection[]
+	collections: readonly PhotoCollection[]
 ): MenuLeaf<PhotoMenuAction>[] {
 	if (collections.length === 0) {
 		return [{ kind: 'action', label: 'create collection…', action: { type: 'create-collection' } }];
@@ -89,8 +105,9 @@ function collectionEntries(
 	});
 }
 
-function stackEntry(targets: Photo[], stack: PhotoStack | null): MenuAction<PhotoMenuAction> {
-	if (stack && targets.every(({ stackId }) => stackId === stack.id)) {
+function stackEntry(targets: Photo[], stacks: readonly PhotoStack[]): MenuAction<PhotoMenuAction> {
+	const stack = sharedStack(targets, stacks);
+	if (stack) {
 		return {
 			kind: 'action',
 			label: 'ungroup stack',
@@ -103,6 +120,12 @@ function stackEntry(targets: Photo[], stack: PhotoStack | null): MenuAction<Phot
 		action: { type: 'group-stack' },
 		disabled: targets.length < 2
 	};
+}
+
+function sharedStack(targets: Photo[], stacks: readonly PhotoStack[]) {
+	const stackId = targets[0]?.stackId;
+	if (!stackId || !targets.every((target) => target.stackId === stackId)) return null;
+	return stacks.find(({ id }) => id === stackId) ?? null;
 }
 
 function removeEntry(targets: Photo[]): MenuAction<PhotoMenuAction> {

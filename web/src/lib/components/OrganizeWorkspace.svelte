@@ -7,8 +7,16 @@
 	import PhotoDetailRail from './PhotoDetailRail.svelte';
 	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import RemovePhotosDialog from './RemovePhotosDialog.svelte';
-	import { contextTargets, photoMenu, type PhotoMenuAction } from '$lib/photo-menu';
+	import {
+		librarySourceCounts,
+		visibleLibraryPhotos,
+		type LibrarySort,
+		type LibrarySource,
+		type LibraryView
+	} from '$lib/library-view';
+	import { photoContextMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import { type Photo, type WorkspaceState } from '$lib/workspace.svelte';
+	import type { Component } from 'svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -16,9 +24,9 @@
 
 	let { workspace }: Props = $props();
 	let search = $state('');
-	let view = $state('grid');
-	let source = $state('all');
-	let sort = $state('capture');
+	let view = $state<LibraryView>('grid');
+	let source = $state<LibrarySource>({ kind: 'all' });
+	let sort = $state<LibrarySort>('capture');
 	let removalIds = $state<string[] | null>(null);
 	const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
@@ -27,64 +35,20 @@
 			workspace.selectedIds.some((id) => stack.photoIds.includes(id))
 		)
 	);
-	const recentCount = $derived(
-		workspace.photos.filter((photo) => photo.importedAt >= recentCutoff).length
+	const counts = $derived(librarySourceCounts(workspace.photos, recentCutoff));
+	const visiblePhotos = $derived(
+		visibleLibraryPhotos(workspace, { search, source, sort, recentCutoff })
 	);
-	const visiblePhotos = $derived.by(() => {
-		const query = search.trim().toLowerCase();
-		const collection = source.startsWith('collection:')
-			? workspace.collections.find((candidate) => candidate.id === source.slice(11))
-			: null;
-		let photos = workspace.photos.filter((photo) => {
-			if (query && !photo.name.toLowerCase().includes(query)) return false;
-			if (source === 'recent' && photo.importedAt < recentCutoff) return false;
-			if (source === 'favorites' && !photo.flagged) return false;
-			if (collection && !collection.photoIds.includes(photo.id)) return false;
-			return true;
-		});
-
-		const filteredIds = new Set(photos.map((photo) => photo.id));
-		photos = photos.filter((photo) => {
-			if (!photo.stackId) return true;
-			const stack = workspace.stacks.find((candidate) => candidate.id === photo.stackId);
-			const firstVisible = stack?.photoIds.find((photoId) => filteredIds.has(photoId));
-			return !stack?.collapsed || firstVisible === photo.id;
-		});
-
-		return [...photos].sort((a, b) => {
-			if (sort === 'name') return a.name.localeCompare(b.name);
-			if (sort === 'rating') return b.rating - a.rating;
-			return a.captured.localeCompare(b.captured);
-		});
-	});
 
 	function stackFor(photo: Photo) {
 		return workspace.stacks.find((stack) => stack.id === photo.stackId);
 	}
 
-	function menuTargets(photo: Photo) {
-		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
-		return workspace.photos.filter(({ id }) => targetIds.includes(id));
-	}
-
 	function cardMenu(photo: Photo) {
-		const targets = menuTargets(photo);
-		const stackId = targets[0]?.stackId ?? null;
-		const stack =
-			stackId && targets.every((target) => target.stackId === stackId)
-				? (workspace.stacks.find(({ id }) => id === stackId) ?? null)
-				: null;
-		return photoMenu({ targets, stack, collections: workspace.collections });
+		return photoContextMenu(workspace, photo.id);
 	}
 
-	function openCardMenu(photo: Photo) {
-		if (contextTargets(photo.id, workspace.selectedIds).moveSelection) {
-			workspace.selectPhoto(photo.id);
-		}
-	}
-
-	function runPhotoAction(action: PhotoMenuAction, photo: Photo) {
-		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
+	function runPhotoAction(action: PhotoMenuAction, photo: Photo, targetIds: string[]) {
 		switch (action.type) {
 			case 'edit':
 				workspace.editPhoto(photo.id);
@@ -121,12 +85,31 @@
 	}
 </script>
 
+{#snippet emptyState(
+	Icon: Component<Record<string, unknown>>,
+	title: string,
+	hint: string,
+	framed: boolean
+)}
+	{#if framed}
+		<div
+			class="mb-4 flex size-10 items-center justify-center rounded border border-subtle bg-surface text-muted"
+		>
+			<Icon size={17} strokeWidth={1.25} />
+		</div>
+	{:else}
+		<Icon size={28} strokeWidth={1} class="mb-3 text-muted" />
+	{/if}
+	<p class="text-xs text-text" class:font-medium={framed}>{title}</p>
+	<p class="mt-1 text-[11px] text-muted">{hint}</p>
+{/snippet}
+
 <div
 	class={workspace.photos.length === 0
 		? 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)]'
 		: 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
 >
-	<LibrarySidebar {workspace} bind:source {recentCount} />
+	<LibrarySidebar {workspace} bind:source {counts} />
 
 	<section class="motion-panel-up flex min-h-0 min-w-0 flex-col bg-canvas">
 		{#if workspace.photos.length > 0}
@@ -177,7 +160,7 @@
 					<ToggleGroup.Root
 						type="single"
 						value={view}
-						onValueChange={(value) => value && (view = value)}
+						onValueChange={(value) => value && (view = value as LibraryView)}
 						class="flex h-7 rounded border border-subtle bg-surface p-0.5"
 					>
 						<ToggleGroup.Item
@@ -202,13 +185,12 @@
 		<div class="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
 			{#if workspace.photos.length === 0}
 				<div class="motion-enter flex h-full flex-col items-center justify-center text-center">
-					<div
-						class="mb-4 flex size-10 items-center justify-center rounded border border-subtle bg-surface text-muted"
-					>
-						<ImagePlus size={17} strokeWidth={1.25} />
-					</div>
-					<p class="text-xs font-medium text-text">empty library</p>
-					<p class="mt-1 text-[11px] text-muted">add photographs when you're ready.</p>
+					{@render emptyState(
+						ImagePlus,
+						'empty library',
+						"add photographs when you're ready.",
+						true
+					)}
 					<label
 						class="mt-4 flex h-8 cursor-pointer items-center rounded bg-text px-3 text-[11px] font-medium text-bg hover:opacity-85"
 					>
@@ -223,23 +205,27 @@
 						: 'flex flex-col gap-px overflow-hidden rounded border border-subtle bg-subtle'}
 				>
 					{#each visiblePhotos as photo, index (photo.id)}
+						{@const menu = cardMenu(photo)}
 						<PhotoCard
 							{workspace}
 							{photo}
 							{view}
 							{index}
 							stack={stackFor(photo)}
-							menu={cardMenu(photo)}
-							onMenuOpen={() => openCardMenu(photo)}
-							onMenuAction={(action) => runPhotoAction(action, photo)}
+							menu={menu.items}
+							onMenuOpen={() => menu.moveSelection && workspace.selectPhoto(photo.id)}
+							onMenuAction={(action) => runPhotoAction(action, photo, menu.targetIds)}
 						/>
 					{/each}
 				</div>
 			{:else}
 				<div class="flex h-full flex-col items-center justify-center text-center">
-					<Box size={28} strokeWidth={1} class="mb-3 text-muted" />
-					<p class="text-xs text-text">no photos in this view</p>
-					<p class="mt-1 text-[11px] text-muted">try another collection or clear the search.</p>
+					{@render emptyState(
+						Box,
+						'no photos in this view',
+						'try another collection or clear the search.',
+						false
+					)}
 				</div>
 			{/if}
 		</div>
