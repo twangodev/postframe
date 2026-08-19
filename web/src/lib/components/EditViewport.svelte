@@ -73,6 +73,26 @@
 	}
 </script>
 
+{#snippet viewportNotice(title: string, detail: string | null)}
+	<div
+		class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
+	>
+		<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
+			<p class="text-[12px]">{title}</p>
+			{#if detail}
+				<p class="text-[10px] leading-relaxed text-white/55">{detail}</p>
+			{/if}
+			<button
+				type="button"
+				class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
+				onclick={workspace.reloadDocument}
+			>
+				retry
+			</button>
+		</div>
+	</div>
+{/snippet}
+
 <ContextMenu items={viewportMenu} onAction={runViewportAction}>
 	{#snippet children({ props })}
 		<div
@@ -257,38 +277,9 @@
 					</div>
 				{/if}
 				{#if activeDocument?.kind === 'cancelled'}
-					<div
-						class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
-					>
-						<div class="motion-enter flex flex-col items-center gap-2.5">
-							<p class="text-[12px]">development stopped</p>
-							<button
-								type="button"
-								class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
-								onclick={workspace.reloadDocument}
-							>
-								retry
-							</button>
-						</div>
-					</div>
+					{@render viewportNotice('development stopped', null)}
 				{:else if activeDocument?.kind === 'error'}
-					<div
-						class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
-					>
-						<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
-							<p class="text-[12px]">couldn't open raw</p>
-							<p class="text-[10px] leading-relaxed text-white/55">
-								{activeDocument.message}
-							</p>
-							<button
-								type="button"
-								class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
-								onclick={workspace.reloadDocument}
-							>
-								retry
-							</button>
-						</div>
-					</div>
+					{@render viewportNotice("couldn't open raw", activeDocument.message)}
 				{/if}
 			{:else}
 				<p class="absolute inset-0 flex items-center justify-center text-[11px] text-muted">

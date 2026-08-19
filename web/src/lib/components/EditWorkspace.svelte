@@ -25,6 +25,10 @@
 	let before = $state(false);
 	let fittedPhotoKey = '';
 
+	const inspectorTabs = ['adjust', 'mask', 'layers'] as const;
+	const inspectorTabClass =
+		'cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text';
+
 	const active = $derived(workspace.editingPhoto);
 	const imageSize = $derived({
 		width: Math.max(1, active?.width ?? 1600),
@@ -143,26 +147,14 @@
 		>
 			<Tabs.Root bind:value={session.inspectorTab}>
 				<Tabs.List class="grid h-10 grid-cols-3 border-b border-subtle bg-bg px-2 pt-1">
-					<Tabs.Trigger
-						value="adjust"
-						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
-					>
-						adjust
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="mask"
-						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
-					>
-						mask {#if workspace.masks.length > 0}<span class="ml-1 text-accent"
-								>{workspace.masks.length}</span
-							>{/if}
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="layers"
-						class="cursor-pointer border-b border-transparent text-[11px] tracking-[0.03em] text-muted data-[state=active]:border-text data-[state=active]:text-text"
-					>
-						layers
-					</Tabs.Trigger>
+					{#each inspectorTabs as tab (tab)}
+						<Tabs.Trigger value={tab} class={inspectorTabClass}>
+							{tab}
+							{#if tab === 'mask' && workspace.masks.length > 0}<span class="ml-1 text-accent"
+									>{workspace.masks.length}</span
+								>{/if}
+						</Tabs.Trigger>
+					{/each}
 				</Tabs.List>
 
 				<AdjustPanel {workspace} activeTool={session.tool} onPickTool={session.choose} />
