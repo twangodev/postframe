@@ -52,8 +52,10 @@ export function radialLayout(
 	};
 }
 
-// Nearest-point iteration on an axis-aligned ellipse, seeded at the 45° point.
-// Three fixed steps converge well enough for hit-testing at every eccentricity.
+/**
+ * Nearest-point iteration on an axis-aligned ellipse, seeded at the 45° point;
+ * three fixed steps converge well enough for hit-testing at every eccentricity.
+ */
 export function ellipseOutlineDistance(local: Point, radiusX: number, radiusY: number): number {
 	const px = Math.abs(local.x);
 	const py = Math.abs(local.y);

@@ -24,6 +24,7 @@ const GRADING_SCALARS = 12;
 const UNIFORM_BYTES = 192;
 const EFFECTS_UNIFORM_BYTES = 64;
 const DETAIL_PLANE_FORMAT: GPUTextureFormat = 'r32float';
+const DETAIL_PLANES_PER_TILE = 2;
 const BUFFER_COPY_DST = 0x0008;
 const BUFFER_UNIFORM = 0x0040;
 const BUFFER_STORAGE = 0x0080;
@@ -241,7 +242,7 @@ export class RawWebGpuRenderer {
 		);
 		const cached = {
 			texture,
-			detail: this.uploadDetailPlanes(source),
+			detail: this.uploadStackedDetailPlanes(source),
 			width: source.width,
 			height: source.height,
 			bytes: source.rgba.byteLength + source.detail.byteLength
@@ -261,20 +262,20 @@ export class RawWebGpuRenderer {
 		return cached;
 	}
 
-	// The fine plane stacked above the coarse one, so one tile needs one texture.
-	private uploadDetailPlanes(source: LinearTileSource) {
-		if (source.detail.length !== (source.rgba.length / 4) * 2) return null;
-		const height = source.height * 2;
+	private uploadStackedDetailPlanes(source: LinearTileSource) {
+		const pixels = source.rgba.length / 4;
+		if (source.detail.length !== pixels * DETAIL_PLANES_PER_TILE) return null;
+		const stackedHeight = source.height * DETAIL_PLANES_PER_TILE;
 		const texture = this.device.createTexture({
-			size: { width: source.width, height },
+			size: { width: source.width, height: stackedHeight },
 			format: DETAIL_PLANE_FORMAT,
 			usage: TEXTURE_BINDING | TEXTURE_COPY_DST
 		});
 		this.device.queue.writeTexture(
 			{ texture },
 			source.detail,
-			{ bytesPerRow: source.width * 4, rowsPerImage: height },
-			{ width: source.width, height }
+			{ bytesPerRow: source.width * 4, rowsPerImage: stackedHeight },
+			{ width: source.width, height: stackedHeight }
 		);
 		return texture;
 	}

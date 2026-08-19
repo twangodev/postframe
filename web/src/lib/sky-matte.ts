@@ -3,9 +3,10 @@ export interface SkySegment {
 	mask: { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
 }
 
-// LABEL_187 is COCO panoptic's sky-other-merged; the checkpoint's id2label predates
-// the merged stuff categories, so the model reports sky through the placeholder name.
-const SKY_SEGMENT_LABELS = new Set(['sky-other', 'clouds', 'LABEL_187']);
+/** The checkpoint's id2label predates COCO panoptic's merged stuff categories. */
+const SKY_OTHER_MERGED_PLACEHOLDER = 'LABEL_187';
+
+const SKY_SEGMENT_LABELS = new Set(['sky-other', 'clouds', SKY_OTHER_MERGED_PLACEHOLDER]);
 
 export function skySegmentAlpha(
 	segments: readonly SkySegment[],

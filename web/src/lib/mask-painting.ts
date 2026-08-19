@@ -80,20 +80,29 @@ export class MaskPainting {
 		stroke: MaskBrushStroke,
 		strokes: MaskBrushStroke[]
 	) {
+		const extended = await this.strokeOntoExistingRaster(paintDims, existing, stroke);
+		return extended ?? rasterizeBrushStrokes(strokes, paintDims.width, paintDims.height);
+	}
+
+	private async strokeOntoExistingRaster(
+		paintDims: { width: number; height: number },
+		existing: Extract<MaskComponent, { type: 'brush' }> | undefined,
+		stroke: MaskBrushStroke
+	) {
 		if (
-			existing?.raster &&
-			existing.raster.width === paintDims.width &&
-			existing.raster.height === paintDims.height &&
-			existing.strokes.length > 0
+			!existing?.raster ||
+			existing.raster.width !== paintDims.width ||
+			existing.raster.height !== paintDims.height ||
+			existing.strokes.length === 0
 		) {
-			try {
-				const base = await this.pipeline.maskRaster(existing.raster);
-				return rasterizeStrokeOnto(base.alpha.slice(), stroke, paintDims.width, paintDims.height);
-			} catch {
-				// Fall through to a full re-rasterization.
-			}
+			return null;
 		}
-		return rasterizeBrushStrokes(strokes, paintDims.width, paintDims.height);
+		try {
+			const base = await this.pipeline.maskRaster(existing.raster);
+			return rasterizeStrokeOnto(base.alpha.slice(), stroke, paintDims.width, paintDims.height);
+		} catch {
+			return null;
+		}
 	}
 
 	private paintableMask(kind?: MaskKind): MaskPaintContext | null {
