@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-// Panels slide open over 200ms; poll scrollIntoView until the target is actually inside the aside.
-async function revealInAside(target: Locator) {
+async function revealInSlidingAside(target: Locator) {
 	await expect
 		.poll(() =>
 			target.evaluate((element) => {
@@ -90,10 +89,10 @@ test('shapes the selected mask with the curve, mixer and grading sections', asyn
 
 	await aside.getByRole('button', { name: /^Curve/ }).click();
 	const plot = aside.getByRole('application', { name: /tone curve/ });
-	await revealInAside(plot);
+	await revealInSlidingAside(plot);
 	await expect(plot).toHaveAttribute('aria-disabled', 'false');
-	// The mask plot draws no histogram backdrop; the document's tones are not its own.
-	await expect(plot.locator('polygon')).toHaveCount(0);
+	const histogramBackdrop = plot.locator('polygon');
+	await expect(histogramBackdrop).toHaveCount(0);
 	const box = (await plot.boundingBox())!;
 	await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.6);
 	await page.mouse.down();
@@ -119,7 +118,7 @@ test('shapes the selected mask with the curve, mixer and grading sections', asyn
 
 	await aside.getByRole('button', { name: 'Color grading' }).click();
 	const disc = aside.getByRole('slider', { name: 'shadows hue and saturation' });
-	await revealInAside(disc);
+	await revealInSlidingAside(disc);
 	const bounds = (await disc.boundingBox())!;
 	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 	await page.mouse.down();
@@ -131,14 +130,14 @@ test('shapes the selected mask with the curve, mixer and grading sections', asyn
 		})
 		.toBeGreaterThan(40);
 
-	// The document's own settings never moved: every edit landed on the mask.
 	const edit = await storedEdit(page);
-	expect(edit.adjustments.curve.luminance).toEqual([
+	const untouchedDocumentSettings = edit.adjustments;
+	expect(untouchedDocumentSettings.curve.luminance).toEqual([
 		{ x: 0, y: 0 },
 		{ x: 1, y: 1 }
 	]);
-	expect(edit.adjustments.mixer.blue).toEqual({ hue: 0, saturation: 0, luminance: 0 });
-	expect(edit.adjustments.grading.shadows.saturation).toBe(0);
+	expect(untouchedDocumentSettings.mixer.blue).toEqual({ hue: 0, saturation: 0, luminance: 0 });
+	expect(untouchedDocumentSettings.grading.shadows.saturation).toBe(0);
 	expect(edit.masks[0].adjustments.curve.luminance[1].y).toBeGreaterThan(
 		edit.masks[0].adjustments.curve.luminance[1].x
 	);

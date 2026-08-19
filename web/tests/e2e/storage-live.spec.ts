@@ -1,13 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-const png = (page: import('@playwright/test').Page, size: number, fill: string) =>
+const incompressiblePng = (page: import('@playwright/test').Page, size: number, fill: string) =>
 	page.evaluate(
 		([size, fill]) => {
 			const canvas = document.createElement('canvas');
 			canvas.width = size;
 			canvas.height = size;
 			const context = canvas.getContext('2d')!;
-			// Noise defeats PNG compression, so a bigger canvas is a bigger file.
 			for (let y = 0; y < size; y += 1) {
 				for (let x = 0; x < size; x += 1) {
 					context.fillStyle = `hsl(${(x * 7 + y * 13) % 360} 60% ${40 + ((x * y) % 30)}%)`;
@@ -31,7 +30,7 @@ const bytesShown = async (locator: import('@playwright/test').Locator) => {
 
 test('the storage bar grows on its own when more is written', async ({ page }) => {
 	await page.goto('/');
-	const first = await png(page, 96, '#a03');
+	const first = await incompressiblePng(page, 96, '#a03');
 	await page
 		.locator('main input[type="file"]')
 		.first()
@@ -49,16 +48,14 @@ test('the storage bar grows on its own when more is written', async ({ page }) =
 	const before = await bytesShown(summary);
 	expect(before).toBeGreaterThan(0);
 
-	// A second, larger import lands while the dialog stays open and nobody
-	// touches refresh. The total must move by itself.
-	const second = await png(page, 256, '#0a3');
+	const largerImport = await incompressiblePng(page, 256, '#0a3');
 	await page
 		.locator('input[type="file"]')
 		.first()
 		.setInputFiles({
 			name: 'second.png',
 			mimeType: 'image/png',
-			buffer: Buffer.from(second.split(',')[1]!, 'base64')
+			buffer: Buffer.from(largerImport.split(',')[1]!, 'base64')
 		});
 
 	await expect

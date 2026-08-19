@@ -85,17 +85,18 @@ function viewportVariance(page: Page) {
 	});
 }
 
-// Tiles are deterministic: refining is done once three samples 0.5s apart agree.
+function deterministicTilesHaveSettled(samples: (number | null)[]) {
+	const window = samples.slice(-3);
+	return window.length === 3 && window.every((value) => value !== null && value === window[0]);
+}
+
 async function stableViewportVariance(page: Page) {
 	const recent: (number | null)[] = [];
 	await expect
 		.poll(
 			async () => {
 				recent.push(await viewportVariance(page));
-				const window = recent.slice(-3);
-				return (
-					window.length === 3 && window.every((value) => value !== null && value === window[0])
-				);
+				return deterministicTilesHaveSettled(recent);
 			},
 			{ timeout: 20_000, intervals: [500] }
 		)

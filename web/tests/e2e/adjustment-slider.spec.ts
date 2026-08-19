@@ -255,12 +255,13 @@ test('renders and persists the vignette and grain for a display photo', async ({
 			.evaluateAll((paths) => paths.map((path) => path.getAttribute('d')).join('|'));
 
 	await page.getByRole('button', { name: 'Effects', exact: true }).click();
-	// Grain size only clumps pixels of a full-resolution photograph, so it
-	// cannot be expected to move the histogram of a thumbnail this small.
-	const grainSize = page.getByRole('textbox', { name: 'Grain size value' });
-	await grainSize.fill('40');
-	await grainSize.press('Enter');
-	await expect(grainSize).toHaveValue('40');
+	const setGrainSizeInvisibleAtThumbnailScale = async () => {
+		const grainSize = page.getByRole('textbox', { name: 'Grain size value' });
+		await grainSize.fill('40');
+		await grainSize.press('Enter');
+		await expect(grainSize).toHaveValue('40');
+	};
+	await setGrainSizeInvisibleAtThumbnailScale();
 
 	const edits = [
 		['Vignette', '-60', '-60'],

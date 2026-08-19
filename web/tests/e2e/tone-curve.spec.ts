@@ -36,8 +36,8 @@ test('keeps every shaped curve on the plot while the chip picks the editable one
 	await plot.scrollIntoViewIfNeeded();
 	await expect(plot).toBeVisible();
 
-	// The histogram sits behind the curve so tones can be shaped where they are.
-	await expect(plot.locator('polygon')).toHaveCount(1);
+	const histogramBackdrop = plot.locator('polygon');
+	await expect(histogramBackdrop).toHaveCount(1);
 	await expect(page.getByRole('radio', { name: 'luminance curve' })).toHaveAttribute(
 		'aria-checked',
 		'true'
@@ -52,16 +52,17 @@ test('keeps every shaped curve on the plot while the chip picks the editable one
 		await page.mouse.up();
 	};
 
+	const drawnCurves = plot.locator('polyline');
+	const headerNamingTheShapedChannels = (channels: string) =>
+		page.getByRole('button', { name: new RegExp(`^Curve\\s*${channels}$`) });
 	await shape(0.6, 0.45);
-	await expect(plot.locator('polyline')).toHaveCount(1);
-	// The panel header names the channels carrying a shape.
-	await expect(page.getByRole('button', { name: /^Curve\s*L$/ })).toBeVisible();
+	await expect(drawnCurves).toHaveCount(1);
+	await expect(headerNamingTheShapedChannels('L')).toBeVisible();
 
 	await page.getByRole('radio', { name: 'red curve' }).click();
 	await expect(plot).toHaveAttribute('aria-label', 'red tone curve');
 	await shape(0.35, 0.2);
 
-	// The luminance curve stays drawn beside the red one it no longer edits.
-	await expect(plot.locator('polyline')).toHaveCount(2);
-	await expect(page.getByRole('button', { name: /^Curve\s*LR$/ })).toBeVisible();
+	await expect(drawnCurves).toHaveCount(2);
+	await expect(headerNamingTheShapedChannels('LR')).toBeVisible();
 });

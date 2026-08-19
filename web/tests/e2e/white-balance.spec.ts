@@ -42,18 +42,8 @@ function viewportCentrePixel(page: Page) {
 	});
 }
 
-test('balances white from a click or the whole frame and paints clipping on demand', async ({
-	page
-}) => {
-	test.setTimeout(90_000);
-	const failures: string[] = [];
-	page.on('console', (message) => {
-		if (/could not be cloned|tile .*failed|failed:/i.test(message.text()))
-			failures.push(message.text());
-	});
-	await page.goto('/?perf');
-	// A blue-cast grey frame with a blown white square in the middle, saved as a JPEG.
-	const dataUrl = await page.evaluate(() => {
+function blueCastGreyJpegWithBlownWhiteCentre(page: Page) {
+	return page.evaluate(() => {
 		const canvas = document.createElement('canvas');
 		canvas.width = 96;
 		canvas.height = 64;
@@ -64,6 +54,19 @@ test('balances white from a click or the whole frame and paints clipping on dema
 		context.fillRect(36, 20, 24, 24);
 		return canvas.toDataURL('image/jpeg', 0.95);
 	});
+}
+
+test('balances white from a click or the whole frame and paints clipping on demand', async ({
+	page
+}) => {
+	test.setTimeout(90_000);
+	const failures: string[] = [];
+	page.on('console', (message) => {
+		if (/could not be cloned|tile .*failed|failed:/i.test(message.text()))
+			failures.push(message.text());
+	});
+	await page.goto('/?perf');
+	const dataUrl = await blueCastGreyJpegWithBlownWhiteCentre(page);
 	await page
 		.locator('main input[type="file"]')
 		.first()
@@ -95,14 +98,10 @@ test('balances white from a click or the whole frame and paints clipping on dema
 	await expect(page.getByText(/refining tiles|applying light/)).toHaveCount(0, { timeout: 20_000 });
 	await page.keyboard.press('1');
 	await expect(page.getByRole('button', { name: 'Choose zoom level' })).toHaveText('100%');
-	// The warmed white keeps red and green pinned at 255, so it still clips.
+	const warmedWhiteStillClips = { red: 255, green: 255, alpha: 255 };
 	await expect
 		.poll(() => viewportCentrePixel(page), { timeout: 15_000 })
-		.toMatchObject({
-			red: 255,
-			green: 255,
-			alpha: 255
-		});
+		.toMatchObject(warmedWhiteStillClips);
 
 	const samplesBefore = await tileSamples(page);
 	await page.keyboard.press('j');
@@ -136,15 +135,12 @@ test('balances white from a click or the whole frame and paints clipping on dema
 	const box = (await viewport.boundingBox())!;
 	await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
 	await expect(page.getByText('white balance', { exact: true })).toBeVisible();
-	// The white square is neutral, so sampling it undoes the cast within JPEG noise.
+	const samplingTheNeutralSquareUndidTheCastWithinJpegNoise = async () => {
+		const color = (await storedAdjustments(page))?.color;
+		return color && Math.abs(color.temperature) <= 2 && Math.abs(color.tint) <= 2;
+	};
 	await expect
-		.poll(
-			async () => {
-				const color = (await storedAdjustments(page))?.color;
-				return color && Math.abs(color.temperature) <= 2 && Math.abs(color.tint) <= 2;
-			},
-			{ timeout: 15_000 }
-		)
+		.poll(samplingTheNeutralSquareUndidTheCastWithinJpegNoise, { timeout: 15_000 })
 		.toBe(true);
 
 	await page.getByRole('button', { name: 'Auto tone' }).click();
