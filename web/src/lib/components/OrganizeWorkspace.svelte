@@ -13,7 +13,7 @@
 		type LibrarySource,
 		type LibraryView
 	} from '$lib/library-view';
-	import { contextTargets, photoMenu, type PhotoMenuAction } from '$lib/photo-menu';
+	import { photoContextMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import { type Photo, type WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -44,29 +44,11 @@
 		return workspace.stacks.find((stack) => stack.id === photo.stackId);
 	}
 
-	function menuTargets(photo: Photo) {
-		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
-		return workspace.photos.filter(({ id }) => targetIds.includes(id));
-	}
-
 	function cardMenu(photo: Photo) {
-		const targets = menuTargets(photo);
-		const stackId = targets[0]?.stackId ?? null;
-		const stack =
-			stackId && targets.every((target) => target.stackId === stackId)
-				? (workspace.stacks.find(({ id }) => id === stackId) ?? null)
-				: null;
-		return photoMenu({ targets, stack, collections: workspace.collections });
+		return photoContextMenu(workspace, photo.id);
 	}
 
-	function openCardMenu(photo: Photo) {
-		if (contextTargets(photo.id, workspace.selectedIds).moveSelection) {
-			workspace.selectPhoto(photo.id);
-		}
-	}
-
-	function runPhotoAction(action: PhotoMenuAction, photo: Photo) {
-		const { targetIds } = contextTargets(photo.id, workspace.selectedIds);
+	function runPhotoAction(action: PhotoMenuAction, photo: Photo, targetIds: string[]) {
 		switch (action.type) {
 			case 'edit':
 				workspace.editPhoto(photo.id);
@@ -219,15 +201,16 @@
 						: 'flex flex-col gap-px overflow-hidden rounded border border-subtle bg-subtle'}
 				>
 					{#each visiblePhotos as photo, index (photo.id)}
+						{@const menu = cardMenu(photo)}
 						<PhotoCard
 							{workspace}
 							{photo}
 							{view}
 							{index}
 							stack={stackFor(photo)}
-							menu={cardMenu(photo)}
-							onMenuOpen={() => openCardMenu(photo)}
-							onMenuAction={(action) => runPhotoAction(action, photo)}
+							menu={menu.items}
+							onMenuOpen={() => menu.moveSelection && workspace.selectPhoto(photo.id)}
+							onMenuAction={(action) => runPhotoAction(action, photo, menu.targetIds)}
 						/>
 					{/each}
 				</div>

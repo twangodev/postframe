@@ -3,7 +3,12 @@ import test from 'node:test';
 
 import { defaultEditDocument } from '../src/lib/edit-document.ts';
 import type { MenuAction, MenuEntry, MenuSubmenu } from '../src/lib/menu.ts';
-import { contextTargets, photoMenu, type PhotoMenuAction } from '../src/lib/photo-menu.ts';
+import {
+	contextTargets,
+	photoContextMenu,
+	photoMenu,
+	type PhotoMenuAction
+} from '../src/lib/photo-menu.ts';
 import type { Photo, PhotoCollection, PhotoStack } from '../src/lib/workspace.svelte.ts';
 
 const photo = (id: string, overrides: Partial<Photo> = {}): Photo => ({
@@ -46,7 +51,7 @@ const stack = (id: string, photoIds: string[]): PhotoStack => ({
 });
 
 const menu = (targets: Photo[], overrides: Partial<Parameters<typeof photoMenu>[0]> = {}) =>
-	photoMenu({ targets, stack: null, collections: [], ...overrides });
+	photoMenu({ targets, stacks: [], collections: [], ...overrides });
 
 type Entry = MenuEntry<PhotoMenuAction>;
 
@@ -155,7 +160,7 @@ test('collection submenu offers creation when no collections exist', () => {
 test('stack entry ungroups a shared stack and gates grouping on target count', () => {
 	const shared = stack('s1', ['p1', 'p2']);
 	const grouped = menu([photo('p1', { stackId: 's1' }), photo('p2', { stackId: 's1' })], {
-		stack: shared
+		stacks: [shared]
 	});
 	assert.deepEqual(action(grouped, 'ungroup stack').action, {
 		type: 'ungroup-stack',
@@ -180,4 +185,54 @@ test('contextTargets keeps a selection the photo belongs to', () => {
 		targetIds: ['p3'],
 		moveSelection: true
 	});
+});
+
+test('stack entry offers grouping when targets span stacks or the stack is unknown', () => {
+	const stacks = [stack('s1', ['p1']), stack('s2', ['p2'])];
+	const spanning = menu([photo('p1', { stackId: 's1' }), photo('p2', { stackId: 's2' })], {
+		stacks
+	});
+	assert.deepEqual(action(spanning, 'group into stack').action, { type: 'group-stack' });
+	const unknown = menu([photo('p1', { stackId: 'gone' }), photo('p2', { stackId: 'gone' })]);
+	assert.deepEqual(action(unknown, 'group into stack').action, { type: 'group-stack' });
+});
+
+test('photoContextMenu targets the whole selection when the photo is selected', () => {
+	const photos = [photo('p1'), photo('p2'), photo('p3')];
+	const result = photoContextMenu(
+		{ photos, stacks: [], collections: [], selectedIds: ['p1', 'p2'] },
+		'p2'
+	);
+	assert.deepEqual(result.targetIds, ['p1', 'p2']);
+	assert.equal(result.moveSelection, false);
+	assert.ok(labels(result.items).includes('remove 2 photos from library…'));
+});
+
+test('photoContextMenu retargets an unselected photo and asks to move the selection', () => {
+	const photos = [photo('p1'), photo('p2'), photo('p3')];
+	const result = photoContextMenu(
+		{ photos, stacks: [], collections: [], selectedIds: ['p1'] },
+		'p3'
+	);
+	assert.deepEqual(result.targetIds, ['p3']);
+	assert.equal(result.moveSelection, true);
+	assert.ok(labels(result.items).includes('remove from library…'));
+});
+
+test('photoContextMenu derives the shared stack from its targets', () => {
+	const photos = [photo('p1', { stackId: 's1' }), photo('p2', { stackId: 's1' }), photo('p3')];
+	const stacks = [stack('s1', ['p1', 'p2'])];
+	const shared = photoContextMenu(
+		{ photos, stacks, collections: [], selectedIds: ['p1', 'p2'] },
+		'p1'
+	);
+	assert.deepEqual(action(shared.items, 'ungroup stack').action, {
+		type: 'ungroup-stack',
+		stackId: 's1'
+	});
+	const mixed = photoContextMenu(
+		{ photos, stacks, collections: [], selectedIds: ['p2', 'p3'] },
+		'p2'
+	);
+	assert.deepEqual(action(mixed.items, 'group into stack').action, { type: 'group-stack' });
 });
