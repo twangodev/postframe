@@ -243,11 +243,9 @@ test('moving any control leaves identity, so a neutral short-circuit never hides
 		mutate(settings);
 		return adjustmentsIdentity(settings);
 	};
-	// Every scalar control, walked from the defaults so a new control cannot be
-	// forgotten here the way it could be in a predicate. The exceptions are the
-	// controls that only shape another one: exposure is a gain the shader
-	// applies outside the chain, noise reduction runs before it, and the
-	// vignette and grain shape controls do nothing until their amount moves.
+	// Walked from defaults so a new control can't be forgotten. Excluded: controls that only
+	// shape another (exposure gains outside the chain, noise reduction runs before it,
+	// vignette/grain shape controls are inert until their amount moves).
 	const scalarGroups = ['light', 'color', 'detail', 'effects'] as const;
 	const shapesAnother = new Set([
 		'exposure',

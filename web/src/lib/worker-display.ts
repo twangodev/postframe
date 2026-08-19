@@ -31,9 +31,7 @@ export function imageData(pixels: Uint8Array, width: number, height: number) {
 	return new ImageData(new Uint8ClampedArray(pixels), width, height);
 }
 
-// The source rectangle a tile reads so its spatial stages see the neighbourhood
-// a whole-image pass would, clamped to the image, and where the requested tile
-// sits inside that padded output in its own (binned) pixels.
+// Pads the source rect (clamped to image) so spatial stages see neighbourhood context; crop locates the tile within it.
 export function apronRegion(region: DisplayRegion, apron: number, image: ImageSize) {
 	const pad = apron * region.bin;
 	const x = Math.max(0, region.x - pad);

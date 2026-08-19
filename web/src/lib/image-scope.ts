@@ -27,10 +27,8 @@ export interface ImageScopeData {
 export type ImageScopeMode = 'waveform' | 'histogram';
 
 /**
- * One channel's bin counts as heights in [0, 1], ready to plot. Clipped tones
- * pile into the outermost bins and would dwarf everything else, so the scale
- * comes from the interior, and a square root keeps quiet tones visible beside
- * a dominant peak.
+ * Bin counts as [0, 1] heights, scaled from the interior peak (edge bins hold
+ * clipped tones and would dwarf everything) with a sqrt to keep quiet tones visible.
  */
 export function histogramProfile(histogram: Uint32Array, channel: HistogramChannel) {
 	const base = HISTOGRAM_CHANNEL[channel] * HISTOGRAM_BINS;
@@ -49,11 +47,7 @@ export interface HistogramPoint {
 	luma: number;
 }
 
-/**
- * Every channel's bins scaled against the single tallest bin on a log curve —
- * the histogram view's presentation, kept distinct from histogramProfile's
- * interior-peak scaling.
- */
+/** Bins scaled against the tallest bin on a log curve — distinct from histogramProfile's interior-peak scaling. */
 export function histogramPoints(histogram: Uint32Array): HistogramPoint[] {
 	let peak = 1;
 	for (const count of histogram) peak = Math.max(peak, count);

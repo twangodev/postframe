@@ -230,9 +230,7 @@ export const GRADING_BLEND_CONTROL_NAMES = [
 
 export type GradingBlendControlName = (typeof GRADING_BLEND_CONTROL_NAMES)[number];
 
-/// Where one control lives in the settings tree. Flat groups need a group and a
-/// control; the mixer and the grading wheels also need the band or range whose
-/// wheel is being moved.
+/// Where one control lives in the settings tree: group + control, plus a band or range for mixer/grading wheels.
 export type AdjustmentTarget =
 	| {
 			[Group in ScalarGroupName]: { group: Group; control: ScalarControlName<Group> };
@@ -415,8 +413,7 @@ export function scalarAdjustments(settings: DevelopSettings): AdjustmentRecord {
 	return { ...settings.light, ...settings.color, ...settings.detail, ...settings.effects };
 }
 
-/// The panel's own editable copy of the settings, detached from the document so
-/// a slider cannot write through to it without passing a command.
+/// The panel's own editable copy, detached so a slider can't write through the document without a command.
 export interface AdjustmentMirror {
 	adjustments: AdjustmentRecord;
 	curve: CurveSettings;
@@ -507,8 +504,7 @@ export function lightIdentity(settings: LightSettings) {
 	);
 }
 
-// The luminance curve is composed into the light LUT, so it decides with the
-// light controls whether the tone stage has anything to do.
+// The luminance curve is composed into the light LUT, so it also gates the tone stage.
 export function luminanceIdentity({ light, curve }: DevelopSettings) {
 	return lightIdentity(light) && isIdentityCurve(curve.luminance);
 }

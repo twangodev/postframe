@@ -215,10 +215,8 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
-    /// The display path with the spatial stages: cleans the tile, builds its
-    /// planes from the display-linear rgb, then runs the full chain over the
-    /// region of the image the tile covers. Neutral detail leaves the bytes
-    /// exactly as `apply_display_rgba8_at` would.
+    /// Display path with spatial stages: cleans the tile, builds planes from display-linear
+    /// rgb, runs the full chain over its region. Neutral detail matches `apply_display_rgba8_at` exactly.
     pub fn apply_display_rgba8_prepared(
         &self,
         rgba: &[u8],
@@ -253,9 +251,8 @@ impl DevelopTransform {
         Ok(adjusted)
     }
 
-    /// Pixels of context a display tile needs on each side, in its own
-    /// (binned) pixels, so its spatial stages match a whole-image pass; zero
-    /// while the detail group is neutral.
+    /// Context pixels a display tile needs per side (binned), to match a whole-image
+    /// pass; zero while the detail group is neutral.
     pub fn detail_apron(&self, image: (usize, usize), bin: usize) -> usize {
         self.settings.detail.apron(image, bin)
     }
@@ -269,10 +266,8 @@ impl DevelopTransform {
         )
     }
 
-    /// The display path, which knows where a pixel is but has no blur planes:
-    /// it composites unhaloed tiles, so the spatial stages stay out of it.
-    /// Showing them in a preview its tiled export could not reproduce is worse
-    /// than leaving them absent from both.
+    /// Knows pixel position but has no blur planes, so tiles composite unhaloed:
+    /// showing effects the tiled export can't reproduce is worse than omitting them from both.
     pub fn apply_display_pixel_at(&self, pixel: [u8; 3], at: PixelContext) -> [u8; 3] {
         let shaded = self.vignetted(self.apply_chroma_pixel(pixel), at);
         let toned = self.apply_channel_curves(self.light.apply_display_pixel(shaded));
@@ -300,9 +295,8 @@ impl DevelopTransform {
         )
     }
 
-    /// Stages one through four. The hue stages open up the color transform's
-    /// linear pass so they can sit between its white balance and its chroma
-    /// scale; with both neutral the pass stays closed and untouched.
+    /// Stages 1-4. Hue stages open the color transform's linear pass to sit between
+    /// its white balance and chroma scale; stays closed when both are neutral.
     fn apply_chroma_pixel(&self, pixel: [u8; 3]) -> [u8; 3] {
         if self.hue_identity {
             return self.color.apply_display_pixel(pixel);
@@ -378,9 +372,8 @@ impl DevelopTransform {
     }
 }
 
-/// Folds the luminance curve into the light response, which every render path
-/// already samples, so the curve reaches them all without a new stage. The
-/// curve shapes encoded values, so the response is decoded around it.
+/// Folds the curve into the light response every render path already samples, instead
+/// of adding a stage; decoded around it since the curve shapes encoded values.
 fn with_luminance_curve(light: LightTransform, points: &CurvePoints) -> LightTransform {
     let curve = ToneCurve::new(points, light.luminance_lut().len());
     if curve.is_identity() {

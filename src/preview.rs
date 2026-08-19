@@ -104,9 +104,8 @@ impl PreparedRegion {
         }
     }
 
-    /// Runs the spatial stages: the tile is cleaned first, then its blur planes
-    /// come off the cleaned luminance, so both depend only on the source and the
-    /// noise controls and so cache alongside the tile.
+    /// Runs the spatial stages: cleans the tile, then builds blur planes off it — both
+    /// depend only on source and noise controls, so they cache with the tile.
     #[cfg(any(test, feature = "wasm"))]
     pub(crate) fn detailed(mut self, settings: &DetailSettings, bin: usize) -> Self {
         let tile = (self.width, self.height);

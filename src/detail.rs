@@ -45,9 +45,8 @@ impl DetailSettings {
         vec![FINE_BLUR_FRACTION, COARSE_BLUR_FRACTION]
     }
 
-    /// Pixels of context a tile needs on every side, in its own (binned)
-    /// pixels, so its cleaning and planes match a whole-image pass: the widest
-    /// plane's reach, plus what the cleaning it reads reached itself.
+    /// Context pixels a tile needs per side (binned), to match a whole-image pass:
+    /// the widest plane's reach, plus the cleaning it reads on top of that.
     pub fn apron(&self, image: (usize, usize), bin: usize) -> usize {
         let planes = self
             .blur_radii()
@@ -175,9 +174,8 @@ impl DetailPlanes {
     }
 }
 
-/// The tile-side work the spatial stages read: the tile cleaned by the noise
-/// controls, then its blur planes built from the cleaned luminance, so both
-/// depend only on the source and the noise controls.
+/// Tile-side work the spatial stages read: noise-cleaned tile, then blur planes built
+/// from it — both depend only on the source and the noise controls.
 pub struct PreparedDetail {
     pub cleaned: Option<Vec<[f32; 3]>>,
     pub planes: Option<DetailPlanes>,
@@ -393,9 +391,8 @@ pub fn blur_radius(fraction: f32, image: (usize, usize), bin: usize) -> usize {
     ((fraction * extent).round().max(1.0)) as usize
 }
 
-/// How far one blurred plane value reads from its own position: the kernel's
-/// radius, or, once the blur runs on a decimated grid, the two coarse cells the
-/// magnified value interpolates between and everything their own blur touched.
+/// Reach of one blurred value: the kernel radius, or on a decimated grid, the two
+/// coarse cells it interpolates between plus their own blur's reach.
 pub fn blur_footprint(radius: usize) -> usize {
     let stride = radius.div_ceil(MAX_DIRECT_BLUR_RADIUS);
     if stride <= 1 {

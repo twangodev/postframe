@@ -52,8 +52,7 @@
 	const shaped = $derived(
 		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(binding.curve[name]))
 	);
-	// Every shaped channel stays on the plot; the chip only decides which one
-	// takes the next drag.
+	// Shaped channels all stay drawn; the chip only decides which one drags.
 	const drawn = $derived(
 		CURVE_CHANNEL_NAMES.filter((name) => name === channel || shaped.includes(name)).sort((left) =>
 			left === channel ? 1 : -1

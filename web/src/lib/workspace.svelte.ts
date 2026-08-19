@@ -402,9 +402,7 @@ export class WorkspaceState {
 
 	refreshBrowserStorage = () => this.storage.refresh();
 
-	// Writes reach storage from three places: the persistence queue, imports,
-	// and the worker's own render cache. All three end at the observer, and a
-	// tab coming back into view re-measures in case another tab wrote.
+	// Persistence, imports, and the worker's render cache all funnel here; visibility re-measures for other tabs' writes.
 	private observeStorageWrites() {
 		const stopWorker = this.workerClient?.onStorageWritten(() => this.storageObserver.wrote());
 		if (typeof document === 'undefined') return () => stopWorker?.();
@@ -588,8 +586,7 @@ export class WorkspaceState {
 
 	settleDevelopRender = (revision: number) => this.develop.settle(revision);
 
-	// The indicators are a view over the tiles, so flipping one re-requests
-	// every tile without touching the document.
+	// Indicators are a view over the tiles: flipping one re-requests all tiles, not the document.
 	toggleClipping = (kind?: ClippingKind) => {
 		const both = this.clipping.highlights && this.clipping.shadows;
 		this.clipping = kind

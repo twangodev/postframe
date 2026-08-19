@@ -8,8 +8,7 @@ import {
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, type MaskEdgeControlName } from './mask-edge-settings.ts';
 
-/// One scalar slider, ready to spread onto AdjustmentSlider. Defaults come
-/// from the develop and mask-edge defaults; signedness follows the range.
+/// One scalar slider, ready to spread onto AdjustmentSlider; signedness follows the range.
 export interface SliderSpec<Control extends string = string> {
 	readonly control: Control;
 	readonly label: string;

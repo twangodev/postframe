@@ -15,11 +15,7 @@ export function showsClipping(indicators: ClippingIndicators) {
 	return indicators.highlights || indicators.shadows;
 }
 
-/**
- * Marks clipped pixels in place: any channel at 255 turns highlight red, any
- * channel at 0 turns shadow blue, highlights winning where both apply. Alpha
- * is left as it is.
- */
+/** Marks clipped pixels in place: any channel at 255 turns highlight red, at 0 turns shadow blue, highlights win ties. */
 export function paintClipping(
 	rgba: Uint8Array | Uint8ClampedArray,
 	indicators: ClippingIndicators

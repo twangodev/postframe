@@ -211,8 +211,7 @@ export function rangeComponents(mask: EditMask | null): RangeComponent[] {
 export type RangeUnit = 'percent' | 'degrees';
 export type RangeControlName = (keyof LuminanceRange | keyof ColorRange) & string;
 
-/// One range slider, ready to spread onto AdjustmentSlider. Percent sliders
-/// show 0–100 for a 0–1 fraction; degree sliders show the stored value.
+/// One range slider for AdjustmentSlider; percent sliders show 0–100 for a 0–1 fraction, degrees show the stored value.
 export interface RangeSliderSpec {
 	readonly control: RangeControlName;
 	readonly label: string;

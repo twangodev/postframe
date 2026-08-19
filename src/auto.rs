@@ -86,9 +86,7 @@ struct ToneTarget {
 }
 
 impl ToneControl {
-    /// The slider spans on which the developed percentile moves monotonically
-    /// with the control. Blacks and whites bend the endpoint curve the moment
-    /// they leave zero, so each side is its own span and zero stands alone.
+    /// Monotonic spans for bisection; blacks/whites bend at zero, so each side is its own span.
     fn spans(self) -> Vec<(f32, f32)> {
         match self {
             Self::Exposure => vec![(-AUTO_EXPOSURE_LIMIT_STOPS, AUTO_EXPOSURE_LIMIT_STOPS)],
@@ -130,11 +128,8 @@ impl ToneControl {
         }
     }
 
-    /// Exposure always takes the value that lands closest to its target, its
-    /// limit included, so a night scene is lifted as far as allowed. The
-    /// endpoint controls only leave zero when doing so at least halves the
-    /// distance to their target; a nudge that barely helps is not worth
-    /// bending the curve for.
+    /// Exposure takes the closest-to-target value, limit included, so a night scene lifts as far as allowed;
+    /// blacks/whites only leave zero if that at least halves the miss.
     fn solve(self, samples: &[u8], settings: LightSettings) -> Result<f32> {
         let target = self.target();
         let miss = |value: f32| -> Result<f32> {
@@ -173,9 +168,8 @@ impl Candidate {
     }
 }
 
-/// The value on `[low, high]` whose miss is nearest zero, assuming the miss
-/// rises across the span: an end when the target is out of reach, otherwise
-/// the closer side of the bracket bisection narrows to.
+/// Value on `[low, high]` with miss nearest zero, assuming miss rises across the span:
+/// an end if unreachable, otherwise the closer bisected bound.
 fn bisect(low: f32, high: f32, miss: &impl Fn(f32) -> Result<f32>) -> Result<Candidate> {
     let mut low = Candidate::at(low, miss)?;
     if low.miss >= 0.0 {

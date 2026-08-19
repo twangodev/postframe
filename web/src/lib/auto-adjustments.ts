@@ -19,11 +19,7 @@ export interface AdjustmentCommitter {
 	commitAdjustments(adjustments: DevelopSettings, label: string): boolean;
 }
 
-/**
- * One-click estimates measured by the worker on the neutral source image and
- * written back through a single adjustment.replace, so each lands as one
- * history entry.
- */
+/** One-click estimates from the worker, written back as a single adjustment.replace per history entry. */
 export class AutoAdjustments {
 	private readonly source: AutoAdjustmentSource | null;
 	private readonly controls: AdjustmentCommitter;

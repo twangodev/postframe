@@ -85,8 +85,7 @@ function viewportVariance(page: Page) {
 	});
 }
 
-// Tiles are deterministic, so the viewport has finished refining once three
-// samples half a second apart agree.
+// Tiles are deterministic: refining is done once three samples 0.5s apart agree.
 async function stableViewportVariance(page: Page) {
 	const recent: (number | null)[] = [];
 	await expect

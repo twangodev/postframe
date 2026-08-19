@@ -127,9 +127,7 @@ function rawTileKey(tile: RenderTileRequest) {
 	return `${region}:${detailTileKey(tile.adjustments.detail)}`;
 }
 
-// The shader applies exposure and color itself, so the tables only carry the
-// stages Rust resolves: the light response composed with the luminance curve,
-// the channel curves, the mixer hue tables and the grading scalars.
+// Shader already applies exposure and color; tables cover only the remaining stages Rust resolves.
 function rawDevelopLuts(active: RawDocument, adjustments: DevelopSettings) {
 	const key = developSettingsKey(adjustments);
 	if (active.developLuts?.key === key) return active.developLuts;

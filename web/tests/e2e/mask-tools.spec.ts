@@ -1,10 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-/**
- * Panels open with a 200ms slide, so a plain scrollIntoViewIfNeeded can run
- * while the aside is still growing and leave the target clipped below the
- * fold. Re-scroll until the target genuinely sits inside the aside.
- */
+// Panels slide open over 200ms; poll scrollIntoView until the target is actually inside the aside.
 async function revealInAside(target: Locator) {
 	await expect
 		.poll(() =>

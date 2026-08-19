@@ -38,8 +38,7 @@ impl DisplayTransform {
         )
     }
 
-    /// Develop one tile of a display document, told where in the image it sits
-    /// and how many image pixels each of its own pixels spans.
+    /// Develop one tile, given its region and how many image pixels each of its pixels spans.
     pub fn apply_tile_rgba(
         &self,
         rgba: Vec<u8>,
@@ -56,8 +55,7 @@ impl DisplayTransform {
         )
     }
 
-    /// Pixels of context a tile needs on each side so its planes match a
-    /// whole-image blur, in output (binned) pixels; 0 when detail is neutral.
+    /// Binned-pixel context a tile needs per side to match a whole-image blur; 0 when detail is neutral.
     pub fn detail_apron(&self, image_width: u32, image_height: u32, bin: u32) -> u32 {
         self.develop
             .detail_apron((image_width as usize, image_height as usize), bin as usize)
@@ -85,8 +83,7 @@ impl DisplayTransform {
         self.develop.luminance_lut().to_vec()
     }
 
-    /// The red, green and blue curves back to back, empty while all three are
-    /// the identity.
+    /// Red, green and blue curves back to back; empty when all three are the identity.
     #[wasm_bindgen(getter)]
     pub fn channel_luts(&self) -> Vec<f32> {
         self.develop

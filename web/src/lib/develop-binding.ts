@@ -10,8 +10,7 @@ import {
 } from './develop-settings.ts';
 import type { EditMask } from './edit-document.ts';
 
-/// What the curve, mixer and grading sections edit: either the document's own
-/// settings or the selected mask's, behind one shape.
+/// What the curve, mixer and grading sections edit: the document's own settings or the selected mask's, behind one shape.
 export interface DevelopBinding {
 	readonly disabled: boolean;
 	readonly curve: CurveSettings;

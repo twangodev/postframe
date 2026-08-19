@@ -4,8 +4,7 @@ export interface AdjustmentFormat {
 	suffix?: string;
 }
 
-/// Fixed decimals pad like a slider readout; without them the value trims to
-/// at most two decimals like a history label.
+/// Fixed decimals pad like a slider readout; otherwise it trims to at most two, like a history label.
 export function formatAdjustment(
 	value: number,
 	{ signed, decimals, suffix = '' }: AdjustmentFormat

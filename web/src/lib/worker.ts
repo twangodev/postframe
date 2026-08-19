@@ -177,8 +177,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			}
 		}
 	} catch (error) {
-		// Stringifying for the client drops the stack, which is the only thing
-		// that says which request failed and where.
+		// String(error) below drops the stack, so log it here first.
 		reportError(`worker request "${message.type}" failed`, error);
 		post({ id: message.id, type: 'error', message: String(error) });
 	}

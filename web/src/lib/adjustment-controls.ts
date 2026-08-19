@@ -69,8 +69,7 @@ export class AdjustmentControls {
 		this.commitAdjustmentsAt([{ target, value }]);
 	}
 
-	/// A grading puck moves a hue and a saturation with one gesture, so previews
-	/// and commits take a whole set of changes rather than a single control.
+	/// A grading puck moves hue and saturation together, so this takes a set of changes.
 	previewAdjustmentsAt(changes: readonly AdjustmentChange[]) {
 		if (!this.host.canAdjustLight || !this.host.selectedPhoto) return;
 		const edit = this.host.selectedPhoto.edit;

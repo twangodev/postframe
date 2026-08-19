@@ -27,8 +27,7 @@ pub(super) fn develop_settings(settings: JsValue) -> Result<DevelopSettings, JsE
         .map_err(err)
 }
 
-/// The document's crop, which the position-dependent stages centre on. An
-/// absent crop is the whole frame.
+/// The document's crop, which position-dependent stages centre on; absent means the whole frame.
 pub(super) fn vignette_frame(crop: JsValue) -> Result<VignetteFrame, JsError> {
     if crop.is_null() || crop.is_undefined() {
         return Ok(VignetteFrame::FULL);
