@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { DropdownMenu, Tabs } from 'bits-ui';
+	import { Tabs } from 'bits-ui';
 	import {
 		Blend,
 		Brush,
@@ -24,6 +24,7 @@
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
+	import DropdownMenu from './ui/DropdownMenu.svelte';
 	import IconButton from './ui/IconButton.svelte';
 	import Panel from './ui/Panel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
@@ -37,7 +38,7 @@
 		withRangeControl,
 		type RangeKind
 	} from '$lib/mask-ranging';
-	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
+	import { maskPreviewMenu } from '$lib/mask-preview';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -69,9 +70,6 @@
 			? workspace.cycleInstanceMaskCandidate
 			: workspace.cycleObjectMaskCandidate
 	);
-	const previewMenuItemClass =
-		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
-	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (tools.maskPreviewMode = mode);
 </script>
 
 <Tabs.Content value="mask" class="motion-tab">
@@ -126,34 +124,24 @@
 	<div class="border-b border-subtle p-3">
 		<div class="mb-2 flex items-center justify-between">
 			<p class="text-[11px] tracking-[0.03em] text-muted">layers</p>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger
-					aria-label="Choose mask preview"
-					class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
-				>
-					{#if tools.maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-					<span>{tools.maskPreviewMode ?? 'off'}</span>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Portal>
-					<DropdownMenu.Content
-						align="end"
-						sideOffset={4}
-						class="motion-menu z-50 min-w-28 rounded border border-subtle bg-bg p-1 shadow-2xl"
+			<DropdownMenu
+				items={maskPreviewMenu(tools.maskPreviewMode)}
+				onAction={(mode) => (tools.maskPreviewMode = mode)}
+				align="end"
+				size="compact"
+			>
+				{#snippet children({ props })}
+					<button
+						{...props}
+						type="button"
+						aria-label="Choose mask preview"
+						class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
 					>
-						{#each MASK_PREVIEW_MODES as mode (mode)}
-							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
-								<span class="w-3 text-accent">{tools.maskPreviewMode === mode ? '•' : ''}</span>
-								<span>{mode}</span>
-							</DropdownMenu.Item>
-						{/each}
-						<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
-						<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(null)}>
-							<span class="w-3 text-accent">{tools.maskPreviewMode === null ? '•' : ''}</span>
-							<span>off</span>
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Portal>
-			</DropdownMenu.Root>
+						{#if tools.maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+						<span>{tools.maskPreviewMode ?? 'off'}</span>
+					</button>
+				{/snippet}
+			</DropdownMenu>
 		</div>
 		<div class="space-y-1">
 			{#each workspace.masks as mask (mask.id)}

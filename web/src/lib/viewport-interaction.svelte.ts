@@ -156,7 +156,6 @@ export class ViewportInteraction {
 	stepZoom = (direction: -1 | 1, anchor?: Point) => this.camera.stepZoom(direction, anchor);
 	zoomIn = () => this.camera.stepZoom(1);
 	zoomOut = () => this.camera.stepZoom(-1);
-	chooseZoom = (scale: number) => () => this.camera.setZoom(scale);
 
 	handleWheel = (event: WheelEvent) => {
 		if (!this.context.enabled()) return;

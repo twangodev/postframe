@@ -1,6 +1,18 @@
+import { separator, type MenuLeaf } from './menu.ts';
+
 export const MASK_PREVIEW_MODES = ['overlay', 'matte', 'edge'] as const;
 
 export type MaskPreviewMode = (typeof MASK_PREVIEW_MODES)[number];
+
+export function maskPreviewMenu(mode: MaskPreviewMode | null): MenuLeaf<MaskPreviewMode | null>[] {
+	const choice = (option: MaskPreviewMode | null): MenuLeaf<MaskPreviewMode | null> => ({
+		kind: 'action',
+		label: option ?? 'off',
+		action: option,
+		checked: mode === option
+	});
+	return [...MASK_PREVIEW_MODES.map(choice), separator(), choice(null)];
+}
 
 export const MASK_OVERLAY_TINT_ALPHA = 0.46;
 
