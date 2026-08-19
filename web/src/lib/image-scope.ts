@@ -1,5 +1,7 @@
 export const HISTOGRAM_BINS = 256;
 export const HISTOGRAM_CHANNELS = 4;
+export const HISTOGRAM_CHANNEL = { red: 0, green: 1, blue: 2, luma: 3 } as const;
+export type HistogramChannel = keyof typeof HISTOGRAM_CHANNEL;
 export const WAVEFORM_CHANNELS = 3;
 export const WAVEFORM_WIDTH = 512;
 export const WAVEFORM_HEIGHT = 256;
@@ -30,13 +32,42 @@ export type ImageScopeMode = 'waveform' | 'histogram';
  * comes from the interior, and a square root keeps quiet tones visible beside
  * a dominant peak.
  */
-export function histogramProfile(histogram: Uint32Array, channel: number) {
-	const base = channel * HISTOGRAM_BINS;
+export function histogramProfile(histogram: Uint32Array, channel: HistogramChannel) {
+	const base = HISTOGRAM_CHANNEL[channel] * HISTOGRAM_BINS;
 	const bins = histogram.subarray(base, base + HISTOGRAM_BINS);
 	const interior = bins.subarray(1, HISTOGRAM_BINS - 1);
 	const peak = interior.reduce((tallest, count) => Math.max(tallest, count), 0);
 	if (peak === 0) return Array.from(bins, () => 0);
 	return Array.from(bins, (count) => Math.min(1, Math.sqrt(count / peak)));
+}
+
+export interface HistogramPoint {
+	bin: number;
+	red: number;
+	green: number;
+	blue: number;
+	luma: number;
+}
+
+/**
+ * Every channel's bins scaled against the single tallest bin on a log curve —
+ * the histogram view's presentation, kept distinct from histogramProfile's
+ * interior-peak scaling.
+ */
+export function histogramPoints(histogram: Uint32Array): HistogramPoint[] {
+	let peak = 1;
+	for (const count of histogram) peak = Math.max(peak, count);
+	const logarithmicPeak = Math.log1p(peak);
+	const level = (channel: HistogramChannel, bin: number) =>
+		Math.log1p(histogram[HISTOGRAM_CHANNEL[channel] * HISTOGRAM_BINS + bin] ?? 0) / logarithmicPeak;
+
+	return Array.from({ length: HISTOGRAM_BINS }, (_, bin) => ({
+		bin,
+		red: level('red', bin),
+		green: level('green', bin),
+		blue: level('blue', bin),
+		luma: level('luma', bin)
+	}));
 }
 
 export function imageScopeFromTransfer(scope: ImageScopeTransfer): ImageScopeData {
@@ -86,9 +117,10 @@ export function imageScopeFromRgba(
 			const luma = (54 * red + 183 * green + 19 * blue) >> 8;
 			const scopeX = Math.floor((x * WAVEFORM_WIDTH) / width);
 
-			for (const [channel, value] of [red, green, blue, luma].entries()) {
-				histogram[channel * HISTOGRAM_BINS + value] += 1;
-			}
+			histogram[HISTOGRAM_CHANNEL.red * HISTOGRAM_BINS + red] += 1;
+			histogram[HISTOGRAM_CHANNEL.green * HISTOGRAM_BINS + green] += 1;
+			histogram[HISTOGRAM_CHANNEL.blue * HISTOGRAM_BINS + blue] += 1;
+			histogram[HISTOGRAM_CHANNEL.luma * HISTOGRAM_BINS + luma] += 1;
 
 			for (const [channel, value] of [red, green, blue].entries()) {
 				const scopeY =

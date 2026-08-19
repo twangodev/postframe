@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	histogramPoints,
 	histogramProfile,
 	imageScopeFromRgba,
 	imageScopeFromTransfer,
 	HISTOGRAM_BINS,
+	HISTOGRAM_CHANNEL,
 	HISTOGRAM_CHANNELS
 } from '../src/lib/image-scope.ts';
 
@@ -68,7 +70,7 @@ test('scales a histogram against its interior so a clipping spike cannot flatten
 	histogram[luma] = 1_000_000; // every shadow pixel crushed to black
 	histogram[luma + 128] = 100;
 
-	const profile = histogramProfile(histogram, 3);
+	const profile = histogramProfile(histogram, 'luma');
 
 	assert.equal(profile.length, HISTOGRAM_BINS);
 	assert.equal(profile[128], 1, 'the tallest interior bin fills the plot');
@@ -77,7 +79,7 @@ test('scales a histogram against its interior so a clipping spike cannot flatten
 });
 
 test('reads an empty histogram without dividing by zero', () => {
-	const profile = histogramProfile(new Uint32Array(HISTOGRAM_CHANNELS * HISTOGRAM_BINS), 0);
+	const profile = histogramProfile(new Uint32Array(HISTOGRAM_CHANNELS * HISTOGRAM_BINS), 'red');
 	assert.ok(profile.every((height) => height === 0));
 });
 
@@ -86,8 +88,24 @@ test('compresses tall bins so quiet tones stay visible', () => {
 	histogram[100] = 10_000;
 	histogram[101] = 100;
 
-	const profile = histogramProfile(histogram, 0);
+	const profile = histogramProfile(histogram, 'red');
 
 	assert.equal(profile[100], 1);
 	assert.ok(profile[101] > 0.05, 'a bin a hundredth as tall is still drawn');
+});
+
+test('names the packed histogram channels once', () => {
+	assert.deepEqual(HISTOGRAM_CHANNEL, { red: 0, green: 1, blue: 2, luma: 3 });
+});
+
+test('histogram points scale every channel against the tallest bin on a log curve', () => {
+	const histogram = new Uint32Array(HISTOGRAM_CHANNELS * HISTOGRAM_BINS);
+	histogram[HISTOGRAM_CHANNEL.red * HISTOGRAM_BINS + 10] = 99;
+	histogram[HISTOGRAM_CHANNEL.luma * HISTOGRAM_BINS + 10] = 99;
+
+	const points = histogramPoints(histogram);
+
+	assert.equal(points.length, HISTOGRAM_BINS);
+	assert.deepEqual(points[10], { bin: 10, red: 1, green: 0, blue: 0, luma: 1 });
+	assert.deepEqual(points[11], { bin: 11, red: 0, green: 0, blue: 0, luma: 0 });
 });

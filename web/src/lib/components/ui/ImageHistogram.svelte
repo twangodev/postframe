@@ -1,23 +1,15 @@
 <script lang="ts">
 	import { LineChart } from 'layerchart/svg';
-	import { HISTOGRAM_BINS, type ImageScopeData } from '$lib/image-scope';
+	import { histogramPoints, HISTOGRAM_BINS, type ImageScopeData } from '$lib/image-scope';
 
 	interface Props {
 		data: ImageScopeData;
 		reduceMotion?: boolean;
 	}
 
-	type HistogramPoint = {
-		bin: number;
-		red: number;
-		green: number;
-		blue: number;
-		luma: number;
-	};
-
 	let { data, reduceMotion = false }: Props = $props();
 
-	const points = $derived.by(() => histogramPoints(data.histogram));
+	const points = $derived(histogramPoints(data.histogram));
 	const motion = $derived(reduceMotion ? 'none' : { type: 'tween' as const, duration: 140 });
 	const series = [
 		{
@@ -45,27 +37,11 @@
 			props: { opacity: 0.86, strokeWidth: 0.9 }
 		}
 	];
-
-	function histogramPoints(histogram: Uint32Array): HistogramPoint[] {
-		let peak = 1;
-		for (const count of histogram) peak = Math.max(peak, count);
-		const logarithmicPeak = Math.log1p(peak);
-		const level = (channel: number, bin: number) =>
-			Math.log1p(histogram[channel * HISTOGRAM_BINS + bin] ?? 0) / logarithmicPeak;
-
-		return Array.from({ length: HISTOGRAM_BINS }, (_, bin) => ({
-			bin,
-			red: level(0, bin),
-			green: level(1, bin),
-			blue: level(2, bin),
-			luma: level(3, bin)
-		}));
-	}
 </script>
 
 <div class="relative size-full" aria-hidden="true">
 	<div class="pointer-events-none absolute inset-0">
-		{#each [25, 50, 75] as position}
+		{#each [25, 50, 75] as position (position)}
 			<div
 				class="absolute right-0 left-0 border-t border-[rgba(122,117,104,0.16)]"
 				style:top={`${position}%`}

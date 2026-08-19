@@ -1,4 +1,4 @@
-import { HISTOGRAM_BINS } from './image-scope.ts';
+import { HISTOGRAM_BINS, HISTOGRAM_CHANNEL } from './image-scope.ts';
 
 export const CLIPPING_KINDS = ['shadows', 'highlights'] as const;
 export type ClippingKind = (typeof CLIPPING_KINDS)[number];
@@ -40,8 +40,8 @@ export function paintClipping(
 /** Which ends of the RGB histogram hold clipped pixels in any channel. */
 export function clippedEnds(histogram: Uint32Array): ClippingIndicators {
 	const ends = noClipping();
-	for (let channel = 0; channel < 3; channel += 1) {
-		const base = channel * HISTOGRAM_BINS;
+	for (const channel of ['red', 'green', 'blue'] as const) {
+		const base = HISTOGRAM_CHANNEL[channel] * HISTOGRAM_BINS;
 		if ((histogram[base] ?? 0) > 0) ends.shadows = true;
 		if ((histogram[base + HISTOGRAM_BINS - 1] ?? 0) > 0) ends.highlights = true;
 	}

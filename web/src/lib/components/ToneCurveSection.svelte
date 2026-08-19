@@ -10,7 +10,7 @@
 		type CurvePoints
 	} from '$lib/develop-settings';
 	import type { DevelopBinding } from '$lib/develop-binding';
-	import { histogramProfile, type ImageScopeData } from '$lib/image-scope';
+	import { histogramProfile, type HistogramChannel, type ImageScopeData } from '$lib/image-scope';
 	import { addCurvePoint, curveSamples, draggedCurve, nearestCurvePoint } from '$lib/tone-curve';
 
 	interface Props {
@@ -34,12 +34,11 @@
 		green: 'G',
 		blue: 'B'
 	};
-	// The scope packs its bins as red, green, blue, then luma.
-	const CHANNEL_BIN: Record<CurveChannelName, number> = {
-		luminance: 3,
-		red: 0,
-		green: 1,
-		blue: 2
+	const CHANNEL_SOURCE: Record<CurveChannelName, HistogramChannel> = {
+		luminance: 'luma',
+		red: 'red',
+		green: 'green',
+		blue: 'blue'
 	};
 
 	type PlotEvent = PointerEvent & { currentTarget: SVGSVGElement };
@@ -60,7 +59,7 @@
 		)
 	);
 	const histogram = $derived(
-		scope ? histogramProfile(scope.histogram, CHANNEL_BIN[channel]) : null
+		scope ? histogramProfile(scope.histogram, CHANNEL_SOURCE[channel]) : null
 	);
 	const backdrop = $derived(
 		histogram
