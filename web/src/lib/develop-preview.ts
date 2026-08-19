@@ -19,7 +19,6 @@ export interface DevelopPreviewHost {
 }
 
 export class DevelopPreviewController {
-	private previewTimer: ReturnType<typeof setTimeout> | null = null;
 	private scopeTimer: ReturnType<typeof setTimeout> | null = null;
 	private scopeRevision = 0;
 	private lastScopeAt = 0;
@@ -27,23 +26,25 @@ export class DevelopPreviewController {
 	private previewUrl: string | null = null;
 	private refinementRevision: number | null = null;
 
+	private readonly workerClient: PostframeWorkerClient | null;
+	private readonly objectUrls: ObjectUrlRegistry;
+	private readonly host: DevelopPreviewHost;
+
 	constructor(
-		private readonly workerClient: PostframeWorkerClient | null,
-		private readonly objectUrls: ObjectUrlRegistry,
-		private readonly host: DevelopPreviewHost
-	) {}
+		workerClient: PostframeWorkerClient | null,
+		objectUrls: ObjectUrlRegistry,
+		host: DevelopPreviewHost
+	) {
+		this.workerClient = workerClient;
+		this.objectUrls = objectUrls;
+		this.host = host;
+	}
 
 	schedule(adjustments: DevelopSettings, crop: NormalizedCrop | null) {
-		this.clearPreviewTimer();
-		this.show('applying');
-		this.previewTimer = setTimeout(() => {
-			this.previewTimer = null;
-			this.request(adjustments, crop, 'applying');
-		}, 40);
+		this.request(adjustments, crop, 'applying');
 	}
 
 	request(adjustments: DevelopSettings, crop: NormalizedCrop | null, phase: DevelopPreviewPhase) {
-		this.clearPreviewTimer();
 		if (!this.workerClient || !this.host.selectedPhoto || !this.host.canAdjustLight) return;
 		const photoId = this.host.selectedPhoto.id;
 		const revision = ++this.previewRevision;
@@ -84,7 +85,6 @@ export class DevelopPreviewController {
 	}
 
 	release() {
-		this.clearPreviewTimer();
 		this.clearScopeTimer();
 		this.previewRevision += 1;
 		this.scopeRevision += 1;
@@ -107,12 +107,6 @@ export class DevelopPreviewController {
 		if (this.previewUrl) this.objectUrls.revoke(this.previewUrl);
 		this.previewUrl = src;
 		this.objectUrls.add(src);
-	}
-
-	private clearPreviewTimer() {
-		if (this.previewTimer === null) return;
-		clearTimeout(this.previewTimer);
-		this.previewTimer = null;
 	}
 
 	private scheduleScope(
