@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
+	import type { Component } from 'svelte';
 	import {
 		Blend,
 		Brush,
@@ -70,7 +71,48 @@
 			? workspace.cycleInstanceMaskCandidate
 			: workspace.cycleObjectMaskCandidate
 	);
+
+	type Icon = Component<Record<string, unknown>>;
+
+	const NEW_MASK_CHOICES: { label: string; icon: Icon; begin: () => void }[] = [
+		{ label: 'brush', icon: Brush, begin: () => tools.addMask('brush') },
+		{ label: 'linear', icon: Blend, begin: () => tools.addMask('linear') },
+		{ label: 'radial', icon: CircleDashed, begin: () => tools.addMask('radial') },
+		{ label: 'subject', icon: UserRound, begin: () => tools.addMask('subject') },
+		{ label: 'sky', icon: CloudSun, begin: () => tools.addMask('sky') },
+		{ label: 'background', icon: Mountain, begin: () => tools.addMask('background') },
+		{ label: 'object', icon: Scan, begin: () => tools.beginObjectMask() },
+		{ label: 'luminance', icon: SunMedium, begin: () => tools.addMask('luminance') },
+		{ label: 'colour', icon: Palette, begin: () => tools.addMask('color') }
+	];
 </script>
+
+{#snippet actionButton(label: string, Icon: Icon, onclick: () => void, active: boolean = false)}
+	<button
+		type="button"
+		class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {active
+			? 'border-accent bg-surface text-text'
+			: ''}"
+		{onclick}
+	>
+		<Icon size={12} />
+		{label}
+	</button>
+{/snippet}
+
+{#snippet brushSizeSlider()}
+	<div class="motion-enter pt-1">
+		<AdjustmentSlider
+			label="Brush"
+			bind:value={tools.refineBrushSize}
+			min={8}
+			max={200}
+			defaultValue={42}
+			suffix=" px"
+			signed={false}
+		/>
+	</div>
+{/snippet}
 
 <Tabs.Content value="mask" class="motion-tab">
 	{#if subjectChoices && workspace.editPreview}
@@ -91,33 +133,15 @@
 	<div class="border-b border-subtle p-3">
 		<p class="mb-2 text-[11px] tracking-[0.03em] text-muted">new mask</p>
 		<div class="grid grid-cols-3 gap-1.5">
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('brush')}
-				><Brush size={15} /><span>brush</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('linear')}
-				><Blend size={15} /><span>linear</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('radial')}
-				><CircleDashed size={15} /><span>radial</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('subject')}
-				><UserRound size={15} /><span>subject</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('sky')}
-				><CloudSun size={15} /><span>sky</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('background')}
-				><Mountain size={15} /><span>background</span></button
-			>
-			<button type="button" class="mask-choice" onclick={tools.beginObjectMask}
-				><Scan size={15} /><span>object</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('luminance')}
-				><SunMedium size={15} /><span>luminance</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => tools.addMask('color')}
-				><Palette size={15} /><span>colour</span></button
-			>
+			{#each NEW_MASK_CHOICES as choice (choice.label)}
+				<button
+					type="button"
+					class="flex min-h-14 cursor-pointer flex-col items-center justify-center gap-1.5 rounded border border-subtle bg-surface text-[11px] text-muted transition-colors hover:border-muted hover:text-text"
+					onclick={choice.begin}
+				>
+					<choice.icon size={15} /><span>{choice.label}</span>
+				</button>
+			{/each}
 		</div>
 	</div>
 
@@ -221,39 +245,21 @@
 			{/if}
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">brush</p>
 			<div class="grid grid-cols-2 gap-1.5">
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && tools.maskBrushOperation === 'add'
-						? 'border-accent bg-surface text-text'
-						: ''}"
-					onclick={() => tools.beginMaskBrush('add')}
-				>
-					<Plus size={12} /> add
-				</button>
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && tools.maskBrushOperation === 'subtract'
-						? 'border-accent bg-surface text-text'
-						: ''}"
-					onclick={() => tools.beginMaskBrush('subtract')}
-				>
-					<Minus size={12} /> subtract
-				</button>
+				{@render actionButton(
+					'add',
+					Plus,
+					() => tools.beginMaskBrush('add'),
+					activeTool === 'mask' && tools.maskBrushOperation === 'add'
+				)}
+				{@render actionButton(
+					'subtract',
+					Minus,
+					() => tools.beginMaskBrush('subtract'),
+					activeTool === 'mask' && tools.maskBrushOperation === 'subtract'
+				)}
 			</div>
 			{#if activeTool === 'mask'}
-				<div class="motion-enter pt-1">
-					<AdjustmentSlider
-						label="Brush"
-						bind:value={tools.refineBrushSize}
-						min={8}
-						max={200}
-						defaultValue={42}
-						suffix=" px"
-						signed={false}
-					/>
-				</div>
+				{@render brushSizeSlider()}
 			{/if}
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">range</p>
@@ -291,20 +297,8 @@
 				class="mb-1.5"
 			/>
 			<div class="grid grid-cols-2 gap-1.5">
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
-					onclick={addRange('luminance')}
-				>
-					<Plus size={12} /> luminance range
-				</button>
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
-					onclick={addRange('color')}
-				>
-					<Plus size={12} /> colour range
-				</button>
+				{@render actionButton('luminance range', Plus, addRange('luminance'))}
+				{@render actionButton('colour range', Plus, addRange('color'))}
 			</div>
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">edge</p>
@@ -328,17 +322,7 @@
 				<span>{activeTool === 'mask-refine' ? 'paint boundary' : 'brush'}</span>
 			</button>
 			{#if activeTool === 'mask-refine'}
-				<div class="motion-enter pt-1">
-					<AdjustmentSlider
-						label="Brush"
-						bind:value={tools.refineBrushSize}
-						min={8}
-						max={200}
-						defaultValue={42}
-						suffix=" px"
-						signed={false}
-					/>
-				</div>
+				{@render brushSizeSlider()}
 			{/if}
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">light</p>
@@ -371,28 +355,3 @@
 		{/if}
 	{/if}
 </Tabs.Content>
-
-<style>
-	.mask-choice {
-		display: flex;
-		min-height: 3.5rem;
-		cursor: pointer;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.35rem;
-		border: 1px solid var(--color-subtle);
-		border-radius: 0.25rem;
-		background: var(--color-surface);
-		color: var(--color-muted);
-		font-size: 0.6875rem;
-		transition:
-			color 150ms ease,
-			border-color 150ms ease;
-	}
-
-	.mask-choice:hover {
-		border-color: var(--color-muted);
-		color: var(--color-text);
-	}
-</style>
