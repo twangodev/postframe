@@ -16,7 +16,7 @@
 
 <script lang="ts">
 	import { paintRasterDimensions, stampCenters } from '$lib/mask-rasterizer';
-	import { MASK_OVERLAY_TINT_ALPHA } from '$lib/mask-preview';
+	import { MASK_OVERLAY_TINT_ALPHA, tintCoverage } from '$lib/mask-preview';
 
 	interface Props {
 		paint: LivePaint;
@@ -178,10 +178,7 @@
 		context.globalAlpha = MASK_OVERLAY_TINT_ALPHA;
 		context.drawImage(source, 0, 0);
 		context.globalAlpha = 1;
-		context.globalCompositeOperation = 'source-in';
-		context.fillStyle = getComputedStyle(context.canvas).color;
-		context.fillRect(0, 0, width, height);
-		context.globalCompositeOperation = 'source-over';
+		tintCoverage(context, width, height);
 	}
 </script>
 

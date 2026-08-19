@@ -4,6 +4,13 @@ export type MaskPreviewMode = (typeof MASK_PREVIEW_MODES)[number];
 
 export const MASK_OVERLAY_TINT_ALPHA = 0.46;
 
+export function tintCoverage(context: CanvasRenderingContext2D, width: number, height: number) {
+	context.globalCompositeOperation = 'source-in';
+	context.fillStyle = getComputedStyle(context.canvas).color;
+	context.fillRect(0, 0, width, height);
+	context.globalCompositeOperation = 'source-over';
+}
+
 export function maskEdgePreview(alpha: Uint8Array, width: number, height: number) {
 	if (alpha.length !== width * height) throw new Error('Mask preview dimensions do not match');
 	const edge = new Uint8Array(alpha.length);

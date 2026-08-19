@@ -3,6 +3,7 @@
 	import {
 		MASK_OVERLAY_TINT_ALPHA,
 		maskEdgePreview,
+		tintCoverage,
 		type MaskPreviewMode
 	} from '$lib/mask-preview';
 
@@ -43,9 +44,7 @@
 		}
 		context.putImageData(new ImageData(pixels, source.width, source.height), 0, 0);
 		if (preview === 'matte') return;
-		context.globalCompositeOperation = 'source-in';
-		context.fillStyle = getComputedStyle(canvas).color;
-		context.fillRect(0, 0, source.width, source.height);
+		tintCoverage(context, source.width, source.height);
 	}
 </script>
 
