@@ -7,10 +7,19 @@ import {
 	defaultColorRange,
 	defaultLuminanceRange,
 	luminanceRangeSchema,
-	type EditMask
+	type ColorRangeComponent,
+	type EditMask,
+	type LuminanceRangeComponent
 } from '../src/lib/edit-document.ts';
 import type { EditorCommand } from '../src/lib/editor-command.ts';
-import { MaskRanging } from '../src/lib/mask-ranging.ts';
+import {
+	COLOR_RANGE_SLIDERS,
+	LUMINANCE_RANGE_SLIDERS,
+	MaskRanging,
+	rangeSliderSpecs,
+	rangeSliderValue,
+	withRangeControl
+} from '../src/lib/mask-ranging.ts';
 import type { RangeComponentInput } from '../src/lib/worker-protocol.ts';
 
 interface Deferred {
@@ -236,4 +245,94 @@ test('commitRange rejects a range that does not fit its component', async () => 
 	assert.equal(host.failures.length, 1);
 	await ranging.commitRange('component-missing', { low: 0.1, high: 0.9, feather: 0 });
 	assert.equal(dispatched.length, 1);
+});
+
+test('the range slider tables mirror the panel verbatim with defaults from the range defaults', () => {
+	assert.deepEqual(
+		LUMINANCE_RANGE_SLIDERS.map(({ control, label, defaultValue, suffix }) => [
+			control,
+			label,
+			defaultValue,
+			suffix
+		]),
+		[
+			['low', 'Low', 50, undefined],
+			['high', 'High', 100, undefined],
+			['feather', 'Feather', 10, undefined]
+		]
+	);
+	assert.deepEqual(
+		COLOR_RANGE_SLIDERS.map(({ control, label, defaultValue, suffix }) => [
+			control,
+			label,
+			defaultValue,
+			suffix
+		]),
+		[
+			['hue', 'Hue', 210, '°'],
+			['width', 'Width', 30, '°'],
+			['saturationFloor', 'Saturation floor', 20, undefined],
+			['feather', 'Feather', 25, undefined]
+		]
+	);
+});
+
+test('rangeSliderSpecs and rangeSliderValue read a component in slider units', () => {
+	const luminance: LuminanceRangeComponent = {
+		id: 'component-luminance',
+		type: 'luminance-range',
+		operation: 'add',
+		raster: null,
+		range: { low: 0.505, high: 0.9, feather: 0.1 }
+	};
+	const color: ColorRangeComponent = {
+		id: 'component-color',
+		type: 'color-range',
+		operation: 'add',
+		raster: null,
+		range: { hue: 210.4, width: 30, saturationFloor: 0.2, feather: 0.25 }
+	};
+	assert.equal(rangeSliderSpecs(luminance), LUMINANCE_RANGE_SLIDERS);
+	assert.equal(rangeSliderSpecs(color), COLOR_RANGE_SLIDERS);
+	assert.equal(rangeSliderValue(luminance, LUMINANCE_RANGE_SLIDERS[0]!), 51);
+	assert.equal(rangeSliderValue(luminance, LUMINANCE_RANGE_SLIDERS[1]!), 90);
+	assert.equal(rangeSliderValue(color, COLOR_RANGE_SLIDERS[0]!), 210);
+	assert.equal(rangeSliderValue(color, COLOR_RANGE_SLIDERS[2]!), 20);
+});
+
+test('withRangeControl converts slider units and keeps low at or below high', () => {
+	const luminance: LuminanceRangeComponent = {
+		id: 'component-luminance',
+		type: 'luminance-range',
+		operation: 'add',
+		raster: null,
+		range: { low: 0.5, high: 0.6, feather: 0.1 }
+	};
+	assert.deepEqual(withRangeControl(luminance, 'low', 80), { low: 0.8, high: 0.8, feather: 0.1 });
+	assert.deepEqual(withRangeControl(luminance, 'high', 30), { low: 0.3, high: 0.3, feather: 0.1 });
+	assert.deepEqual(withRangeControl(luminance, 'feather', 40), {
+		low: 0.5,
+		high: 0.6,
+		feather: 0.4
+	});
+
+	const color: ColorRangeComponent = {
+		id: 'component-color',
+		type: 'color-range',
+		operation: 'add',
+		raster: null,
+		range: { hue: 210, width: 30, saturationFloor: 0.2, feather: 0.25 }
+	};
+	assert.deepEqual(withRangeControl(color, 'hue', 240), {
+		hue: 240,
+		width: 30,
+		saturationFloor: 0.2,
+		feather: 0.25
+	});
+	assert.deepEqual(withRangeControl(color, 'saturationFloor', 35), {
+		hue: 210,
+		width: 30,
+		saturationFloor: 0.35,
+		feather: 0.25
+	});
 });

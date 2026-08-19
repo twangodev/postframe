@@ -1,3 +1,5 @@
+import { formatAdjustment } from './adjustment-format.ts';
+import { adjustmentSuffix } from './develop-sliders.ts';
 import {
 	cloneEditDocument,
 	editDocumentSchema,
@@ -10,10 +12,8 @@ import {
 	type NormalizedCrop
 } from './edit-document.ts';
 import {
-	colorSettingsSchema,
 	curvePointsSchema,
 	developSettingsSchema,
-	lightSettingsSchema,
 	sameDevelopSettings,
 	sameMaskAdjustments,
 	withAdjustmentAt,
@@ -21,11 +21,9 @@ import {
 	withMaskAdjustmentAt,
 	withMaskCurve,
 	type AdjustmentTarget,
-	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
 	type DevelopSettings,
-	type LightControlName,
 	type MaskAdjustments,
 	type MaskAdjustmentTarget
 } from './develop-settings.ts';
@@ -53,8 +51,6 @@ export function curveCommand(channel: CurveChannelName, points: CurvePoints): Ad
 export type EditorCommand =
 	| AdjustmentCommand
 	| { type: 'adjustment.replace'; adjustments: DevelopSettings; label: string }
-	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
-	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.adjustment.set'; maskId: string; target: MaskAdjustmentTarget; value: number }
 	| { type: 'mask.curve.set'; maskId: string; channel: CurveChannelName; value: CurvePoints }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
@@ -124,28 +120,6 @@ export function applyEditorCommand(
 			next.adjustments = adjustments;
 			return transition(command, command.label, 'render', next);
 		}
-		case 'mask.light.set': {
-			const mask = next.masks.find(({ id }) => id === command.maskId);
-			if (!mask) return null;
-			const light = lightSettingsSchema.parse({
-				...mask.adjustments.light,
-				[command.control]: command.value
-			});
-			if (mask.adjustments.light[command.control] === light[command.control]) return null;
-			mask.adjustments.light = light;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
-		}
-		case 'mask.color.set': {
-			const mask = next.masks.find(({ id }) => id === command.maskId);
-			if (!mask) return null;
-			const color = colorSettingsSchema.parse({
-				...mask.adjustments.color,
-				[command.control]: command.value
-			});
-			if (mask.adjustments.color[command.control] === color[command.control]) return null;
-			mask.adjustments.color = color;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
-		}
 		case 'mask.adjustment.set':
 			return maskAdjustmentTransition(
 				next,
@@ -207,7 +181,12 @@ export function applyEditorCommand(
 		case 'geometry.rotate': {
 			if (next.geometry.rotation === command.rotation) return null;
 			next.geometry.rotation = command.rotation;
-			return transition(command, `rotated ${formatNumber(command.rotation)}°`, 'geometry', next);
+			return transition(
+				command,
+				`rotated ${formatAdjustment(command.rotation, { signed: false, suffix: '°' })}`,
+				'geometry',
+				next
+			);
 		}
 		case 'geometry.flip': {
 			const key = command.axis === 'horizontal' ? 'flipHorizontal' : 'flipVertical';
@@ -252,19 +231,9 @@ function targetLabel(target: AdjustmentTarget, value: number) {
 }
 
 function controlLabel(control: string, value: number) {
-	return adjustmentLabel(control, value, control === 'exposure' ? ' EV' : '');
+	return `${control} ${formatAdjustment(value, { signed: true, suffix: adjustmentSuffix(control) })}`;
 }
 
 function edgeLabel(control: MaskEdgeControlName, value: number) {
-	return `mask ${adjustmentLabel(control, value, control === 'contrast' ? '' : ' px')}`;
-}
-
-function adjustmentLabel(control: string, value: number, suffix = '') {
-	return `${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
-}
-
-function formatNumber(value: number) {
-	return Number.isInteger(value)
-		? String(value)
-		: value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+	return `mask ${controlLabel(control, value)}`;
 }

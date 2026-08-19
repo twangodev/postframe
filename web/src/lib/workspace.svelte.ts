@@ -21,10 +21,8 @@ import {
 	type AdjustmentTarget,
 	type DevelopGroupName,
 	type DevelopSettings,
-	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
-	type LightControlName,
 	type MaskAdjustmentTarget,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -556,30 +554,6 @@ export class WorkspaceState {
 	sampleWhiteBalance = (point: NormalizedPoint) => this.auto.sampleWhiteBalance(point);
 
 	autoTone = () => this.auto.tone();
-
-	previewLight = (control: LightControlName, value: number) =>
-		this.controls.previewLight(control, value);
-
-	commitLight = (control: LightControlName, value: number) =>
-		this.controls.commitLight(control, value);
-
-	previewColor = (control: ColorControlName, value: number) =>
-		this.controls.previewColor(control, value);
-
-	commitColor = (control: ColorControlName, value: number) =>
-		this.controls.commitColor(control, value);
-
-	previewMaskLight = (control: LightControlName, value: number) =>
-		this.controls.previewMaskLight(control, value);
-
-	commitMaskLight = (control: LightControlName, value: number) =>
-		this.controls.commitMaskLight(control, value);
-
-	previewMaskColor = (control: ColorControlName, value: number) =>
-		this.controls.previewMaskColor(control, value);
-
-	commitMaskColor = (control: ColorControlName, value: number) =>
-		this.controls.commitMaskColor(control, value);
 
 	previewMaskAdjustmentAt = (target: MaskAdjustmentTarget, value: number) =>
 		this.controls.previewMaskAdjustmentAt(target, value);

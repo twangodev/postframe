@@ -1,6 +1,7 @@
 <script lang="ts">
-	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
+	import { DETAIL_SLIDERS, PRESENCE_SLIDERS } from '$lib/develop-sliders';
 	import type { DetailControlName } from '$lib/develop-settings';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -10,71 +11,28 @@
 
 	let { workspace }: Props = $props();
 
-	const preview = (control: DetailControlName) => (value: number) =>
+	const preview = (control: DetailControlName, value: number) =>
 		workspace.previewAdjustment('detail', control, value);
-	const commit = (control: DetailControlName) => (value: number) =>
+	const commit = (control: DetailControlName, value: number) =>
 		workspace.commitAdjustment('detail', control, value);
 </script>
 
 <Panel title="Presence" open={false}>
-	<AdjustmentSlider
-		label="Texture"
-		bind:value={workspace.adjustments.texture}
-		min={-100}
-		max={100}
+	<AdjustmentSliders
+		sliders={PRESENCE_SLIDERS}
+		values={workspace.adjustments}
 		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('texture')}
-		onValueCommit={commit('texture')}
-	/>
-	<AdjustmentSlider
-		label="Clarity"
-		bind:value={workspace.adjustments.clarity}
-		min={-100}
-		max={100}
-		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('clarity')}
-		onValueCommit={commit('clarity')}
-	/>
-	<AdjustmentSlider
-		label="Dehaze"
-		bind:value={workspace.adjustments.dehaze}
-		min={-100}
-		max={100}
-		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('dehaze')}
-		onValueCommit={commit('dehaze')}
+		onPreview={preview}
+		onCommit={commit}
 	/>
 </Panel>
 
 <Panel title="Detail" open={false}>
-	<AdjustmentSlider
-		label="Sharpening"
-		bind:value={workspace.adjustments.sharpenAmount}
-		min={0}
-		max={150}
-		signed={false}
+	<AdjustmentSliders
+		sliders={DETAIL_SLIDERS}
+		values={workspace.adjustments}
 		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('sharpenAmount')}
-		onValueCommit={commit('sharpenAmount')}
-	/>
-	<AdjustmentSlider
-		label="Noise reduction"
-		bind:value={workspace.adjustments.noiseLuminance}
-		min={0}
-		max={100}
-		signed={false}
-		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('noiseLuminance')}
-		onValueCommit={commit('noiseLuminance')}
-	/>
-	<AdjustmentSlider
-		label="Color noise"
-		bind:value={workspace.adjustments.noiseColor}
-		min={0}
-		max={100}
-		signed={false}
-		disabled={!workspace.canAdjustLight}
-		onValueChange={preview('noiseColor')}
-		onValueCommit={commit('noiseColor')}
+		onPreview={preview}
+		onCommit={commit}
 	/>
 </Panel>

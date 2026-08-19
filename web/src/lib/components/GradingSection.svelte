@@ -1,12 +1,9 @@
 <script lang="ts">
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
-	import {
-		GRADING_BLEND_CONTROL_NAMES,
-		GRADING_RANGE_NAMES,
-		type GradingBlendControlName,
-		type GradingRangeName
-	} from '$lib/develop-settings';
+	import { GRADING_RANGE_NAMES, type GradingRangeName } from '$lib/develop-settings';
+	import { GRADING_BLEND_SLIDERS } from '$lib/develop-sliders';
 	import {
 		clampToDisc,
 		hueSaturationToPoint,
@@ -71,13 +68,6 @@
 		event.currentTarget.releasePointerCapture(event.pointerId);
 		binding.commitAdjustmentsAt(wheelChanges(discPosition(event)));
 	}
-
-	const blendTarget = (control: GradingBlendControlName) =>
-		({ group: 'grading', control }) as const;
-	const previewBlend = (control: GradingBlendControlName) => (value: number) =>
-		binding.previewAdjustmentAt(blendTarget(control), value);
-	const commitBlend = (control: GradingBlendControlName) => (value: number) =>
-		binding.commitAdjustmentAt(blendTarget(control), value);
 
 	const previewLuminance = (value: number) =>
 		binding.previewAdjustmentAt({ group: 'grading', range, control: 'luminance' }, value);
@@ -153,18 +143,14 @@
 		</div>
 	</div>
 	<div class="mt-2">
-		{#each GRADING_BLEND_CONTROL_NAMES as control (control)}
-			<AdjustmentSlider
-				label={control}
-				bind:value={binding.grading[control]}
-				min={control === 'balance' ? -100 : 0}
-				max={100}
-				defaultValue={control === 'balance' ? 0 : 50}
-				signed={control === 'balance'}
-				disabled={binding.disabled}
-				onValueChange={previewBlend(control)}
-				onValueCommit={commitBlend(control)}
-			/>
-		{/each}
+		<AdjustmentSliders
+			sliders={GRADING_BLEND_SLIDERS}
+			values={binding.grading}
+			disabled={binding.disabled}
+			onPreview={(control, value) =>
+				binding.previewAdjustmentAt({ group: 'grading', control }, value)}
+			onCommit={(control, value) =>
+				binding.commitAdjustmentAt({ group: 'grading', control }, value)}
+		/>
 	</div>
 </Panel>

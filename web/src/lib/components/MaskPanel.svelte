@@ -23,18 +23,22 @@
 	import SubjectPicker from './SubjectPicker.svelte';
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
+	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
-	import type { ColorControlName, LightControlName } from '$lib/develop-settings';
+	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
 	import {
 		maskOperationSchema,
-		type ColorRangeComponent,
-		type LuminanceRangeComponent,
 		type MaskComponent,
 		type MaskOperation,
 		type NormalizedRegion
 	} from '$lib/edit-document';
-	import type { MaskEdgeControlName } from '$lib/mask-edge-settings';
-	import { rangeComponents, type RangeKind } from '$lib/mask-ranging';
+	import {
+		rangeComponents,
+		rangeSliderSpecs,
+		rangeSliderValue,
+		withRangeControl,
+		type RangeKind
+	} from '$lib/mask-ranging';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 	import type { Mask, MaskKind, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
 
@@ -72,52 +76,10 @@
 		onBeginEdgeRefinement
 	}: Props = $props();
 
-	const previewMaskLight = (control: LightControlName) => (value: number) =>
-		workspace.previewMaskLight(control, value);
-	const commitMaskLight = (control: LightControlName) => (value: number) =>
-		workspace.commitMaskLight(control, value);
-	const previewMaskColor = (control: ColorControlName) => (value: number) =>
-		workspace.previewMaskColor(control, value);
-	const commitMaskColor = (control: ColorControlName) => (value: number) =>
-		workspace.commitMaskColor(control, value);
-	const previewMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
-		workspace.previewMaskEdge(control, value);
-	const commitMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
-		workspace.commitMaskEdge(control, value);
+	const maskEmpty = $derived((selectedMask?.components.length ?? 0) === 0);
 
 	let rangeOperation = $state<MaskOperation>('add');
 	const selectedRanges = $derived(rangeComponents(selectedMask));
-	const percent = (fraction: number) => Math.round(fraction * 100);
-
-	type LuminanceControl = keyof LuminanceRangeComponent['range'];
-	type ColorControl = keyof ColorRangeComponent['range'];
-
-	function luminanceRange(
-		component: LuminanceRangeComponent,
-		control: LuminanceControl,
-		value: number
-	) {
-		const range = { ...component.range, [control]: value / 100 };
-		if (control === 'low') range.high = Math.max(range.high, range.low);
-		if (control === 'high') range.low = Math.min(range.low, range.high);
-		return range;
-	}
-
-	function colorRange(component: ColorRangeComponent, control: ColorControl, value: number) {
-		const degrees = control === 'hue' || control === 'width';
-		return { ...component.range, [control]: degrees ? value : value / 100 };
-	}
-
-	const previewLuminance =
-		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
-			workspace.previewRange(component.id, luminanceRange(component, control, value));
-	const commitLuminance =
-		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
-			void workspace.commitRange(component.id, luminanceRange(component, control, value));
-	const previewColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
-		workspace.previewRange(component.id, colorRange(component, control, value));
-	const commitColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
-		void workspace.commitRange(component.id, colorRange(component, control, value));
 	const addRange = (kind: RangeKind) => () =>
 		void workspace.addRangeComponent(kind, rangeOperation);
 
@@ -345,81 +307,22 @@
 					<p class="text-[10px] text-muted lowercase">
 						{component.type === 'luminance-range' ? 'luminance' : 'colour'} · {component.operation}
 					</p>
-					{#if component.type === 'luminance-range'}
+					{#each rangeSliderSpecs(component) as spec (spec.control)}
 						<AdjustmentSlider
-							label="Low"
-							value={percent(component.range.low)}
-							min={0}
-							max={100}
-							defaultValue={50}
-							signed={false}
-							onValueChange={previewLuminance(component, 'low')}
-							onValueCommit={commitLuminance(component, 'low')}
+							{...spec}
+							value={rangeSliderValue(component, spec)}
+							onValueChange={(value) =>
+								workspace.previewRange(
+									component.id,
+									withRangeControl(component, spec.control, value)
+								)}
+							onValueCommit={(value) =>
+								void workspace.commitRange(
+									component.id,
+									withRangeControl(component, spec.control, value)
+								)}
 						/>
-						<AdjustmentSlider
-							label="High"
-							value={percent(component.range.high)}
-							min={0}
-							max={100}
-							defaultValue={100}
-							signed={false}
-							onValueChange={previewLuminance(component, 'high')}
-							onValueCommit={commitLuminance(component, 'high')}
-						/>
-						<AdjustmentSlider
-							label="Feather"
-							value={percent(component.range.feather)}
-							min={0}
-							max={100}
-							defaultValue={10}
-							signed={false}
-							onValueChange={previewLuminance(component, 'feather')}
-							onValueCommit={commitLuminance(component, 'feather')}
-						/>
-					{:else}
-						<AdjustmentSlider
-							label="Hue"
-							value={Math.round(component.range.hue)}
-							min={0}
-							max={360}
-							defaultValue={210}
-							suffix="°"
-							signed={false}
-							onValueChange={previewColor(component, 'hue')}
-							onValueCommit={commitColor(component, 'hue')}
-						/>
-						<AdjustmentSlider
-							label="Width"
-							value={Math.round(component.range.width)}
-							min={0}
-							max={90}
-							defaultValue={30}
-							suffix="°"
-							signed={false}
-							onValueChange={previewColor(component, 'width')}
-							onValueCommit={commitColor(component, 'width')}
-						/>
-						<AdjustmentSlider
-							label="Saturation floor"
-							value={percent(component.range.saturationFloor)}
-							min={0}
-							max={100}
-							defaultValue={20}
-							signed={false}
-							onValueChange={previewColor(component, 'saturationFloor')}
-							onValueCommit={commitColor(component, 'saturationFloor')}
-						/>
-						<AdjustmentSlider
-							label="Feather"
-							value={percent(component.range.feather)}
-							min={0}
-							max={100}
-							defaultValue={25}
-							signed={false}
-							onValueChange={previewColor(component, 'feather')}
-							onValueCommit={commitColor(component, 'feather')}
-						/>
-					{/if}
+					{/each}
 				</div>
 			{/each}
 			<div class="mb-1.5 flex gap-1" role="tablist" aria-label="Range operation">
@@ -456,36 +359,12 @@
 			</div>
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">edge</p>
-			<AdjustmentSlider
-				label="Definition"
-				value={selectedMask.edge.contrast}
-				min={0}
-				max={100}
-				signed={false}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskEdge('contrast')}
-				onValueCommit={commitMaskEdge('contrast')}
-			/>
-			<AdjustmentSlider
-				label="Feather"
-				value={selectedMask.edge.feather}
-				min={0}
-				max={100}
-				suffix=" px"
-				signed={false}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskEdge('feather')}
-				onValueCommit={commitMaskEdge('feather')}
-			/>
-			<AdjustmentSlider
-				label="Shift"
-				value={selectedMask.edge.shift}
-				min={-100}
-				max={100}
-				suffix=" px"
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskEdge('shift')}
-				onValueCommit={commitMaskEdge('shift')}
+			<AdjustmentSliders
+				sliders={MASK_EDGE_SLIDERS}
+				values={selectedMask.edge}
+				disabled={maskEmpty}
+				onPreview={workspace.previewMaskEdge}
+				onCommit={workspace.commitMaskEdge}
 			/>
 			<button
 				type="button"
@@ -514,100 +393,25 @@
 			{/if}
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">light</p>
-			<AdjustmentSlider
-				label="Exposure"
-				value={selectedMask.adjustments.light.exposure}
-				min={-4}
-				max={4}
-				step={0.05}
-				decimals={2}
-				suffix=" EV"
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('exposure')}
-				onValueCommit={commitMaskLight('exposure')}
-			/>
-			<AdjustmentSlider
-				label="Contrast"
-				value={selectedMask.adjustments.light.contrast}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('contrast')}
-				onValueCommit={commitMaskLight('contrast')}
-			/>
-			<AdjustmentSlider
-				label="Highlights"
-				value={selectedMask.adjustments.light.highlights}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('highlights')}
-				onValueCommit={commitMaskLight('highlights')}
-			/>
-			<AdjustmentSlider
-				label="Shadows"
-				value={selectedMask.adjustments.light.shadows}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('shadows')}
-				onValueCommit={commitMaskLight('shadows')}
-			/>
-			<AdjustmentSlider
-				label="Whites"
-				value={selectedMask.adjustments.light.whites}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('whites')}
-				onValueCommit={commitMaskLight('whites')}
-			/>
-			<AdjustmentSlider
-				label="Blacks"
-				value={selectedMask.adjustments.light.blacks}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskLight('blacks')}
-				onValueCommit={commitMaskLight('blacks')}
+			<AdjustmentSliders
+				sliders={LIGHT_SLIDERS}
+				values={selectedMask.adjustments.light}
+				disabled={maskEmpty}
+				onPreview={(control, value) =>
+					workspace.previewMaskAdjustmentAt({ group: 'light', control }, value)}
+				onCommit={(control, value) =>
+					workspace.commitMaskAdjustmentAt({ group: 'light', control }, value)}
 			/>
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">color</p>
-			<AdjustmentSlider
-				label="Temperature"
-				value={selectedMask.adjustments.color.temperature}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskColor('temperature')}
-				onValueCommit={commitMaskColor('temperature')}
-			/>
-			<AdjustmentSlider
-				label="Tint"
-				value={selectedMask.adjustments.color.tint}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskColor('tint')}
-				onValueCommit={commitMaskColor('tint')}
-			/>
-			<AdjustmentSlider
-				label="Vibrance"
-				value={selectedMask.adjustments.color.vibrance}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskColor('vibrance')}
-				onValueCommit={commitMaskColor('vibrance')}
-			/>
-			<AdjustmentSlider
-				label="Saturation"
-				value={selectedMask.adjustments.color.saturation}
-				min={-100}
-				max={100}
-				disabled={selectedMask.components.length === 0}
-				onValueChange={previewMaskColor('saturation')}
-				onValueCommit={commitMaskColor('saturation')}
+			<AdjustmentSliders
+				sliders={COLOR_SLIDERS}
+				values={selectedMask.adjustments.color}
+				disabled={maskEmpty}
+				onPreview={(control, value) =>
+					workspace.previewMaskAdjustmentAt({ group: 'color', control }, value)}
+				onCommit={(control, value) =>
+					workspace.commitMaskAdjustmentAt({ group: 'color', control }, value)}
 			/>
 		</Panel>
 		{#if workspace.selectedMaskDevelop}
