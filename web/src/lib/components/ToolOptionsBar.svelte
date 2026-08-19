@@ -11,20 +11,21 @@
 		vectorTools
 	} from '$lib/editor-tools';
 
+	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
+
 	interface Props {
-		activeTool: string;
-		activeToolLabel: string;
-		maskBrushOperation: 'add' | 'subtract';
-		refineBrushSize: number;
+		tools: EditorToolSession;
 	}
 
-	let { activeTool, activeToolLabel, maskBrushOperation, refineBrushSize }: Props = $props();
+	let { tools }: Props = $props();
+
+	const activeTool = $derived(tools.tool);
 </script>
 
 <div
 	class="flex h-9 shrink-0 items-center gap-2 overflow-x-auto border-b border-subtle bg-bg px-3 text-[11px] text-muted"
 >
-	<span class="shrink-0 font-medium text-text">{activeToolLabel}</span>
+	<span class="shrink-0 font-medium text-text">{tools.label}</span>
 	<span class="h-4 w-px shrink-0 bg-subtle"></span>
 
 	{#if activeTool === 'eyedropper'}
@@ -126,12 +127,14 @@
 			drag on the photo to place the {activeTool === 'mask-linear' ? 'linear' : 'radial'} gradient
 		</span>
 	{:else if activeTool.startsWith('mask')}
-		<span class="shrink-0">size <span class="font-mono text-text">{refineBrushSize} px</span></span>
+		<span class="shrink-0"
+			>size <span class="font-mono text-text">{tools.refineBrushSize} px</span></span
+		>
 		<span class="shrink-0">feather <span class="font-mono text-text">45%</span></span>
 		<span class="shrink-0">flow <span class="font-mono text-text">100%</span></span>
 		{#if activeTool === 'mask'}
 			<span class="shrink-0"
-				>mode <span class="font-mono text-text">{maskBrushOperation}</span></span
+				>mode <span class="font-mono text-text">{tools.maskBrushOperation}</span></span
 			>
 		{/if}
 	{:else}

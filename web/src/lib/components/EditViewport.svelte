@@ -11,40 +11,24 @@
 	import ProgressCard from './ui/ProgressCard.svelte';
 	import { separator, type MenuEntry } from '$lib/menu';
 	import { cropTools, retouchTools, selectionTools, typeTools } from '$lib/editor-tools';
-	import type { NormalizedRegion } from '$lib/edit-document';
-	import type { MaskPreviewMode } from '$lib/mask-preview';
+	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
 	import type { ViewportInteraction } from '$lib/viewport-interaction.svelte';
-	import type { Mask, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
 		viewport: ViewportInteraction;
-		activeTool: string;
-		maskBrushOperation: 'add' | 'subtract';
-		maskPreviewMode: MaskPreviewMode | null;
-		selectedMask: Mask | null;
-		subjectChoices: SubjectChoices | null;
-		hoveredSubjectBox: NormalizedRegion | null;
-		smartMaskWorking: boolean;
+		tools: EditorToolSession;
 		before: boolean;
 		onExport: () => void;
 	}
 
-	let {
-		workspace,
-		viewport,
-		activeTool,
-		maskBrushOperation,
-		maskPreviewMode,
-		selectedMask,
-		subjectChoices,
-		hoveredSubjectBox,
-		smartMaskWorking,
-		before,
-		onExport
-	}: Props = $props();
+	let { workspace, viewport, tools, before, onExport }: Props = $props();
 
 	const active = $derived(workspace.editingPhoto);
+	const activeTool = $derived(tools.tool);
+	const maskPreviewMode = $derived(tools.maskPreviewMode);
+	const selectedMask = $derived(tools.selectedMask);
 	const imageSize = $derived(viewport.image);
 	const surfaceStyle = $derived(
 		`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`
@@ -231,7 +215,7 @@
 								viewportScale={viewport.transform.scale}
 							/>
 						{/if}
-						{#if viewport.maskStroke && maskBrushOperation === 'subtract'}
+						{#if viewport.maskStroke && tools.maskBrushOperation === 'subtract'}
 							<MaskPromptOverlay
 								points={viewport.maskStroke.points}
 								label="background"
@@ -252,7 +236,7 @@
 								viewportScale={viewport.transform.scale}
 							/>
 						{/if}
-						{#if viewport.brushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !smartMaskWorking))}
+						{#if viewport.brushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !tools.smartMaskWorking))}
 							<MaskBrushCursor
 								point={viewport.brushPoint}
 								radius={activeTool === 'mask'
@@ -263,9 +247,9 @@
 								viewportScale={viewport.transform.scale}
 							/>
 						{/if}
-						{#if subjectChoices && hoveredSubjectBox}
+						{#if tools.subjectChoices && tools.hoveredSubjectBox}
 							<SubjectHoverBox
-								box={hoveredSubjectBox}
+								box={tools.hoveredSubjectBox}
 								imageWidth={imageSize.width}
 								imageHeight={imageSize.height}
 								viewportScale={viewport.transform.scale}

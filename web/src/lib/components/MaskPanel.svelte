@@ -26,12 +26,8 @@
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
 	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
-	import {
-		maskOperationSchema,
-		type MaskComponent,
-		type MaskOperation,
-		type NormalizedRegion
-	} from '$lib/edit-document';
+	import { maskOperationSchema, type MaskComponent, type MaskOperation } from '$lib/edit-document';
+	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
 	import {
 		rangeComponents,
 		rangeSliderSpecs,
@@ -40,42 +36,19 @@
 		type RangeKind
 	} from '$lib/mask-ranging';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
-	import type { Mask, MaskKind, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
-		activeTool: string;
-		maskBrushOperation: 'add' | 'subtract';
-		maskPreviewMode: MaskPreviewMode | null;
-		refineBrushSize: number;
-		selectedMask: Mask | null;
-		subjectChoices: SubjectChoices | null;
-		smartMaskWorking: boolean;
-		canRefineSelectedMask: boolean;
-		hoveredSubjectBox: NormalizedRegion | null;
-		onAddMask: (kind: MaskKind) => void;
-		onBeginMaskBrush: (operation: 'add' | 'subtract') => void;
-		onBeginObjectMask: () => void;
-		onBeginEdgeRefinement: () => void;
+		tools: EditorToolSession;
 	}
 
-	let {
-		workspace,
-		activeTool,
-		maskBrushOperation,
-		maskPreviewMode = $bindable(),
-		refineBrushSize = $bindable(),
-		selectedMask,
-		subjectChoices,
-		smartMaskWorking,
-		canRefineSelectedMask,
-		hoveredSubjectBox = $bindable(),
-		onAddMask,
-		onBeginMaskBrush,
-		onBeginObjectMask,
-		onBeginEdgeRefinement
-	}: Props = $props();
+	let { workspace, tools }: Props = $props();
 
+	const activeTool = $derived(tools.tool);
+	const selectedMask = $derived(tools.selectedMask);
+	const subjectChoices = $derived(tools.subjectChoices);
+	const smartMaskWorking = $derived(tools.smartMaskWorking);
 	const maskEmpty = $derived((selectedMask?.components.length ?? 0) === 0);
 
 	let rangeOperation = $state<MaskOperation>('add');
@@ -96,7 +69,7 @@
 	);
 	const previewMenuItemClass =
 		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
-	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (maskPreviewMode = mode);
+	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (tools.maskPreviewMode = mode);
 </script>
 
 <Tabs.Content value="mask" class="motion-tab">
@@ -109,40 +82,40 @@
 			onChoose={(index) => void workspace.chooseDetectedSubject(index)}
 			onChooseAll={workspace.chooseAllSubjects}
 			onDismiss={() => {
-				hoveredSubjectBox = null;
+				tools.hoveredSubjectBox = null;
 				workspace.dismissSubjectChoices();
 			}}
-			onHover={(box) => (hoveredSubjectBox = box)}
+			onHover={(box) => (tools.hoveredSubjectBox = box)}
 		/>
 	{/if}
 	<div class="border-b border-subtle p-3">
 		<p class="mb-2 text-[11px] tracking-[0.03em] text-muted">new mask</p>
 		<div class="grid grid-cols-3 gap-1.5">
-			<button type="button" class="mask-choice" onclick={() => onAddMask('brush')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('brush')}
 				><Brush size={15} /><span>brush</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('linear')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('linear')}
 				><Blend size={15} /><span>linear</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('radial')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('radial')}
 				><CircleDashed size={15} /><span>radial</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('subject')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('subject')}
 				><UserRound size={15} /><span>subject</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('sky')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('sky')}
 				><CloudSun size={15} /><span>sky</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('background')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('background')}
 				><Mountain size={15} /><span>background</span></button
 			>
-			<button type="button" class="mask-choice" onclick={onBeginObjectMask}
+			<button type="button" class="mask-choice" onclick={tools.beginObjectMask}
 				><Scan size={15} /><span>object</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('luminance')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('luminance')}
 				><SunMedium size={15} /><span>luminance</span></button
 			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('color')}
+			<button type="button" class="mask-choice" onclick={() => tools.addMask('color')}
 				><Palette size={15} /><span>colour</span></button
 			>
 		</div>
@@ -156,8 +129,8 @@
 					aria-label="Choose mask preview"
 					class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
 				>
-					{#if maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-					<span>{maskPreviewMode ?? 'off'}</span>
+					{#if tools.maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+					<span>{tools.maskPreviewMode ?? 'off'}</span>
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Portal>
 					<DropdownMenu.Content
@@ -167,13 +140,13 @@
 					>
 						{#each MASK_PREVIEW_MODES as mode (mode)}
 							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
-								<span class="w-3 text-accent">{maskPreviewMode === mode ? '•' : ''}</span>
+								<span class="w-3 text-accent">{tools.maskPreviewMode === mode ? '•' : ''}</span>
 								<span>{mode}</span>
 							</DropdownMenu.Item>
 						{/each}
 						<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
 						<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(null)}>
-							<span class="w-3 text-accent">{maskPreviewMode === null ? '•' : ''}</span>
+							<span class="w-3 text-accent">{tools.maskPreviewMode === null ? '•' : ''}</span>
 							<span>off</span>
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
@@ -265,20 +238,20 @@
 				<button
 					type="button"
 					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && maskBrushOperation === 'add'
+						'mask' && tools.maskBrushOperation === 'add'
 						? 'border-accent bg-surface text-text'
 						: ''}"
-					onclick={() => onBeginMaskBrush('add')}
+					onclick={() => tools.beginMaskBrush('add')}
 				>
 					<Plus size={12} /> add
 				</button>
 				<button
 					type="button"
 					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && maskBrushOperation === 'subtract'
+						'mask' && tools.maskBrushOperation === 'subtract'
 						? 'border-accent bg-surface text-text'
 						: ''}"
-					onclick={() => onBeginMaskBrush('subtract')}
+					onclick={() => tools.beginMaskBrush('subtract')}
 				>
 					<Minus size={12} /> subtract
 				</button>
@@ -287,7 +260,7 @@
 				<div class="motion-enter pt-1">
 					<AdjustmentSlider
 						label="Brush"
-						bind:value={refineBrushSize}
+						bind:value={tools.refineBrushSize}
 						min={8}
 						max={200}
 						defaultValue={42}
@@ -368,12 +341,12 @@
 			/>
 			<button
 				type="button"
-				disabled={!canRefineSelectedMask || smartMaskWorking}
+				disabled={!tools.canRefineSelectedMask || smartMaskWorking}
 				class="mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text disabled:cursor-default disabled:opacity-40 {activeTool ===
 				'mask-refine'
 					? 'border-accent bg-surface text-text'
 					: ''}"
-				onclick={onBeginEdgeRefinement}
+				onclick={tools.beginEdgeRefinement}
 			>
 				<span class="flex items-center gap-2"><Brush size={12} /> refine edge</span>
 				<span>{activeTool === 'mask-refine' ? 'paint boundary' : 'brush'}</span>
@@ -382,7 +355,7 @@
 				<div class="motion-enter pt-1">
 					<AdjustmentSlider
 						label="Brush"
-						bind:value={refineBrushSize}
+						bind:value={tools.refineBrushSize}
 						min={8}
 						max={200}
 						defaultValue={42}
