@@ -15,6 +15,7 @@
 	} from '$lib/library-view';
 	import { photoContextMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import { type Photo, type WorkspaceState } from '$lib/workspace.svelte';
+	import type { Component } from 'svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
@@ -91,6 +92,25 @@
 		importing = false;
 	}
 </script>
+
+{#snippet emptyState(
+	Icon: Component<Record<string, unknown>>,
+	title: string,
+	hint: string,
+	framed: boolean
+)}
+	{#if framed}
+		<div
+			class="mb-4 flex size-10 items-center justify-center rounded border border-subtle bg-surface text-muted"
+		>
+			<Icon size={17} strokeWidth={1.25} />
+		</div>
+	{:else}
+		<Icon size={28} strokeWidth={1} class="mb-3 text-muted" />
+	{/if}
+	<p class="text-xs text-text" class:font-medium={framed}>{title}</p>
+	<p class="mt-1 text-[11px] text-muted">{hint}</p>
+{/snippet}
 
 <div
 	class={workspace.photos.length === 0
@@ -173,13 +193,12 @@
 		<div class="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
 			{#if workspace.photos.length === 0}
 				<div class="motion-enter flex h-full flex-col items-center justify-center text-center">
-					<div
-						class="mb-4 flex size-10 items-center justify-center rounded border border-subtle bg-surface text-muted"
-					>
-						<ImagePlus size={17} strokeWidth={1.25} />
-					</div>
-					<p class="text-xs font-medium text-text">empty library</p>
-					<p class="mt-1 text-[11px] text-muted">add photographs when you're ready.</p>
+					{@render emptyState(
+						ImagePlus,
+						'empty library',
+						"add photographs when you're ready.",
+						true
+					)}
 					<label
 						class="mt-4 flex h-8 cursor-pointer items-center rounded bg-text px-3 text-[11px] font-medium text-bg hover:opacity-85"
 					>
@@ -216,9 +235,12 @@
 				</div>
 			{:else}
 				<div class="flex h-full flex-col items-center justify-center text-center">
-					<Box size={28} strokeWidth={1} class="mb-3 text-muted" />
-					<p class="text-xs text-text">no photos in this view</p>
-					<p class="mt-1 text-[11px] text-muted">try another collection or clear the search.</p>
+					{@render emptyState(
+						Box,
+						'no photos in this view',
+						'try another collection or clear the search.',
+						false
+					)}
 				</div>
 			{/if}
 		</div>
