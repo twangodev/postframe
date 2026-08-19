@@ -5,6 +5,10 @@ import { createEditMask } from '../src/lib/edit-document.ts';
 import { MaskPainting } from '../src/lib/mask-painting.ts';
 import type { EditorCommand } from '../src/lib/editor-command.ts';
 
+function stubbed<T>(onlyTheMembersItReads: unknown): T {
+	return onlyTheMembersItReads as T;
+}
+
 function paintingHarness() {
 	const mask = createEditMask('mask-one', 'linear');
 	const dispatched: EditorCommand[] = [];
@@ -53,8 +57,7 @@ function paintingHarness() {
 		},
 		selectMask: () => {}
 	};
-	// The harness only exercises the members MaskPainting reads.
-	const painting = new MaskPainting(pipeline as never, session as never, host as never);
+	const painting = new MaskPainting(stubbed(pipeline), stubbed(session), stubbed(host));
 	return { painting, mask, dispatched, persisted };
 }
 

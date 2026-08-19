@@ -32,20 +32,21 @@ import {
 	type MaskGroupName
 } from '../src/lib/develop-settings.ts';
 
+const detailKey = (changed: Partial<ReturnType<typeof defaultDetailSettings>>) =>
+	detailTileKey({ ...defaultDetailSettings(), ...changed });
+
 test('the source tile key tracks the tile-side detail work and nothing else', () => {
-	const neutral = defaultDetailSettings();
-	const key = (changed: Partial<typeof neutral>) => detailTileKey({ ...neutral, ...changed });
+	assert.equal(detailKey({ dehaze: 60 }), detailKey({}));
+	assert.notEqual(detailKey({ noiseLuminance: 30 }), detailKey({}));
+	assert.notEqual(detailKey({ noiseColor: 30 }), detailKey({}));
+	assert.notEqual(detailKey({ clarity: 10 }), detailKey({}));
+});
 
-	assert.equal(key({ dehaze: 60 }), key({}));
-	assert.notEqual(key({ noiseLuminance: 30 }), key({}));
-	assert.notEqual(key({ noiseColor: 30 }), key({}));
-	assert.notEqual(key({ clarity: 10 }), key({}));
-
-	// Every plane reader shares one key, so dragging clarity reuses the planes.
-	assert.equal(key({ clarity: 10 }), key({ clarity: 90 }));
-	assert.equal(key({ clarity: 10 }), key({ texture: -80 }));
-	assert.equal(key({ clarity: 10 }), key({ sharpenAmount: 150 }));
-	assert.equal(key({ clarity: 10, dehaze: -40 }), key({ texture: 5 }));
+test('every plane reader shares one key, so dragging clarity reuses the planes', () => {
+	assert.equal(detailKey({ clarity: 10 }), detailKey({ clarity: 90 }));
+	assert.equal(detailKey({ clarity: 10 }), detailKey({ texture: -80 }));
+	assert.equal(detailKey({ clarity: 10 }), detailKey({ sharpenAmount: 150 }));
+	assert.equal(detailKey({ clarity: 10, dehaze: -40 }), detailKey({ texture: 5 }));
 });
 
 test('the neutral develop aggregate satisfies its own schema', () => {
@@ -243,22 +244,25 @@ test('moving any control leaves identity, so a neutral short-circuit never hides
 		mutate(settings);
 		return adjustmentsIdentity(settings);
 	};
-	// Walked from defaults so a new control can't be forgotten. Excluded: controls that only
-	// shape another (exposure gains outside the chain, noise reduction runs before it,
-	// vignette/grain shape controls are inert until their amount moves).
 	const scalarGroups = ['light', 'color', 'detail', 'effects'] as const;
-	const shapesAnother = new Set([
-		'exposure',
-		'noiseLuminance',
-		'noiseColor',
+	const gainsOutsideTheToneChain = ['exposure'];
+	const runsBeforeTheToneChain = ['noiseLuminance', 'noiseColor'];
+	const inertUntilTheirAmountMoves = [
 		'vignetteMidpoint',
 		'vignetteRoundness',
 		'vignetteFeather',
 		'grainSize'
+	];
+	const identityIgnores = new Set([
+		...gainsOutsideTheToneChain,
+		...runsBeforeTheToneChain,
+		...inertUntilTheirAmountMoves
 	]);
+	const everyControlOf = (group: (typeof scalarGroups)[number]) =>
+		Object.keys(defaultDevelopSettings()[group]);
 	for (const group of scalarGroups) {
-		for (const control of Object.keys(defaultDevelopSettings()[group])) {
-			if (shapesAnother.has(control)) continue;
+		for (const control of everyControlOf(group)) {
+			if (identityIgnores.has(control)) continue;
 			assert.equal(
 				moved((s) => Object.assign(s[group], { [control]: 1 })),
 				false,

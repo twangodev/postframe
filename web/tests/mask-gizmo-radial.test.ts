@@ -51,8 +51,8 @@ test('hit-tests dots, rotate, feather ring, body, and misses', () => {
 		kind: 'handle',
 		handle: 'rotate'
 	});
-	// feather 0.5 -> core ellipse radii (30, 15); its outline passes through (130, 50)
-	assert.deepEqual(hitTestRadial(geometry, { x: 131, y: 50 }, image, 5, 12), {
+	const justInsideFeatherRingOnMajorAxis = { x: 131, y: 50 };
+	assert.deepEqual(hitTestRadial(geometry, justInsideFeatherRingOnMajorAxis, image, 5, 12), {
 		kind: 'handle',
 		handle: 'feather'
 	});

@@ -3,8 +3,7 @@ import test from 'node:test';
 
 import { StorageObserver } from '../src/lib/storage-observer.ts';
 
-// A hand-driven clock keeps the coalescing deterministic and instant.
-function clock() {
+function handDrivenClock() {
 	let now = 0;
 	const timers = new Map<number, { at: number; fire: () => void }>();
 	let nextId = 1;
@@ -28,7 +27,7 @@ function clock() {
 }
 
 function observer(refresh: () => Promise<void>) {
-	const time = clock();
+	const time = handDrivenClock();
 	return {
 		time,
 		observer: new StorageObserver(refresh, { quietMs: 600, set: time.set, clear: time.clear })

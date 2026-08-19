@@ -22,6 +22,10 @@ import {
 } from '../src/lib/mask-ranging.ts';
 import type { RangeComponentInput } from '../src/lib/worker-protocol.ts';
 
+function stubbed<T>(onlyTheMembersItReads: unknown): T {
+	return onlyTheMembersItReads as T;
+}
+
 interface Deferred {
 	input: RangeComponentInput;
 	resolve: (alpha: number) => void;
@@ -97,8 +101,7 @@ function rangingHarness(options: { manual?: boolean } = {}) {
 			host.failures.push(error);
 		}
 	};
-	// The harness only exercises the members MaskRanging reads.
-	const ranging = new MaskRanging(workerClient as never, pipeline as never, host as never, 0);
+	const ranging = new MaskRanging(stubbed(workerClient), stubbed(pipeline), stubbed(host), 0);
 	return { ranging, mask, host, dispatched, persisted, rasterized, pending };
 }
 

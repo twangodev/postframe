@@ -92,13 +92,11 @@ test('the nearest point is only picked up within its grab radius', () => {
 	assert.equal(nearestCurvePoint(curve, { x: 0.99, y: 0.98 }, 0.05), 2);
 });
 
-// The plot has to draw the curve the pipeline applies, so these mirror the
-// monotone-interpolation tests in src/curve.rs.
-test('the plotted curve reproduces the identity', () => {
+test('the plotted curve reproduces the identity, matching the pipeline in src/curve.rs', () => {
 	assert.deepEqual(curveSamples(identityCurve(), 5), [0, 0.25, 0.5, 0.75, 1]);
 });
 
-test('the plotted curve passes through its control points without overshooting', () => {
+test('the plotted curve passes through its control points without overshooting, matching src/curve.rs', () => {
 	const control = [
 		{ x: 0, y: 0 },
 		{ x: 0.25, y: 0.85 },
