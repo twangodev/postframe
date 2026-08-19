@@ -26,6 +26,7 @@
 	let { workspace, viewport, tools, before, onExport }: Props = $props();
 
 	const active = $derived(workspace.editingPhoto);
+	const activeDocument = $derived(workspace.activeDocument);
 	const activeTool = $derived(tools.tool);
 	const maskPreviewMode = $derived(tools.maskPreviewMode);
 	const selectedMask = $derived(tools.selectedMask);
@@ -99,7 +100,7 @@
 						style={surfaceStyle}
 					>
 						<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-						{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
+						{#if activeDocument?.kind === 'loading' && activeDocument.phase !== 'reading'}
 							<div class="absolute inset-0 z-20 overflow-hidden text-white">
 								<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
 								<div
@@ -119,8 +120,7 @@
 					</div>
 					<PhotoPyramidLayer
 						photoId={active.id}
-						enabled={workspace.documentStatus.kind === 'ready' &&
-							workspace.documentStatus.photoId === active.id}
+						enabled={activeDocument?.kind === 'ready'}
 						viewport={viewport.size}
 						image={imageSize}
 						transform={viewport.transform}
@@ -271,7 +271,7 @@
 						<ProgressCard task={workspace.viewportProgress} variant="floating" />
 					</div>
 				{/if}
-				{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
+				{#if activeDocument?.kind === 'cancelled'}
 					<div
 						class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
 					>
@@ -286,14 +286,14 @@
 							</button>
 						</div>
 					</div>
-				{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
+				{:else if activeDocument?.kind === 'error'}
 					<div
 						class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
 					>
 						<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
 							<p class="text-[12px]">couldn't open raw</p>
 							<p class="text-[10px] leading-relaxed text-white/55">
-								{workspace.documentStatus.message}
+								{activeDocument.message}
 							</p>
 							<button
 								type="button"
