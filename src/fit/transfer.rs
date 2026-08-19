@@ -104,11 +104,11 @@ fn mixed_values(samples: &[Sample], mix: &[[f32; 3]; 3], c: usize) -> Vec<f32> {
         .collect()
 }
 
-// The camera's rendering is not channel-separable after any single 3x3: the
-// same linear blue codes differently depending on tile chroma. A small fitted
-// cross-term per channel absorbs the first-order dependence; minimum-norm
-// tie-breaking handles the degenerate valley where the other two channels are
-// collinear within flat tiles.
+/// The camera's rendering is not channel-separable after any single 3x3 — the
+/// same linear blue codes differently depending on tile chroma — so a small
+/// fitted cross-term per channel absorbs the first-order dependence. Flat
+/// tiles with collinear channels leave the objective degenerate, hence the
+/// minimizer's minimum-norm tie-breaking.
 fn fit_mix(samples: &[Sample]) -> [[f32; 3]; 3] {
     let mut mix = [[0.0; 3]; 3];
     for (c, row) in mix.iter_mut().enumerate() {
@@ -155,16 +155,19 @@ fn minimize_2d(mut objective: impl FnMut(f32, f32) -> f32) -> (f32, f32) {
                 evals.push((objective(point.0, point.1), point));
             }
         }
-        let floor = evals.iter().map(|(v, _)| *v).fold(f32::INFINITY, f32::min);
-        centre = evals
-            .into_iter()
-            .filter(|(v, _)| *v <= floor * 1.005)
-            .map(|(_, p)| p)
-            .min_by(|a, b| (a.0 * a.0 + a.1 * a.1).total_cmp(&(b.0 * b.0 + b.1 * b.1)))
-            .unwrap_or(centre);
+        centre = minimum_norm_near_floor(evals).unwrap_or(centre);
         step /= 4.0;
     }
     centre
+}
+
+fn minimum_norm_near_floor(evals: Vec<(f32, (f32, f32))>) -> Option<(f32, f32)> {
+    let floor = evals.iter().map(|(v, _)| *v).fold(f32::INFINITY, f32::min);
+    evals
+        .into_iter()
+        .filter(|(v, _)| *v <= floor * 1.005)
+        .map(|(_, p)| p)
+        .min_by(|a, b| (a.0 * a.0 + a.1 * a.1).total_cmp(&(b.0 * b.0 + b.1 * b.1)))
 }
 
 fn fit_channel(domain: &[f32], samples: &[Sample], c: usize) -> Result<Curve> {

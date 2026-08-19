@@ -269,17 +269,14 @@ impl Merged {
         }
     }
 
-    // Extended Reinhard on the brightest channel, white point at the bracket's
-    // measured maximum, so recovered highlights roll into SDR range instead of
-    // clipping. The gain is applied as a scalar per pixel to preserve hue.
     pub fn render_tone_mapped(&self, ev: f32) -> Rendered {
         let gain = (2.0f32).powf(ev);
-        let white = (self.report.radiance_max * gain).max(1.0);
+        let white_point = (self.report.radiance_max * gain).max(1.0);
         let mut rgb8 = Vec::with_capacity(self.radiance.rgb.len() * 3);
         for pixel in &self.radiance.rgb {
             let exposed = pixel.map(|c| c * gain);
             let brightest = exposed.iter().fold(0.0f32, |m, &c| m.max(c));
-            let compress = (1.0 + brightest / (white * white)) / (1.0 + brightest);
+            let compress = extended_reinhard_gain(brightest, white_point);
             let coded = self.transfer.eval(exposed.map(|c| c * compress));
             rgb8.extend(coded.map(|v| v.round().clamp(0.0, 255.0) as u8));
         }
@@ -318,13 +315,17 @@ fn upright(linear: Linear, orientation: Orientation) -> Linear {
     }
 }
 
-// A clipped pixel's channel ratios are meaningless (each channel saturates at
-// its own ceiling), so render neutral at the brightest channel's level, as the
-// camera would — the same fallback the multi-frame composite applies.
+/// A clipped pixel's channel ratios are meaningless — each channel saturates
+/// at its own ceiling — so render neutral at the brightest channel's level,
+/// as the camera would.
+fn neutral_at_brightest(pixel: [f32; 3]) -> [f32; 3] {
+    [pixel.iter().fold(0.0f32, |m, &v| m.max(v)); 3]
+}
+
 fn neutralize_clipped(radiance: &mut Linear) {
     for (pixel, &clipped) in radiance.rgb.iter_mut().zip(&radiance.clipped) {
         if clipped {
-            *pixel = [pixel.iter().fold(0.0f32, |m, &v| m.max(v)); 3];
+            *pixel = neutral_at_brightest(*pixel);
         }
     }
 }
@@ -402,17 +403,12 @@ fn merge_radiance(
             *out_pixel = if weight > 0.0 {
                 [0, 1, 2].map(|c| (sum[c] / weight) as f32)
             } else {
-                // Clipped in every frame: the per-channel ratios are meaningless
-                // (each channel saturates at its own ceiling), so render neutral
-                // at the brightest channel's level, as the camera would.
                 let sx = (crop.x + x) as i64 - shifts[shortest].x as i64;
                 let sy = (crop.y + y) as i64 - shifts[shortest].y as i64;
                 let src = sy as usize * width + sx as usize;
                 *out_clipped = true;
-                let brightest = frames[shortest].image().rgb[src]
-                    .iter()
-                    .fold(0.0f32, |m, &v| m.max(v));
-                [brightest * t_ref / exposures[shortest]; 3]
+                neutral_at_brightest(frames[shortest].image().rgb[src])
+                    .map(|v| v * t_ref / exposures[shortest])
             };
         }
     });
@@ -426,6 +422,13 @@ fn merge_radiance(
             clipped,
         },
     ))
+}
+
+/// Extended Reinhard: compresses so `brightest` reaches 1.0 at `white_point`,
+/// rolling recovered highlights into SDR range instead of clipping. One scalar
+/// per pixel, applied to every channel, preserves hue.
+fn extended_reinhard_gain(brightest: f32, white_point: f32) -> f32 {
+    (1.0 + brightest / (white_point * white_point)) / (1.0 + brightest)
 }
 
 fn render(radiance: &Linear, transfer: &Transfer, ev: f32) -> Rendered {

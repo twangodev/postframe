@@ -180,9 +180,8 @@ const FRINGE_EDGE_FULL: f32 = 0.4;
 const FRINGE_CHROMA_FLOOR: f32 = 0.2;
 const FRINGE_LUMA_FLOOR: f32 = 0.05;
 
-// Micro-glints demosaic into single-pixel color speckles: strong luma edges
-// whose chroma matches none of the surrounding ring. Pull those toward the
-// ring's median chroma at unchanged luma, harder the stronger the edge.
+/// Demosaicing turns micro-glints into single-pixel color speckles: strong
+/// luma edges whose chroma matches none of the surrounding ring.
 fn defringe(rgb: &mut [[f32; 3]], width: usize, height: usize) {
     let luma = parallel::map_pixels(rgb, |&[r, g, b]| [0.25 * r + 0.5 * g + 0.25 * b]);
     let rgb_snapshot = &*rgb;
