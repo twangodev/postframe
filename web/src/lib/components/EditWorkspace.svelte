@@ -23,7 +23,25 @@
 	let { workspace, onExport }: Props = $props();
 
 	let before = $state(false);
+	let beforeHeldByKey = false;
 	let fittedPhotoKey = '';
+
+	function holdOriginal(event: KeyboardEvent) {
+		if (event.key !== '\\' || event.repeat || editableTarget(event.target)) return;
+		beforeHeldByKey = true;
+		before = true;
+	}
+
+	function releaseOriginal(event: Event) {
+		if (!beforeHeldByKey) return;
+		if (event instanceof KeyboardEvent && event.key !== '\\') return;
+		beforeHeldByKey = false;
+		before = false;
+	}
+
+	$effect(() => {
+		workspace.compareOriginal(before);
+	});
 
 	const inspectorTabs = ['adjust', 'mask', 'layers'] as const;
 	const inspectorTabClass =
@@ -89,11 +107,17 @@
 		window.addEventListener('keydown', viewport.handleKeyDown);
 		window.addEventListener('keyup', viewport.handleKeyUp);
 		window.addEventListener('blur', viewport.handleBlur);
+		window.addEventListener('keydown', holdOriginal);
+		window.addEventListener('keyup', releaseOriginal);
+		window.addEventListener('blur', releaseOriginal);
 		return () => {
 			observer.disconnect();
 			window.removeEventListener('keydown', viewport.handleKeyDown);
 			window.removeEventListener('keyup', viewport.handleKeyUp);
 			window.removeEventListener('blur', viewport.handleBlur);
+			window.removeEventListener('keydown', holdOriginal);
+			window.removeEventListener('keyup', releaseOriginal);
+			window.removeEventListener('blur', releaseOriginal);
 		};
 	});
 </script>

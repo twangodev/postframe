@@ -91,9 +91,9 @@
 		</p>
 	{/if}
 
-	<!-- TODO(WASM_TODOS.previewRendering): switch between original and rendered Wasm output. -->
 	<button
 		type="button"
+		title="compare with the original (hold \\)"
 		class="flex h-6 cursor-pointer items-center gap-1.5 rounded border border-subtle px-2 text-[11px] text-muted transition-colors hover:text-text"
 		onclick={() => (before = !before)}
 	>

@@ -51,6 +51,7 @@ import {
 } from './adjustment-controls';
 import { AutoAdjustments } from './auto-adjustments';
 import { noClipping, type ClippingIndicators, type ClippingKind } from './clipping';
+import { DevelopComparison } from './develop-comparison.ts';
 import { DevelopPreviewController, type DevelopPreviewPhase } from './develop-preview';
 import { DocumentSession, type DocumentStatus } from './document-session';
 import { EditorSession } from './editor-session';
@@ -98,6 +99,7 @@ export class WorkspaceState {
 	private stopStorageObserving = () => {};
 	private readonly thumbnails: ThumbnailLoader;
 	private readonly develop: DevelopPreviewController;
+	private readonly comparison: DevelopComparison;
 	private readonly pipeline: MaskRasterPipeline;
 	private readonly smartMasks: SmartMasking;
 	private readonly painting: MaskPainting;
@@ -161,6 +163,7 @@ export class WorkspaceState {
 	mixer = $state(defaultMixerSettings());
 	grading = $state(defaultGradingSettings());
 	settingsClipboard = $state<SettingsClipboard | null>(null);
+	comparingOriginal = $state(false);
 	renderSettings = $state<{
 		adjustments: DevelopSettings;
 		crop: NormalizedCrop | null;
@@ -226,6 +229,7 @@ export class WorkspaceState {
 		this.smartMasks = new SmartMasking(this.pipeline, host);
 		this.painting = new MaskPainting(this.pipeline, this.smartMasks, host);
 		this.ranging = new MaskRanging(this.workerClient, this.pipeline, host);
+		this.comparison = new DevelopComparison(this.pipeline, host);
 		this.controls = new AdjustmentControls(this.develop, this.pipeline, host);
 		this.auto = new AutoAdjustments(this.workerClient, this.controls, host);
 		this.editor = new EditorSession(this.develop, this.pipeline, this.persistence, host);
@@ -270,6 +274,7 @@ export class WorkspaceState {
 				'modelPreloadStatus',
 				'developPreview',
 				'renderSettings',
+				'comparingOriginal',
 				'history',
 				'canUndo',
 				'canRedo',
@@ -584,6 +589,10 @@ export class WorkspaceState {
 	redo = () => this.editor.redo();
 
 	settleDevelopRender = (revision: number) => this.develop.settle(revision);
+
+	compareOriginal = (comparing: boolean) => {
+		void this.comparison.set(comparing);
+	};
 
 	toggleClipping = (kind?: ClippingKind) => {
 		const both = this.clipping.highlights && this.clipping.shadows;

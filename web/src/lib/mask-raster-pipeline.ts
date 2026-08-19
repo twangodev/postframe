@@ -100,6 +100,10 @@ export class MaskRasterPipeline {
 		this.host.markRefining(this.host.renderSettings.revision);
 	}
 
+	async clearMaskCompositors() {
+		await this.workerClient?.setMasks([]).catch(() => {});
+	}
+
 	async installMaskCompositors(document: EditDocument, stillCurrent: () => boolean) {
 		try {
 			const masks = await this.renderMasks(document);
