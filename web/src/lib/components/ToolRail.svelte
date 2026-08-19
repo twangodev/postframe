@@ -46,25 +46,14 @@
 		WandSparkles,
 		ZoomIn
 	} from '@lucide/svelte';
+	import SelectableRow from './ui/SelectableRow.svelte';
+	import { TOOL_GROUPS, type ToolGroup, type ToolId } from '$lib/editor-tools';
 
 	type Icon = Component<Record<string, unknown>>;
 
-	interface Tool {
-		id: string;
-		label: string;
-		shortcut?: string;
-		icon: Icon;
-	}
-
-	interface ToolGroup {
-		id: string;
-		label: string;
-		tools: Tool[];
-	}
-
 	interface Props {
 		activeTool: string;
-		onSelect: (id: string, label: string) => void;
+		onSelect: (id: string) => void;
 		canUndo: boolean;
 		canRedo: boolean;
 		onUndo: () => void;
@@ -74,151 +63,89 @@
 	let { activeTool, onSelect, canUndo, canRedo, onUndo, onRedo }: Props = $props();
 	let openGroup = $state<string | null>(null);
 
-	const groups: ToolGroup[] = [
-		{
-			id: 'view',
-			label: 'move & view',
-			tools: [
-				{ id: 'move', label: 'move', shortcut: 'V', icon: Move },
-				{ id: 'hand', label: 'hand', shortcut: 'H', icon: Hand },
-				{ id: 'zoom', label: 'zoom', shortcut: 'Z', icon: ZoomIn },
-				{ id: 'rotate-view', label: 'rotate view', shortcut: 'R', icon: RotateCcw }
-			]
-		},
-		{
-			id: 'select',
-			label: 'selection',
-			tools: [
-				{ id: 'object-select', label: 'object selection', shortcut: 'W', icon: ScanSearch },
-				{ id: 'quick-select', label: 'quick selection', shortcut: 'W', icon: Brush },
-				{ id: 'magic-wand', label: 'magic wand', shortcut: 'W', icon: WandSparkles },
-				{ id: 'marquee', label: 'rectangular marquee', shortcut: 'M', icon: SquareDashed },
-				{ id: 'ellipse-marquee', label: 'elliptical marquee', shortcut: 'M', icon: CircleDashed },
-				{
-					id: 'single-row-marquee',
-					label: 'single row marquee',
-					shortcut: 'M',
-					icon: SquareDashed
-				},
-				{
-					id: 'single-column-marquee',
-					label: 'single column marquee',
-					shortcut: 'M',
-					icon: SquareDashed
-				},
-				{ id: 'lasso', label: 'lasso', shortcut: 'L', icon: Lasso },
-				{ id: 'polygon-lasso', label: 'polygonal lasso', shortcut: 'L', icon: Spline },
-				{ id: 'magnetic-lasso', label: 'magnetic lasso', shortcut: 'L', icon: Magnet }
-			]
-		},
-		{
-			id: 'crop',
-			label: 'crop & frame',
-			tools: [
-				{ id: 'crop', label: 'crop', shortcut: 'C', icon: Crop },
-				{ id: 'perspective-crop', label: 'perspective crop', shortcut: 'C', icon: ScanLine },
-				{ id: 'slice', label: 'slice', shortcut: 'C', icon: Slice },
-				{ id: 'slice-select', label: 'slice selection', shortcut: 'C', icon: MousePointer },
-				{ id: 'frame', label: 'frame', shortcut: 'K', icon: Frame }
-			]
-		},
-		{
-			id: 'retouch',
-			label: 'retouch',
-			tools: [
-				{ id: 'remove', label: 'remove', icon: Sparkles },
-				{ id: 'spot-heal', label: 'spot healing brush', icon: Bandage },
-				{ id: 'healing-brush', label: 'healing brush', icon: Pipette },
-				{ id: 'patch', label: 'patch', icon: Scan },
-				{ id: 'content-aware-move', label: 'content-aware move', icon: Move },
-				{ id: 'clone-stamp', label: 'clone stamp', shortcut: 'S', icon: Stamp },
-				{ id: 'red-eye', label: 'red eye', icon: Eye },
-				{ id: 'blur', label: 'blur', icon: Droplets },
-				{ id: 'sharpen', label: 'sharpen', icon: Triangle },
-				{ id: 'smudge', label: 'smudge', icon: Fingerprint },
-				{ id: 'dodge', label: 'dodge', shortcut: 'O', icon: SunMedium },
-				{ id: 'burn', label: 'burn', shortcut: 'O', icon: Moon },
-				{ id: 'sponge', label: 'sponge', shortcut: 'O', icon: CircleDot },
-				{ id: 'background-eraser', label: 'background eraser', shortcut: 'E', icon: Eraser },
-				{ id: 'magic-eraser', label: 'magic eraser', shortcut: 'E', icon: WandSparkles }
-			]
-		},
-		{
-			id: 'paint',
-			label: 'paint & fill',
-			tools: [
-				{ id: 'brush', label: 'brush', shortcut: 'B', icon: Brush },
-				{ id: 'pencil', label: 'pencil', shortcut: 'B', icon: Pencil },
-				{ id: 'mixer-brush', label: 'mixer brush', shortcut: 'B', icon: Paintbrush },
-				{ id: 'color-replacement', label: 'color replacement', shortcut: 'B', icon: Pipette },
-				{ id: 'history-brush', label: 'history brush', shortcut: 'Y', icon: RotateCcw },
-				{ id: 'art-history-brush', label: 'art history brush', shortcut: 'Y', icon: Sparkles },
-				{ id: 'eraser', label: 'eraser', shortcut: 'E', icon: Eraser },
-				{ id: 'gradient', label: 'gradient', shortcut: 'G', icon: Blend },
-				{ id: 'paint-bucket', label: 'paint bucket', shortcut: 'G', icon: PaintBucket },
-				{ id: 'eyedropper', label: 'eyedropper', shortcut: 'I', icon: Pipette },
-				{ id: 'color-sampler', label: 'color sampler', shortcut: 'I', icon: Crosshair },
-				{ id: 'pattern-stamp', label: 'pattern stamp', shortcut: 'S', icon: Stamp }
-			]
-		},
-		{
-			id: 'draw',
-			label: 'type & vector',
-			tools: [
-				{ id: 'pen', label: 'pen', shortcut: 'P', icon: PenTool },
-				{ id: 'freeform-pen', label: 'freeform pen', shortcut: 'P', icon: Pencil },
-				{ id: 'curvature-pen', label: 'curvature pen', shortcut: 'P', icon: Spline },
-				{ id: 'add-anchor', label: 'add anchor point', icon: PenTool },
-				{ id: 'delete-anchor', label: 'delete anchor point', icon: PenTool },
-				{ id: 'convert-point', label: 'convert point', icon: Spline },
-				{ id: 'path-select', label: 'path selection', shortcut: 'A', icon: MousePointer },
-				{ id: 'type', label: 'horizontal type', shortcut: 'T', icon: Type },
-				{ id: 'vertical-type', label: 'vertical type', shortcut: 'T', icon: Type },
-				{ id: 'type-mask', label: 'type mask', shortcut: 'T', icon: Type },
-				{ id: 'shape', label: 'rectangle', shortcut: 'U', icon: Shapes },
-				{ id: 'ellipse-shape', label: 'ellipse', shortcut: 'U', icon: Shapes },
-				{ id: 'triangle-shape', label: 'triangle', shortcut: 'U', icon: Triangle },
-				{ id: 'polygon-shape', label: 'polygon', shortcut: 'U', icon: Shapes },
-				{ id: 'star-shape', label: 'star', shortcut: 'U', icon: Sparkles },
-				{ id: 'line-shape', label: 'line', shortcut: 'U', icon: Shapes },
-				{ id: 'custom-shape', label: 'custom shape', shortcut: 'U', icon: Shapes }
-			]
-		},
-		{
-			id: 'measure',
-			label: 'measure',
-			tools: [
-				{ id: 'ruler', label: 'ruler', shortcut: 'I', icon: Ruler },
-				{ id: 'note', label: 'note', icon: MessageSquare },
-				{ id: 'count', label: 'count', icon: ListOrdered }
-			]
-		},
-		{
-			id: 'generate',
-			label: 'generative',
-			tools: [
-				{ id: 'generative-fill', label: 'generative fill', icon: Sparkles },
-				{ id: 'content-aware-fill', label: 'content-aware fill', icon: Scan },
-				{ id: 'remove-background', label: 'remove background', icon: ImageMinus }
-			]
-		},
-		{
-			id: 'mask',
-			label: 'masking',
-			tools: [
-				{ id: 'mask', label: 'mask brush', shortcut: 'Q', icon: CircleDashed },
-				{ id: 'mask-linear', label: 'linear mask', icon: Blend },
-				{ id: 'mask-radial', label: 'radial mask', icon: CircleDot }
-			]
-		}
-	];
+	const icons: Record<ToolId, Icon> = {
+		move: Move,
+		hand: Hand,
+		zoom: ZoomIn,
+		'rotate-view': RotateCcw,
+		'object-select': ScanSearch,
+		'quick-select': Brush,
+		'magic-wand': WandSparkles,
+		marquee: SquareDashed,
+		'ellipse-marquee': CircleDashed,
+		'single-row-marquee': SquareDashed,
+		'single-column-marquee': SquareDashed,
+		lasso: Lasso,
+		'polygon-lasso': Spline,
+		'magnetic-lasso': Magnet,
+		crop: Crop,
+		'perspective-crop': ScanLine,
+		slice: Slice,
+		'slice-select': MousePointer,
+		frame: Frame,
+		remove: Sparkles,
+		'spot-heal': Bandage,
+		'healing-brush': Pipette,
+		patch: Scan,
+		'content-aware-move': Move,
+		'clone-stamp': Stamp,
+		'red-eye': Eye,
+		blur: Droplets,
+		sharpen: Triangle,
+		smudge: Fingerprint,
+		dodge: SunMedium,
+		burn: Moon,
+		sponge: CircleDot,
+		'background-eraser': Eraser,
+		'magic-eraser': WandSparkles,
+		brush: Brush,
+		pencil: Pencil,
+		'mixer-brush': Paintbrush,
+		'color-replacement': Pipette,
+		'history-brush': RotateCcw,
+		'art-history-brush': Sparkles,
+		eraser: Eraser,
+		gradient: Blend,
+		'paint-bucket': PaintBucket,
+		eyedropper: Pipette,
+		'color-sampler': Crosshair,
+		'pattern-stamp': Stamp,
+		pen: PenTool,
+		'freeform-pen': Pencil,
+		'curvature-pen': Spline,
+		'add-anchor': PenTool,
+		'delete-anchor': PenTool,
+		'convert-point': Spline,
+		'path-select': MousePointer,
+		type: Type,
+		'vertical-type': Type,
+		'type-mask': Type,
+		shape: Shapes,
+		'ellipse-shape': Shapes,
+		'triangle-shape': Triangle,
+		'polygon-shape': Shapes,
+		'star-shape': Sparkles,
+		'line-shape': Shapes,
+		'custom-shape': Shapes,
+		ruler: Ruler,
+		note: MessageSquare,
+		count: ListOrdered,
+		'generative-fill': Sparkles,
+		'content-aware-fill': Scan,
+		'remove-background': ImageMinus,
+		mask: CircleDashed,
+		'mask-linear': Blend,
+		'mask-radial': CircleDot
+	};
+
+	const iconFor = (id: string) => icons[id as ToolId];
 
 	function currentTool(group: ToolGroup) {
-		return group.tools.find((tool) => tool.id === activeTool) ?? group.tools[0];
+		return group.tools.find((tool) => tool.id === activeTool) ?? group.tools[0]!;
 	}
 
-	function select(tool: Tool) {
-		onSelect(tool.id, tool.label);
+	function select(id: string) {
+		onSelect(id);
 		openGroup = null;
 	}
 </script>
@@ -226,9 +153,9 @@
 <aside
 	class="motion-panel-left relative z-30 flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-visible border-r border-subtle bg-bg py-2"
 >
-	{#each groups as group (group.id)}
+	{#each TOOL_GROUPS as group (group.id)}
 		{@const selected = currentTool(group)}
-		{@const SelectedIcon = selected.icon}
+		{@const SelectedIcon = iconFor(selected.id)}
 		<div class="relative">
 			<button
 				type="button"
@@ -257,22 +184,18 @@
 				>
 					<p class="px-2 pt-1 pb-1.5 text-[11px] tracking-[0.04em] text-muted">{group.label}</p>
 					{#each group.tools as tool (tool.id)}
-						{@const ToolIcon = tool.icon}
-						<button
-							type="button"
+						{#snippet shortcutKey()}
+							<kbd class="font-mono text-[10px] opacity-55">{tool.shortcut}</kbd>
+						{/snippet}
+						<SelectableRow
 							role="menuitem"
-							class="flex h-8 w-full cursor-pointer items-center gap-2 rounded px-2 text-left text-[12px] transition-colors {activeTool ===
-							tool.id
-								? 'bg-surface text-text'
-								: 'text-muted hover:bg-surface/60 hover:text-text'}"
-							onclick={() => select(tool)}
+							selected={activeTool === tool.id}
+							icon={iconFor(tool.id)}
+							meta={tool.shortcut ? shortcutKey : undefined}
+							onclick={() => select(tool.id)}
 						>
-							<ToolIcon size={13} strokeWidth={1.4} />
-							<span class="flex-1">{tool.label}</span>
-							{#if tool.shortcut}
-								<kbd class="font-mono text-[10px] opacity-55">{tool.shortcut}</kbd>
-							{/if}
-						</button>
+							{tool.label}
+						</SelectableRow>
 					{/each}
 				</div>
 			{/if}

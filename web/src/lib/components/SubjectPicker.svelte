@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Check, X } from '@lucide/svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import { detectedSubjectName, type DetectedSubject } from '$lib/subject-detection';
 	import { coverCrop } from '$lib/subject-picker-crop';
 	import type { NormalizedRegion } from '$lib/edit-document';
@@ -42,14 +43,9 @@
 		<p class="text-[11px] tracking-[0.03em] text-muted">
 			{subjects.length} subjects found · choose one to mask
 		</p>
-		<button
-			type="button"
-			aria-label="Dismiss subject choices"
-			class="cursor-pointer rounded p-0.5 text-muted transition-colors hover:text-text"
-			onclick={onDismiss}
-		>
+		<IconButton label="Dismiss subject choices" onclick={onDismiss}>
 			<X size={12} />
-		</button>
+		</IconButton>
 	</div>
 	<div class="flex flex-wrap gap-1.5">
 		{#each subjects as subject, index (index)}

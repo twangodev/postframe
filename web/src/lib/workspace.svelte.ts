@@ -191,11 +191,14 @@ export class WorkspaceState {
 	backgroundTasks: BackgroundTask[] = $derived(
 		composeBackgroundTasks(this.documentStatus, this.smartMaskStatus, this.modelPreloadStatus)
 	);
-	canAdjustLight = $derived(
-		this.selectedPhoto !== null &&
-			this.documentStatus.kind === 'ready' &&
+	activeDocument = $derived(
+		this.selectedPhoto &&
+			this.documentStatus.kind !== 'idle' &&
 			this.documentStatus.photoId === this.selectedPhoto.id
+			? this.documentStatus
+			: null
 	);
+	canAdjustLight = $derived(this.activeDocument?.kind === 'ready');
 	syncTargetIds = $derived(this.selectedIds.filter((id) => id !== this.activePhotoId));
 	canSync = $derived(this.syncTargetIds.length > 0);
 	selectedMask = $derived(this.masks.find((mask) => mask.id === this.selectedMaskId) ?? null);

@@ -11,41 +11,27 @@
 	import ProgressCard from './ui/ProgressCard.svelte';
 	import { separator, type MenuEntry } from '$lib/menu';
 	import { cropTools, retouchTools, selectionTools, typeTools } from '$lib/editor-tools';
-	import type { NormalizedRegion } from '$lib/edit-document';
-	import type { MaskPreviewMode } from '$lib/mask-preview';
+	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
 	import type { ViewportInteraction } from '$lib/viewport-interaction.svelte';
-	import type { Mask, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
 		viewport: ViewportInteraction;
-		activeTool: string;
-		maskBrushOperation: 'add' | 'subtract';
-		maskPreviewMode: MaskPreviewMode | null;
-		selectedMask: Mask | null;
-		subjectChoices: SubjectChoices | null;
-		hoveredSubjectBox: NormalizedRegion | null;
-		smartMaskWorking: boolean;
+		tools: EditorToolSession;
 		before: boolean;
 		onExport: () => void;
 	}
 
-	let {
-		workspace,
-		viewport,
-		activeTool,
-		maskBrushOperation,
-		maskPreviewMode,
-		selectedMask,
-		subjectChoices,
-		hoveredSubjectBox,
-		smartMaskWorking,
-		before,
-		onExport
-	}: Props = $props();
+	let { workspace, viewport, tools, before, onExport }: Props = $props();
 
 	const active = $derived(workspace.editingPhoto);
+	const activeDocument = $derived(workspace.activeDocument);
+	const activeTool = $derived(tools.tool);
+	const maskPreviewMode = $derived(tools.maskPreviewMode);
+	const selectedMask = $derived(tools.selectedMask);
 	const imageSize = $derived(viewport.image);
+	const frame = $derived({ image: imageSize, scale: viewport.transform.scale });
 	const surfaceStyle = $derived(
 		`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`
 	);
@@ -87,6 +73,26 @@
 	}
 </script>
 
+{#snippet viewportNotice(title: string, detail: string | null)}
+	<div
+		class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
+	>
+		<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
+			<p class="text-[12px]">{title}</p>
+			{#if detail}
+				<p class="text-[10px] leading-relaxed text-white/55">{detail}</p>
+			{/if}
+			<button
+				type="button"
+				class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
+				onclick={workspace.reloadDocument}
+			>
+				retry
+			</button>
+		</div>
+	</div>
+{/snippet}
+
 <ContextMenu items={viewportMenu} onAction={runViewportAction}>
 	{#snippet children({ props })}
 		<div
@@ -115,7 +121,7 @@
 						style={surfaceStyle}
 					>
 						<PhotoVisual photo={active} contain onRequest={workspace.loadThumbnail} />
-						{#if workspace.documentStatus.kind === 'loading' && workspace.documentStatus.photoId === active.id && workspace.documentStatus.phase !== 'reading'}
+						{#if activeDocument?.kind === 'loading' && activeDocument.phase !== 'reading'}
 							<div class="absolute inset-0 z-20 overflow-hidden text-white">
 								<div class="develop-soft-focus pointer-events-none absolute inset-0"></div>
 								<div
@@ -135,8 +141,7 @@
 					</div>
 					<PhotoPyramidLayer
 						photoId={active.id}
-						enabled={workspace.documentStatus.kind === 'ready' &&
-							workspace.documentStatus.photoId === active.id}
+						enabled={activeDocument?.kind === 'ready'}
 						viewport={viewport.size}
 						image={imageSize}
 						transform={viewport.transform}
@@ -207,8 +212,7 @@
 						{#if viewport.livePaint ?? viewport.settlingPaint}
 							<MaskPaintPreview
 								paint={(viewport.livePaint ?? viewport.settlingPaint)!}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
+								image={imageSize}
 								mode={maskPreviewMode === 'matte' ? 'matte' : 'overlay'}
 							/>
 						{/if}
@@ -216,9 +220,7 @@
 							<MaskPromptOverlay
 								points={viewport.objectStroke.points}
 								label={viewport.objectStroke.label}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.edgeRefinementStroke}
@@ -226,19 +228,15 @@
 								points={viewport.edgeRefinementStroke.points}
 								label="refine"
 								brushRadius={viewport.edgeRefinementStroke.radius}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
-						{#if viewport.maskStroke && maskBrushOperation === 'subtract'}
+						{#if viewport.maskStroke && tools.maskBrushOperation === 'subtract'}
 							<MaskPromptOverlay
 								points={viewport.maskStroke.points}
 								label="background"
 								brushRadius={viewport.maskBrushSize / 2}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.gizmoComponent}
@@ -247,29 +245,20 @@
 								hover={viewport.gizmoHover}
 								active={viewport.gizmoDrag?.grip ?? null}
 								angle={viewport.gizmoAngle}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
-						{#if viewport.brushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !smartMaskWorking))}
+						{#if viewport.brushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !tools.smartMaskWorking))}
 							<MaskBrushCursor
 								point={viewport.brushPoint}
 								radius={activeTool === 'mask'
 									? viewport.maskBrushSize / 2
 									: (viewport.edgeRefinementStroke?.radius ?? viewport.refineBrushRadius)}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
-						{#if subjectChoices && hoveredSubjectBox}
-							<SubjectHoverBox
-								box={hoveredSubjectBox}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
-							/>
+						{#if tools.subjectChoices && tools.hoveredSubjectBox}
+							<SubjectHoverBox box={tools.hoveredSubjectBox} {frame} />
 						{/if}
 					</div>
 				{/key}
@@ -287,39 +276,10 @@
 						<ProgressCard task={workspace.viewportProgress} variant="floating" />
 					</div>
 				{/if}
-				{#if workspace.documentStatus.kind === 'cancelled' && workspace.documentStatus.photoId === active.id}
-					<div
-						class="absolute inset-0 z-20 flex items-center justify-center bg-black/50 px-6 text-center text-white backdrop-blur-[1px]"
-					>
-						<div class="motion-enter flex flex-col items-center gap-2.5">
-							<p class="text-[12px]">development stopped</p>
-							<button
-								type="button"
-								class="cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
-								onclick={workspace.reloadDocument}
-							>
-								retry
-							</button>
-						</div>
-					</div>
-				{:else if workspace.documentStatus.kind === 'error' && workspace.documentStatus.photoId === active.id}
-					<div
-						class="absolute inset-0 z-20 flex items-center justify-center bg-black/60 px-6 text-center text-white backdrop-blur-[1px]"
-					>
-						<div class="motion-enter flex max-w-72 flex-col items-center gap-2.5">
-							<p class="text-[12px]">couldn't open raw</p>
-							<p class="text-[10px] leading-relaxed text-white/55">
-								{workspace.documentStatus.message}
-							</p>
-							<button
-								type="button"
-								class="mt-1 cursor-pointer rounded border border-white/20 px-2.5 py-1 text-[11px] transition-colors hover:bg-white/10"
-								onclick={workspace.reloadDocument}
-							>
-								retry
-							</button>
-						</div>
-					</div>
+				{#if activeDocument?.kind === 'cancelled'}
+					{@render viewportNotice('development stopped', null)}
+				{:else if activeDocument?.kind === 'error'}
+					{@render viewportNotice("couldn't open raw", activeDocument.message)}
 				{/if}
 			{:else}
 				<p class="absolute inset-0 flex items-center justify-center text-[11px] text-muted">

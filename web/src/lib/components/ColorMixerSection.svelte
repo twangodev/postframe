@@ -1,6 +1,7 @@
 <script lang="ts">
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import {
 		MIXER_BAND_CONTROL_NAMES,
 		MIXER_BAND_NAMES,
@@ -39,28 +40,24 @@
 		binding.commitAdjustmentAt(target(control), value);
 </script>
 
+{#snippet bandDot(name: MixerBandName)}
+	<span
+		class="mx-auto block size-1 rounded-full bg-bg transition-opacity"
+		class:opacity-0={!moved(name)}
+	></span>
+{/snippet}
+
 <Panel title="Color mixer" bind:open>
-	<div class="mb-2 flex gap-1" role="radiogroup" aria-label="Mixer band">
-		{#each MIXER_BAND_NAMES as name (name)}
-			<button
-				type="button"
-				role="radio"
-				aria-checked={band === name}
-				aria-label={name}
-				title={name}
-				onclick={() => (band = name)}
-				class="h-6 flex-1 cursor-pointer rounded border transition-colors {band === name
-					? 'border-control-active'
-					: 'border-transparent hover:border-muted'}"
-				style="background-color: hsl({SWATCH_HUES[name]} 62% 46%)"
-			>
-				<span
-					class="mx-auto block size-1 rounded-full bg-bg transition-opacity"
-					class:opacity-0={!moved(name)}
-				></span>
-			</button>
-		{/each}
-	</div>
+	<SegmentedControl
+		options={MIXER_BAND_NAMES}
+		bind:value={band}
+		label="Mixer band"
+		class="mb-2"
+		itemClass="border-transparent hover:border-muted data-[state=on]:border-control-active"
+		itemStyle={(name) => `background-color: hsl(${SWATCH_HUES[name]} 62% 46%)`}
+		itemTitle={(name) => name}
+		item={bandDot}
+	/>
 	{#each MIXER_BAND_CONTROL_NAMES as control (control)}
 		<AdjustmentSlider
 			label={`Band ${control}`}

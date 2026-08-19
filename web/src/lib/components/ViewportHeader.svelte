@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { DropdownMenu } from 'bits-ui';
 	import { Columns2, Maximize2, Minus, Plus } from '@lucide/svelte';
-	import Tooltip from './ui/Tooltip.svelte';
+	import DropdownMenu from './ui/DropdownMenu.svelte';
+	import IconButton from './ui/IconButton.svelte';
+	import { separator, type MenuLeaf } from '$lib/menu';
 	import { ZOOM_MENU_PRESETS } from '$lib/photo-viewport';
 	import type { ViewportInteraction } from '$lib/viewport-interaction.svelte';
 
@@ -13,8 +14,40 @@
 
 	let { viewport, photoName, before = $bindable() }: Props = $props();
 
-	const zoomMenuItemClass =
-		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
+	type ZoomAction = 'fit' | 'actual' | number;
+
+	const manualScale = (scale: number) =>
+		viewport.mode === 'manual' && Math.abs(viewport.transform.scale - scale) < 0.0001;
+
+	const zoomMenu: MenuLeaf<ZoomAction>[] = $derived([
+		{
+			kind: 'action',
+			label: 'fit',
+			action: 'fit',
+			shortcut: '0',
+			checked: viewport.mode === 'fit'
+		},
+		{
+			kind: 'action',
+			label: 'actual pixels',
+			action: 'actual',
+			shortcut: '1',
+			checked: manualScale(1)
+		},
+		separator(),
+		...ZOOM_MENU_PRESETS.map((scale): MenuLeaf<ZoomAction> => ({
+			kind: 'action',
+			label: formatZoom(scale),
+			action: scale,
+			checked: manualScale(scale)
+		}))
+	]);
+
+	function runZoomAction(action: ZoomAction) {
+		if (action === 'fit') viewport.fitPhoto();
+		else if (action === 'actual') viewport.showActualPixels();
+		else viewport.setZoom(action);
+	}
 
 	function formatZoom(scale: number) {
 		const percent = scale * 100;
@@ -24,79 +57,32 @@
 
 <div class="flex h-9 shrink-0 items-center justify-between border-b border-subtle bg-bg px-3">
 	<div class="flex items-center gap-1 text-muted">
-		<Tooltip text="Fit image to view">
-			{#snippet children(props)}
+		<IconButton
+			label="Fit image to view"
+			tooltip
+			active={viewport.mode === 'fit'}
+			onclick={viewport.fitPhoto}
+		>
+			<Maximize2 size={12} />
+		</IconButton>
+		<IconButton label="Zoom out" onclick={viewport.zoomOut}>
+			<Minus size={12} />
+		</IconButton>
+		<DropdownMenu items={zoomMenu} onAction={runZoomAction} size="compact">
+			{#snippet children({ props })}
 				<button
 					{...props}
 					type="button"
-					aria-label="Fit image to view"
-					class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text {viewport.mode ===
-					'fit'
-						? 'text-accent'
-						: ''}"
-					onclick={viewport.fitPhoto}
+					aria-label="Choose zoom level"
+					class="flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[11px] tabular-nums outline-none hover:bg-surface hover:text-text"
 				>
-					<Maximize2 size={12} />
+					{formatZoom(viewport.transform.scale)}
 				</button>
 			{/snippet}
-		</Tooltip>
-		<button
-			type="button"
-			aria-label="Zoom out"
-			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
-			onclick={viewport.zoomOut}
-		>
-			<Minus size={12} />
-		</button>
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger
-				aria-label="Choose zoom level"
-				class="flex h-6 min-w-12 cursor-pointer items-center justify-center rounded px-1 font-mono text-[11px] tabular-nums outline-none hover:bg-surface hover:text-text"
-			>
-				{formatZoom(viewport.transform.scale)}
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Portal>
-				<DropdownMenu.Content
-					align="start"
-					sideOffset={4}
-					class="motion-menu z-50 min-w-36 rounded border border-subtle bg-bg p-1 shadow-2xl"
-				>
-					<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.fitPhoto}>
-						<span class="w-3 text-accent">{viewport.mode === 'fit' ? '•' : ''}</span>
-						<span class="flex-1">fit</span>
-						<kbd class="font-mono text-[10px] text-muted">0</kbd>
-					</DropdownMenu.Item>
-					<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.showActualPixels}>
-						<span class="w-3 text-accent"
-							>{viewport.mode === 'manual' && Math.abs(viewport.transform.scale - 1) < 0.0001
-								? '•'
-								: ''}</span
-						>
-						<span class="flex-1">actual pixels</span>
-						<kbd class="font-mono text-[10px] text-muted">1</kbd>
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
-					{#each ZOOM_MENU_PRESETS as scale}
-						<DropdownMenu.Item class={zoomMenuItemClass} onSelect={viewport.chooseZoom(scale)}>
-							<span class="w-3 text-accent"
-								>{viewport.mode === 'manual' && Math.abs(viewport.transform.scale - scale) < 0.0001
-									? '•'
-									: ''}</span
-							>
-							<span>{formatZoom(scale)}</span>
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Content>
-			</DropdownMenu.Portal>
-		</DropdownMenu.Root>
-		<button
-			type="button"
-			aria-label="Zoom in"
-			class="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-surface hover:text-text"
-			onclick={viewport.zoomIn}
-		>
+		</DropdownMenu>
+		<IconButton label="Zoom in" onclick={viewport.zoomIn}>
 			<Plus size={12} />
-		</button>
+		</IconButton>
 	</div>
 
 	{#if photoName !== null}

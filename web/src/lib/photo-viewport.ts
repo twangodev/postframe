@@ -38,6 +38,25 @@ export const ZOOM_PRESETS = [
 ] as const;
 export const ZOOM_MENU_PRESETS = [0.05, 0.1, 0.25, 0.5, 2, 4, 8, 16, 32] as const;
 
+export function maxDimension(image: Size) {
+	return Math.max(image.width, image.height);
+}
+
+export function normalizedLength(value: number, image: Size) {
+	return value * maxDimension(image);
+}
+
+export function normalizedToPixel(point: { x: number; y: number }, image: Size): Point {
+	return { x: point.x * image.width, y: point.y * image.height };
+}
+
+export function pixelToNormalized(point: Point, image: Size) {
+	return {
+		x: clamp(point.x / image.width, 0, 1),
+		y: clamp(point.y / image.height, 0, 1)
+	};
+}
+
 export function fitScale(viewport: Size, image: Size, inset = VIEWPORT_INSET) {
 	if (!validSize(viewport) || !validSize(image)) return 1;
 	const availableWidth = Math.max(1, viewport.width - inset * 2);

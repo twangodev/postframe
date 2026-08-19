@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import {
 		CURVE_CHANNEL_NAMES,
 		identityCurve,
@@ -9,7 +10,8 @@
 		type CurvePoints
 	} from '$lib/develop-settings';
 	import type { DevelopBinding } from '$lib/develop-binding';
-	import { histogramProfile, type ImageScopeData } from '$lib/image-scope';
+	import { histogramProfile, type HistogramChannel, type ImageScopeData } from '$lib/image-scope';
+	import { pointerFraction } from '$lib/pointer-fraction';
 	import { addCurvePoint, curveSamples, draggedCurve, nearestCurvePoint } from '$lib/tone-curve';
 
 	interface Props {
@@ -33,12 +35,11 @@
 		green: 'G',
 		blue: 'B'
 	};
-	// The scope packs its bins as red, green, blue, then luma.
-	const CHANNEL_BIN: Record<CurveChannelName, number> = {
-		luminance: 3,
-		red: 0,
-		green: 1,
-		blue: 2
+	const CHANNEL_SOURCE: Record<CurveChannelName, HistogramChannel> = {
+		luminance: 'luma',
+		red: 'red',
+		green: 'green',
+		blue: 'blue'
 	};
 
 	type PlotEvent = PointerEvent & { currentTarget: SVGSVGElement };
@@ -59,7 +60,7 @@
 		)
 	);
 	const histogram = $derived(
-		scope ? histogramProfile(scope.histogram, CHANNEL_BIN[channel]) : null
+		scope ? histogramProfile(scope.histogram, CHANNEL_SOURCE[channel]) : null
 	);
 	const backdrop = $derived(
 		histogram
@@ -76,11 +77,8 @@
 	}
 
 	function positionOf(event: PlotEvent): CurvePoint {
-		const bounds = event.currentTarget.getBoundingClientRect();
-		return {
-			x: (event.clientX - bounds.left) / bounds.width,
-			y: 1 - (event.clientY - bounds.top) / bounds.height
-		};
+		const { x, y } = pointerFraction(event, event.currentTarget);
+		return { x, y: 1 - y };
 	}
 
 	function grab(event: PlotEvent) {
@@ -116,33 +114,27 @@
 	}
 </script>
 
+{#snippet channelChip(name: CurveChannelName)}
+	{CHANNEL_LABEL[name]}
+{/snippet}
+
 <Panel
 	title="Curve"
 	open={false}
 	meta={shaped.length ? shaped.map((n) => CHANNEL_LABEL[n]).join('') : 'linear'}
 >
 	<div class="space-y-2">
-		<div class="flex gap-1" role="radiogroup" aria-label="Tone curve channel">
-			{#each CURVE_CHANNEL_NAMES as name (name)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={channel === name}
-					aria-label="{name} curve"
-					{disabled}
-					onclick={() => (channel = name)}
-					class="h-6 flex-1 cursor-pointer rounded border text-[11px] transition-colors disabled:cursor-default {channel ===
-					name
-						? 'border-subtle bg-surface'
-						: 'border-transparent hover:border-subtle'}"
-					style:color={channel === name || shaped.includes(name)
-						? CHANNEL_STROKE[name]
-						: 'var(--color-muted)'}
-				>
-					{CHANNEL_LABEL[name]}
-				</button>
-			{/each}
-		</div>
+		<SegmentedControl
+			options={CURVE_CHANNEL_NAMES}
+			bind:value={channel}
+			label="Tone curve channel"
+			{disabled}
+			itemLabel={(name) => `${name} curve`}
+			itemClass="border-transparent text-[11px] hover:border-subtle disabled:cursor-default data-[state=on]:border-subtle data-[state=on]:bg-surface"
+			itemStyle={(name) =>
+				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}`}
+			item={channelChip}
+		/>
 
 		<svg
 			viewBox="0 0 100 100"

@@ -2,11 +2,16 @@ import { extendedStroke } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import { GizmoSession } from './gizmo-session.svelte.ts';
 import type { GradientComponent } from './mask-painting.ts';
-import type { MaskBrushStroke } from './mask-rasterizer.ts';
-import { screenToImage, withinImage, type Point, type Size } from './photo-viewport.ts';
+import type { LivePaint, MaskBrushStroke } from './mask-rasterizer.ts';
+import {
+	pixelToNormalized,
+	screenToImage,
+	withinImage,
+	type Point,
+	type Size
+} from './photo-viewport.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
 import { ViewportCamera } from './viewport-camera.svelte.ts';
-import type { LivePaint } from './components/MaskPaintPreview.svelte';
 
 export const MASK_BRUSH_FEATHER = 0.45;
 export const MASK_BRUSH_FLOW = 1;
@@ -156,7 +161,6 @@ export class ViewportInteraction {
 	stepZoom = (direction: -1 | 1, anchor?: Point) => this.camera.stepZoom(direction, anchor);
 	zoomIn = () => this.camera.stepZoom(1);
 	zoomOut = () => this.camera.stepZoom(-1);
-	chooseZoom = (scale: number) => () => this.camera.setZoom(scale);
 
 	handleWheel = (event: WheelEvent) => {
 		if (!this.context.enabled()) return;
@@ -387,7 +391,7 @@ export class ViewportInteraction {
 	private normalizedImagePoint(point: Point) {
 		const imagePoint = screenToImage(point, this.size, this.image, this.transform);
 		if (!withinImage(imagePoint, this.image)) return null;
-		return { x: imagePoint.x / this.image.width, y: imagePoint.y / this.image.height };
+		return pixelToNormalized(imagePoint, this.image);
 	}
 
 	private imagePixel(point: Point): Point {

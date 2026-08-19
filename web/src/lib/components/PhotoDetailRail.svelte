@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Flag } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import RatingStars from './ui/RatingStars.svelte';
 	import { colorLabelChoices, labelColors, metadataRows } from '$lib/photo-format';
 	import { formatBytes, type WorkspaceState } from '$lib/workspace.svelte';
@@ -34,14 +35,13 @@
 						{active.extension} · {formatBytes(active.size)}
 					</p>
 				</div>
-				<button
-					type="button"
-					aria-label={active.flagged ? 'Remove flag' : 'Flag photo'}
-					class="cursor-pointer rounded p-1 text-muted transition-colors hover:text-text"
+				<IconButton
+					label={active.flagged ? 'Remove flag' : 'Flag photo'}
+					size={7}
 					onclick={() => workspace.toggleFlag(active.id)}
 				>
 					<Flag size={14} class={active.flagged ? 'fill-text text-text' : ''} />
-				</button>
+				</IconButton>
 			</div>
 			<div class="mt-3 flex items-center justify-between">
 				<RatingStars

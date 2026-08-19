@@ -11,6 +11,7 @@
 		Trash2
 	} from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -63,9 +64,9 @@
 					<CircleDashed size={12} />
 				</div>
 				<span class="min-w-0 flex-1 truncate text-[11px]">{mask.name}</span>
-				<button type="button" aria-label="Layer options" class="text-muted hover:text-text">
+				<IconButton label="Layer options">
 					<MoreHorizontal size={12} />
-				</button>
+				</IconButton>
 			</div>
 		{/each}
 
@@ -84,26 +85,14 @@
 	<div
 		class="sticky bottom-0 mt-4 flex h-9 items-center justify-end gap-1 border-t border-subtle bg-bg px-2"
 	>
-		<button
-			type="button"
-			aria-label="Add layer mask"
-			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-text"
-		>
+		<IconButton label="Add layer mask">
 			<CircleDashed size={12} />
-		</button>
-		<button
-			type="button"
-			aria-label="New layer"
-			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-text"
-		>
+		</IconButton>
+		<IconButton label="New layer">
 			<Plus size={12} />
-		</button>
-		<button
-			type="button"
-			aria-label="Delete layer"
-			class="flex size-6 items-center justify-center rounded text-muted hover:bg-surface hover:text-negative"
-		>
+		</IconButton>
+		<IconButton label="Delete layer" tone="danger">
 			<Trash2 size={12} />
-		</button>
+		</IconButton>
 	</div>
 </Tabs.Content>

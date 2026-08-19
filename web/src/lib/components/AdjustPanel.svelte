@@ -16,7 +16,7 @@
 	interface Props {
 		workspace: WorkspaceState;
 		activeTool: string;
-		onPickTool: (tool: string, label?: string) => void;
+		onPickTool: (tool: string) => void;
 	}
 
 	let { workspace, activeTool, onPickTool }: Props = $props();
@@ -28,7 +28,7 @@
 	<div class="border-b border-subtle p-3">
 		<ImageScope
 			data={workspace.imageScope}
-			loading={workspace.documentStatus.kind === 'loading'}
+			loading={workspace.activeDocument?.kind === 'loading'}
 			clipping={workspace.clipping}
 			onToggleClipping={workspace.toggleClipping}
 		/>

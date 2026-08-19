@@ -165,7 +165,7 @@ test('builds a luminance range mask from the source and lights only what it sele
 	const shadowAfter = (await renderedPixel(page, shadowPoint))!;
 	expect(Math.abs(luma(shadowAfter) - luma(shadowBefore))).toBeLessThan(6);
 
-	await aside.getByRole('tab', { name: 'intersect', exact: true }).click();
+	await aside.getByRole('radio', { name: 'intersect', exact: true }).click();
 	await aside.getByRole('button', { name: 'colour range', exact: true }).click();
 	await expect
 		.poll(() => storedMasks(page), { timeout: 15_000 })

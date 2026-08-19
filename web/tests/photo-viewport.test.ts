@@ -6,6 +6,10 @@ import {
 	fitScale,
 	fittedTransform,
 	imageToScreen,
+	maxDimension,
+	normalizedLength,
+	normalizedToPixel,
+	pixelToNormalized,
 	nextZoomScale,
 	panBy,
 	pixelGridOpacity,
@@ -113,4 +117,13 @@ test('fades the source pixel grid in only at useful magnification', () => {
 	assert.equal(pixelGridOpacity(7), 0.5);
 	assert.equal(pixelGridOpacity(8), 1);
 	assert.equal(pixelGridOpacity(32), 1);
+});
+
+test('normalized coordinates convert per axis and lengths follow the longest side', () => {
+	const image = { width: 200, height: 100 };
+	assert.deepEqual(normalizedToPixel({ x: 0.25, y: 0.5 }, image), { x: 50, y: 50 });
+	assert.deepEqual(pixelToNormalized({ x: 50, y: 50 }, image), { x: 0.25, y: 0.5 });
+	assert.deepEqual(pixelToNormalized({ x: -10, y: 130 }, image), { x: 0, y: 1 });
+	assert.equal(maxDimension(image), 200);
+	assert.equal(normalizedLength(0.1, image), 20);
 });

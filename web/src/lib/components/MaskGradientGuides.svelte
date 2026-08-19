@@ -1,32 +1,32 @@
 <script lang="ts">
+	import ImageSpaceOverlay from './ui/ImageSpaceOverlay.svelte';
 	import { GIZMO_ROTATE_OFFSET_PX, type GizmoHit } from '$lib/mask-gizmo';
 	import { linearLayout } from '$lib/mask-gizmo-linear';
 	import { radialLayout } from '$lib/mask-gizmo-radial';
 	import type { GradientComponent } from '$lib/mask-painting';
+	import { dashes, hairline, type OverlayFrame } from '$lib/overlay-frame';
 
 	interface Props {
 		component: GradientComponent | null;
 		hover: GizmoHit | null;
 		active: GizmoHit | null;
 		angle: { label: string; locked: boolean } | null;
-		imageWidth: number;
-		imageHeight: number;
-		viewportScale: number;
+		frame: OverlayFrame;
 	}
 
-	let { component, hover, active, angle, imageWidth, imageHeight, viewportScale }: Props = $props();
+	let { component, hover, active, angle, frame }: Props = $props();
 
-	const image = $derived({ width: imageWidth, height: imageHeight });
+	const image = $derived(frame.image);
 	const grip = $derived(active ?? hover);
-	const outerStroke = $derived(3 / viewportScale);
-	const innerStroke = $derived(1 / viewportScale);
-	const dashPattern = $derived(`${6 / viewportScale} ${4 / viewportScale}`);
-	const reach = $derived(Math.hypot(imageWidth, imageHeight));
+	const outerStroke = $derived(hairline(frame, 3));
+	const innerStroke = $derived(hairline(frame));
+	const dashPattern = $derived(dashes(frame));
+	const reach = $derived(Math.hypot(image.width, image.height));
 
 	const linear = $derived(component?.type === 'linear' ? linearLayout(component, image) : null);
 	const radial = $derived(
 		component?.type === 'radial'
-			? radialLayout(component, image, GIZMO_ROTATE_OFFSET_PX / viewportScale)
+			? radialLayout(component, image, hairline(frame, GIZMO_ROTATE_OFFSET_PX))
 			: null
 	);
 	const core = $derived(component?.type === 'radial' ? 1 - component.feather : 0);
@@ -79,7 +79,7 @@
 	<circle
 		cx={x}
 		cy={y}
-		r={(emphasized ? 5.5 : 3.5) / viewportScale}
+		r={hairline(frame, emphasized ? 5.5 : 3.5)}
 		fill="white"
 		stroke="black"
 		stroke-width={innerStroke}
@@ -113,12 +113,7 @@
 	/>
 {/snippet}
 
-<svg
-	aria-hidden="true"
-	class="pointer-events-none absolute inset-0 size-full overflow-visible"
-	viewBox={`0 0 ${imageWidth} ${imageHeight}`}
-	preserveAspectRatio="none"
->
+<ImageSpaceOverlay {image}>
 	{#if linear}
 		{@const across = { x: -linear.direction.y * reach, y: linear.direction.x * reach }}
 		{@render guideLine(
@@ -177,7 +172,7 @@
 		<circle
 			cx={radial.center.x}
 			cy={radial.center.y}
-			r={1.5 / viewportScale}
+			r={hairline(frame, 1.5)}
 			fill="white"
 			stroke="black"
 			stroke-width={innerStroke}
@@ -185,16 +180,16 @@
 	{/if}
 	{#if angle && anglePoint}
 		<text
-			x={anglePoint.x + 14 / viewportScale}
-			y={anglePoint.y - 10 / viewportScale}
+			x={anglePoint.x + hairline(frame, 14)}
+			y={anglePoint.y - hairline(frame, 10)}
 			fill="white"
 			stroke="black"
-			stroke-width={(angle.locked ? 4 : 3) / viewportScale}
-			font-size={11 / viewportScale}
+			stroke-width={hairline(frame, angle.locked ? 4 : 3)}
+			font-size={hairline(frame, 11)}
 			font-weight={angle.locked ? 700 : 400}
 			style="paint-order: stroke"
 		>
 			{angle.label}
 		</text>
 	{/if}
-</svg>
+</ImageSpaceOverlay>

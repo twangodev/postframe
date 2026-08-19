@@ -1,4 +1,5 @@
 import type { NormalizedPoint } from './edit-document.ts';
+import { maxDimension, normalizedLength, normalizedToPixel } from './photo-viewport.ts';
 
 export interface MaskBrushStroke {
 	points: NormalizedPoint[];
@@ -20,6 +21,11 @@ export interface RadialMaskGeometry {
 	rotation: number;
 	feather: number;
 }
+
+export type LivePaint =
+	| ({ kind: 'linear' } & LinearMaskGeometry)
+	| ({ kind: 'radial' } & RadialMaskGeometry)
+	| ({ kind: 'brush' } & MaskBrushStroke);
 
 export const PAINT_RASTER_MAX_DIMENSION = 2048;
 
@@ -51,9 +57,9 @@ export function rasterizeLinearGradient(
 	height: number
 ): Uint8Array {
 	const alpha = emptyPlane(width, height);
-	const origin = toPixel(anchor, width, height);
+	const origin = normalizedToPixel(anchor, { width, height });
 	const direction = { x: Math.cos(rotation), y: Math.sin(rotation) };
-	const band = 2 * compression * Math.max(width, height);
+	const band = normalizedLength(2 * compression, { width, height });
 	for (let y = 0; y < height; y += 1) {
 		for (let x = 0; x < width; x += 1) {
 			const along = (x + 0.5 - origin.x) * direction.x + (y + 0.5 - origin.y) * direction.y;
@@ -69,8 +75,8 @@ export function rasterizeRadialGradient(
 	height: number
 ): Uint8Array {
 	const alpha = emptyPlane(width, height);
-	const origin = toPixel(center, width, height);
-	const maxDim = Math.max(width, height);
+	const origin = normalizedToPixel(center, { width, height });
+	const maxDim = maxDimension({ width, height });
 	const cos = Math.cos(rotation);
 	const sin = Math.sin(rotation);
 	for (let y = 0; y < height; y += 1) {
@@ -98,7 +104,7 @@ export function rasterizeStrokeOnto(
 	width: number,
 	height: number
 ): Uint8Array {
-	const radius = (stroke.size / 2) * Math.max(width, height);
+	const radius = normalizedLength(stroke.size / 2, { width, height });
 	for (const center of stampCenters(stroke.points, width, height, Math.max(1, radius / 2))) {
 		stampCircle(alpha, center, radius, stroke.feather, stroke.flow, width, height);
 	}
@@ -111,7 +117,7 @@ export function stampCenters(
 	height: number,
 	spacing: number
 ): PixelPoint[] {
-	const [first, ...rest] = points.map((point) => toPixel(point, width, height));
+	const [first, ...rest] = points.map((point) => normalizedToPixel(point, { width, height }));
 	if (!first) return [];
 	const stamps = [first];
 	let previous = first;
@@ -170,10 +176,6 @@ function emptyPlane(width: number, height: number) {
 		throw new Error('Mask dimensions must be positive integers');
 	}
 	return new Uint8Array(width * height);
-}
-
-function toPixel(point: NormalizedPoint, width: number, height: number): PixelPoint {
-	return { x: point.x * width, y: point.y * height };
 }
 
 function clamp01(value: number) {

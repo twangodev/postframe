@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Save, Sparkles, X } from '@lucide/svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import Panel from './ui/Panel.svelte';
-	import Tooltip from './ui/Tooltip.svelte';
 	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
 	import { presetNamed } from '$lib/preset';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -37,19 +37,14 @@
 						>{groupCount(preset.groups.length)}</span
 					>
 				</button>
-				<Tooltip text="delete preset">
-					{#snippet children(props)}
-						<button
-							{...props}
-							type="button"
-							aria-label={`Delete preset ${preset.name}`}
-							onclick={() => workspace.deletePreset(preset.id)}
-							class="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text"
-						>
-							<X size={11} />
-						</button>
-					{/snippet}
-				</Tooltip>
+				<IconButton
+					label={`Delete preset ${preset.name}`}
+					tooltip="delete preset"
+					class="shrink-0"
+					onclick={() => workspace.deletePreset(preset.id)}
+				>
+					<X size={11} />
+				</IconButton>
 			</div>
 		{:else}
 			<p class="px-2 py-1.5 text-[11px] text-muted">no presets yet</p>

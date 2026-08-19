@@ -1,4 +1,24 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+/**
+ * Panels open with a 200ms slide, so a plain scrollIntoViewIfNeeded can run
+ * while the aside is still growing and leave the target clipped below the
+ * fold. Re-scroll until the target genuinely sits inside the aside.
+ */
+async function revealInAside(target: Locator) {
+	await expect
+		.poll(() =>
+			target.evaluate((element) => {
+				element.scrollIntoView({ block: 'nearest' });
+				const aside = element.closest('aside');
+				if (!aside) return false;
+				const bounds = aside.getBoundingClientRect();
+				const rect = element.getBoundingClientRect();
+				return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1;
+			})
+		)
+		.toBe(true);
+}
 
 function storedEdit(page: Page) {
 	return page.evaluate(async () => {
@@ -74,7 +94,7 @@ test('shapes the selected mask with the curve, mixer and grading sections', asyn
 
 	await aside.getByRole('button', { name: /^Curve/ }).click();
 	const plot = aside.getByRole('application', { name: /tone curve/ });
-	await plot.scrollIntoViewIfNeeded();
+	await revealInAside(plot);
 	await expect(plot).toHaveAttribute('aria-disabled', 'false');
 	// The mask plot draws no histogram backdrop; the document's tones are not its own.
 	await expect(plot.locator('polygon')).toHaveCount(0);
@@ -103,7 +123,7 @@ test('shapes the selected mask with the curve, mixer and grading sections', asyn
 
 	await aside.getByRole('button', { name: 'Color grading' }).click();
 	const disc = aside.getByRole('slider', { name: 'shadows hue and saturation' });
-	await disc.scrollIntoViewIfNeeded();
+	await revealInAside(disc);
 	const bounds = (await disc.boundingBox())!;
 	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 	await page.mouse.down();

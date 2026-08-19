@@ -8,8 +8,8 @@ import {
 } from './mask-gizmo.ts';
 import { hitTestGizmo, reduceGizmoDrag, seedGizmoComponent } from './mask-gizmo-drag.ts';
 import type { GradientComponent } from './mask-painting.ts';
+import type { LivePaint } from './mask-rasterizer.ts';
 import type { Point, Size } from './photo-viewport.ts';
-import type { LivePaint } from './components/MaskPaintPreview.svelte';
 
 const rotationalHandles = new Set(['positive', 'negative', 'span', 'rotate']);
 

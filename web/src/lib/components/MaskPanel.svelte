@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { DropdownMenu, Tabs } from 'bits-ui';
+	import { Tabs } from 'bits-ui';
+	import type { Component } from 'svelte';
 	import {
 		Blend,
 		Brush,
@@ -24,14 +25,13 @@
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
+	import DropdownMenu from './ui/DropdownMenu.svelte';
+	import IconButton from './ui/IconButton.svelte';
 	import Panel from './ui/Panel.svelte';
+	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
-	import {
-		maskOperationSchema,
-		type MaskComponent,
-		type MaskOperation,
-		type NormalizedRegion
-	} from '$lib/edit-document';
+	import { maskOperationSchema, type MaskComponent, type MaskOperation } from '$lib/edit-document';
+	import type { EditorToolSession } from '$lib/editor-tool-session.svelte';
 	import {
 		rangeComponents,
 		rangeSliderSpecs,
@@ -39,43 +39,20 @@
 		withRangeControl,
 		type RangeKind
 	} from '$lib/mask-ranging';
-	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
-	import type { Mask, MaskKind, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
+	import { maskPreviewMenu } from '$lib/mask-preview';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
-		activeTool: string;
-		maskBrushOperation: 'add' | 'subtract';
-		maskPreviewMode: MaskPreviewMode | null;
-		refineBrushSize: number;
-		selectedMask: Mask | null;
-		subjectChoices: SubjectChoices | null;
-		smartMaskWorking: boolean;
-		canRefineSelectedMask: boolean;
-		hoveredSubjectBox: NormalizedRegion | null;
-		onAddMask: (kind: MaskKind) => void;
-		onBeginMaskBrush: (operation: 'add' | 'subtract') => void;
-		onBeginObjectMask: () => void;
-		onBeginEdgeRefinement: () => void;
+		tools: EditorToolSession;
 	}
 
-	let {
-		workspace,
-		activeTool,
-		maskBrushOperation,
-		maskPreviewMode = $bindable(),
-		refineBrushSize = $bindable(),
-		selectedMask,
-		subjectChoices,
-		smartMaskWorking,
-		canRefineSelectedMask,
-		hoveredSubjectBox = $bindable(),
-		onAddMask,
-		onBeginMaskBrush,
-		onBeginObjectMask,
-		onBeginEdgeRefinement
-	}: Props = $props();
+	let { workspace, tools }: Props = $props();
 
+	const activeTool = $derived(tools.tool);
+	const selectedMask = $derived(tools.selectedMask);
+	const subjectChoices = $derived(tools.subjectChoices);
+	const smartMaskWorking = $derived(tools.smartMaskWorking);
 	const maskEmpty = $derived((selectedMask?.components.length ?? 0) === 0);
 
 	let rangeOperation = $state<MaskOperation>('add');
@@ -94,10 +71,48 @@
 			? workspace.cycleInstanceMaskCandidate
 			: workspace.cycleObjectMaskCandidate
 	);
-	const previewMenuItemClass =
-		'data-[highlighted]:bg-elevated data-[highlighted]:text-text flex h-7 min-w-32 cursor-default items-center rounded-sm px-2 text-[11px] outline-none';
-	const chooseMaskPreview = (mode: MaskPreviewMode | null) => () => (maskPreviewMode = mode);
+
+	type Icon = Component<Record<string, unknown>>;
+
+	const NEW_MASK_CHOICES: { label: string; icon: Icon; begin: () => void }[] = [
+		{ label: 'brush', icon: Brush, begin: () => tools.addMask('brush') },
+		{ label: 'linear', icon: Blend, begin: () => tools.addMask('linear') },
+		{ label: 'radial', icon: CircleDashed, begin: () => tools.addMask('radial') },
+		{ label: 'subject', icon: UserRound, begin: () => tools.addMask('subject') },
+		{ label: 'sky', icon: CloudSun, begin: () => tools.addMask('sky') },
+		{ label: 'background', icon: Mountain, begin: () => tools.addMask('background') },
+		{ label: 'object', icon: Scan, begin: () => tools.beginObjectMask() },
+		{ label: 'luminance', icon: SunMedium, begin: () => tools.addMask('luminance') },
+		{ label: 'colour', icon: Palette, begin: () => tools.addMask('color') }
+	];
 </script>
+
+{#snippet actionButton(label: string, Icon: Icon, onclick: () => void, active: boolean = false)}
+	<button
+		type="button"
+		class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {active
+			? 'border-accent bg-surface text-text'
+			: ''}"
+		{onclick}
+	>
+		<Icon size={12} />
+		{label}
+	</button>
+{/snippet}
+
+{#snippet brushSizeSlider()}
+	<div class="motion-enter pt-1">
+		<AdjustmentSlider
+			label="Brush"
+			bind:value={tools.refineBrushSize}
+			min={8}
+			max={200}
+			defaultValue={42}
+			suffix=" px"
+			signed={false}
+		/>
+	</div>
+{/snippet}
 
 <Tabs.Content value="mask" class="motion-tab">
 	{#if subjectChoices && workspace.editPreview}
@@ -109,76 +124,48 @@
 			onChoose={(index) => void workspace.chooseDetectedSubject(index)}
 			onChooseAll={workspace.chooseAllSubjects}
 			onDismiss={() => {
-				hoveredSubjectBox = null;
+				tools.hoveredSubjectBox = null;
 				workspace.dismissSubjectChoices();
 			}}
-			onHover={(box) => (hoveredSubjectBox = box)}
+			onHover={(box) => (tools.hoveredSubjectBox = box)}
 		/>
 	{/if}
 	<div class="border-b border-subtle p-3">
 		<p class="mb-2 text-[11px] tracking-[0.03em] text-muted">new mask</p>
 		<div class="grid grid-cols-3 gap-1.5">
-			<button type="button" class="mask-choice" onclick={() => onAddMask('brush')}
-				><Brush size={15} /><span>brush</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('linear')}
-				><Blend size={15} /><span>linear</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('radial')}
-				><CircleDashed size={15} /><span>radial</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('subject')}
-				><UserRound size={15} /><span>subject</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('sky')}
-				><CloudSun size={15} /><span>sky</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('background')}
-				><Mountain size={15} /><span>background</span></button
-			>
-			<button type="button" class="mask-choice" onclick={onBeginObjectMask}
-				><Scan size={15} /><span>object</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('luminance')}
-				><SunMedium size={15} /><span>luminance</span></button
-			>
-			<button type="button" class="mask-choice" onclick={() => onAddMask('color')}
-				><Palette size={15} /><span>colour</span></button
-			>
+			{#each NEW_MASK_CHOICES as choice (choice.label)}
+				<button
+					type="button"
+					class="flex min-h-14 cursor-pointer flex-col items-center justify-center gap-1.5 rounded border border-subtle bg-surface text-[11px] text-muted transition-colors hover:border-muted hover:text-text"
+					onclick={choice.begin}
+				>
+					<choice.icon size={15} /><span>{choice.label}</span>
+				</button>
+			{/each}
 		</div>
 	</div>
 
 	<div class="border-b border-subtle p-3">
 		<div class="mb-2 flex items-center justify-between">
 			<p class="text-[11px] tracking-[0.03em] text-muted">layers</p>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger
-					aria-label="Choose mask preview"
-					class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
-				>
-					{#if maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-					<span>{maskPreviewMode ?? 'off'}</span>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Portal>
-					<DropdownMenu.Content
-						align="end"
-						sideOffset={4}
-						class="motion-menu z-50 min-w-28 rounded border border-subtle bg-bg p-1 shadow-2xl"
+			<DropdownMenu
+				items={maskPreviewMenu(tools.maskPreviewMode)}
+				onAction={(mode) => (tools.maskPreviewMode = mode)}
+				align="end"
+				size="compact"
+			>
+				{#snippet children({ props })}
+					<button
+						{...props}
+						type="button"
+						aria-label="Choose mask preview"
+						class="flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[10px] text-muted lowercase outline-none hover:bg-surface hover:text-text"
 					>
-						{#each MASK_PREVIEW_MODES as mode (mode)}
-							<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(mode)}>
-								<span class="w-3 text-accent">{maskPreviewMode === mode ? '•' : ''}</span>
-								<span>{mode}</span>
-							</DropdownMenu.Item>
-						{/each}
-						<DropdownMenu.Separator class="my-1 h-px bg-subtle" />
-						<DropdownMenu.Item class={previewMenuItemClass} onSelect={chooseMaskPreview(null)}>
-							<span class="w-3 text-accent">{maskPreviewMode === null ? '•' : ''}</span>
-							<span>off</span>
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Portal>
-			</DropdownMenu.Root>
+						{#if tools.maskPreviewMode}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+						<span>{tools.maskPreviewMode ?? 'off'}</span>
+					</button>
+				{/snippet}
+			</DropdownMenu>
 		</div>
 		<div class="space-y-1">
 			{#each workspace.masks as mask (mask.id)}
@@ -233,15 +220,13 @@
 		<Panel title="Mask adjustments" meta={selectedMask.name}>
 			{#if candidateComponent?.alternatives && candidateComponent.alternatives.count > 1}
 				<div class="mb-2 flex h-8 items-center justify-between rounded border border-subtle px-1">
-					<button
-						type="button"
-						aria-label="Previous mask candidate"
+					<IconButton
+						label="Previous mask candidate"
 						disabled={smartMaskWorking}
-						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(-1)}
 					>
 						<ChevronLeft size={12} />
-					</button>
+					</IconButton>
 					<span class="text-[10px] text-muted lowercase">
 						candidate
 						<span class="font-mono text-text"
@@ -249,52 +234,32 @@
 								.count}</span
 						>
 					</span>
-					<button
-						type="button"
-						aria-label="Next mask candidate"
+					<IconButton
+						label="Next mask candidate"
 						disabled={smartMaskWorking}
-						class="flex size-6 cursor-pointer items-center justify-center rounded text-muted hover:bg-surface hover:text-text disabled:cursor-default disabled:opacity-40"
 						onclick={() => cycleMaskCandidate(1)}
 					>
 						<ChevronRight size={12} />
-					</button>
+					</IconButton>
 				</div>
 			{/if}
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">brush</p>
 			<div class="grid grid-cols-2 gap-1.5">
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && maskBrushOperation === 'add'
-						? 'border-accent bg-surface text-text'
-						: ''}"
-					onclick={() => onBeginMaskBrush('add')}
-				>
-					<Plus size={12} /> add
-				</button>
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text {activeTool ===
-						'mask' && maskBrushOperation === 'subtract'
-						? 'border-accent bg-surface text-text'
-						: ''}"
-					onclick={() => onBeginMaskBrush('subtract')}
-				>
-					<Minus size={12} /> subtract
-				</button>
+				{@render actionButton(
+					'add',
+					Plus,
+					() => tools.beginMaskBrush('add'),
+					activeTool === 'mask' && tools.maskBrushOperation === 'add'
+				)}
+				{@render actionButton(
+					'subtract',
+					Minus,
+					() => tools.beginMaskBrush('subtract'),
+					activeTool === 'mask' && tools.maskBrushOperation === 'subtract'
+				)}
 			</div>
 			{#if activeTool === 'mask'}
-				<div class="motion-enter pt-1">
-					<AdjustmentSlider
-						label="Brush"
-						bind:value={refineBrushSize}
-						min={8}
-						max={200}
-						defaultValue={42}
-						suffix=" px"
-						signed={false}
-					/>
-				</div>
+				{@render brushSizeSlider()}
 			{/if}
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">range</p>
@@ -325,37 +290,15 @@
 					{/each}
 				</div>
 			{/each}
-			<div class="mb-1.5 flex gap-1" role="tablist" aria-label="Range operation">
-				{#each maskOperationSchema.options as operation (operation)}
-					<button
-						type="button"
-						role="tab"
-						aria-selected={rangeOperation === operation}
-						onclick={() => (rangeOperation = operation)}
-						class="h-6 flex-1 cursor-pointer rounded border text-[11px] lowercase transition-colors {rangeOperation ===
-						operation
-							? 'border-control-edge bg-surface text-text'
-							: 'border-subtle text-muted hover:text-text'}"
-					>
-						{operation}
-					</button>
-				{/each}
-			</div>
+			<SegmentedControl
+				options={maskOperationSchema.options}
+				bind:value={rangeOperation}
+				label="Range operation"
+				class="mb-1.5"
+			/>
 			<div class="grid grid-cols-2 gap-1.5">
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
-					onclick={addRange('luminance')}
-				>
-					<Plus size={12} /> luminance range
-				</button>
-				<button
-					type="button"
-					class="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text"
-					onclick={addRange('color')}
-				>
-					<Plus size={12} /> colour range
-				</button>
+				{@render actionButton('luminance range', Plus, addRange('luminance'))}
+				{@render actionButton('colour range', Plus, addRange('color'))}
 			</div>
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">edge</p>
@@ -368,28 +311,18 @@
 			/>
 			<button
 				type="button"
-				disabled={!canRefineSelectedMask || smartMaskWorking}
+				disabled={!tools.canRefineSelectedMask || smartMaskWorking}
 				class="mt-1 flex h-8 w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 text-[11px] text-muted lowercase transition-colors hover:border-muted hover:text-text disabled:cursor-default disabled:opacity-40 {activeTool ===
 				'mask-refine'
 					? 'border-accent bg-surface text-text'
 					: ''}"
-				onclick={onBeginEdgeRefinement}
+				onclick={tools.beginEdgeRefinement}
 			>
 				<span class="flex items-center gap-2"><Brush size={12} /> refine edge</span>
 				<span>{activeTool === 'mask-refine' ? 'paint boundary' : 'brush'}</span>
 			</button>
 			{#if activeTool === 'mask-refine'}
-				<div class="motion-enter pt-1">
-					<AdjustmentSlider
-						label="Brush"
-						bind:value={refineBrushSize}
-						min={8}
-						max={200}
-						defaultValue={42}
-						suffix=" px"
-						signed={false}
-					/>
-				</div>
+				{@render brushSizeSlider()}
 			{/if}
 			<div class="my-2 h-px bg-subtle"></div>
 			<p class="pb-1 text-[10px] tracking-[0.03em] text-muted lowercase">light</p>
@@ -422,28 +355,3 @@
 		{/if}
 	{/if}
 </Tabs.Content>
-
-<style>
-	.mask-choice {
-		display: flex;
-		min-height: 3.5rem;
-		cursor: pointer;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.35rem;
-		border: 1px solid var(--color-subtle);
-		border-radius: 0.25rem;
-		background: var(--color-surface);
-		color: var(--color-muted);
-		font-size: 0.6875rem;
-		transition:
-			color 150ms ease,
-			border-color 150ms ease;
-	}
-
-	.mask-choice:hover {
-		border-color: var(--color-muted);
-		color: var(--color-text);
-	}
-</style>

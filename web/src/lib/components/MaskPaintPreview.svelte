@@ -1,33 +1,19 @@
-<script lang="ts" module>
-	import type { NormalizedPoint } from '$lib/edit-document';
-
-	export type LivePaint =
-		| { kind: 'linear'; anchor: NormalizedPoint; rotation: number; compression: number }
-		| {
-				kind: 'radial';
-				center: NormalizedPoint;
-				radiusX: number;
-				radiusY: number;
-				rotation: number;
-				feather: number;
-		  }
-		| { kind: 'brush'; points: NormalizedPoint[]; size: number; feather: number; flow: number };
-</script>
-
 <script lang="ts">
-	import { paintRasterDimensions, stampCenters } from '$lib/mask-rasterizer';
+	import { linearLayout } from '$lib/mask-gizmo-linear';
+	import { radialLayout } from '$lib/mask-gizmo-radial';
+	import { paintRasterDimensions, stampCenters, type LivePaint } from '$lib/mask-rasterizer';
 	import { MASK_OVERLAY_TINT_ALPHA, tintCoverage } from '$lib/mask-preview';
+	import { maxDimension, normalizedLength, type Size } from '$lib/photo-viewport';
 
 	interface Props {
 		paint: LivePaint;
-		imageWidth: number;
-		imageHeight: number;
+		image: Size;
 		mode: 'overlay' | 'matte';
 	}
 
-	let { paint, imageWidth, imageHeight, mode }: Props = $props();
+	let { paint, image, mode }: Props = $props();
 	let canvas = $state<HTMLCanvasElement | null>(null);
-	const dims = $derived(paintRasterDimensions(imageWidth, imageHeight));
+	const dims = $derived(paintRasterDimensions(image.width, image.height));
 	const replacesCommittedMask = $derived(paint.kind !== 'brush');
 
 	let shape: HTMLCanvasElement | null = null;
@@ -81,16 +67,12 @@
 	function paintShape(context: CanvasRenderingContext2D, width: number, height: number) {
 		if (paint.kind === 'linear') {
 			context.clearRect(0, 0, width, height);
-			const maxDim = Math.max(width, height);
-			const originX = paint.anchor.x * width;
-			const originY = paint.anchor.y * height;
-			const reachX = Math.cos(paint.rotation) * paint.compression * maxDim;
-			const reachY = Math.sin(paint.rotation) * paint.compression * maxDim;
+			const span = linearLayout(paint, { width, height });
 			const gradient = context.createLinearGradient(
-				originX - reachX,
-				originY - reachY,
-				originX + reachX,
-				originY + reachY
+				span.negative.x,
+				span.negative.y,
+				span.positive.x,
+				span.positive.y
 			);
 			gradient.addColorStop(0, 'rgba(255,255,255,0)');
 			gradient.addColorStop(1, 'rgba(255,255,255,1)');
@@ -98,14 +80,17 @@
 			context.fillRect(0, 0, width, height);
 		} else if (paint.kind === 'radial') {
 			context.clearRect(0, 0, width, height);
-			const maxDim = Math.max(width, height);
-			const edge = paint.radiusX * maxDim;
-			const core = Math.max(0, Math.min(edge * (1 - paint.feather), edge - 0.01));
+			const maxDim = maxDimension({ width, height });
+			const disc = radialLayout(paint, { width, height }, 0);
+			const core = Math.max(
+				0,
+				Math.min(disc.radiusXPx * (1 - paint.feather), disc.radiusXPx - 0.01)
+			);
 			context.save();
-			context.translate(paint.center.x * width, paint.center.y * height);
+			context.translate(disc.center.x, disc.center.y);
 			context.rotate(paint.rotation);
-			context.scale(1, paint.radiusY / paint.radiusX);
-			const gradient = context.createRadialGradient(0, 0, core, 0, 0, edge);
+			context.scale(1, disc.radiusYPx / disc.radiusXPx);
+			const gradient = context.createRadialGradient(0, 0, core, 0, 0, disc.radiusXPx);
 			gradient.addColorStop(0, 'rgba(255,255,255,1)');
 			gradient.addColorStop(1, 'rgba(255,255,255,0)');
 			context.fillStyle = gradient;
@@ -127,7 +112,7 @@
 			stampedCount = 0;
 		}
 		strokeLength = stroke.points.length;
-		const radius = (stroke.size / 2) * Math.max(width, height);
+		const radius = normalizedLength(stroke.size / 2, { width, height });
 		const stamp = brushSprite(radius, stroke.feather, stroke.flow);
 		const centers = stampCenters(stroke.points, width, height, Math.max(1, radius / 2));
 		context.globalCompositeOperation = 'lighter';
