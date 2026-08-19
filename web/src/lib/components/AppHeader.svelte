@@ -9,9 +9,7 @@
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
 	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
-	import { defaultDevelopSettings } from '$lib/develop-settings';
 	import type { EditorMenuAction } from '$lib/editor-menu';
-	import { changedGroups } from '$lib/preset';
 	import { editableTarget } from '$lib/viewport-interaction.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -25,9 +23,6 @@
 	let syncOpen = $state(false);
 	let importInput = $state<HTMLInputElement>();
 
-	const editedGroups = $derived(
-		changedGroups(workspace.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings())
-	);
 	const syncTargetCount = $derived(workspace.syncTargetIds.length);
 
 	function runMenuAction(action: EditorMenuAction) {
@@ -233,7 +228,7 @@
 	title="copy settings"
 	description="choose which settings of this photograph to copy."
 	confirmLabel="copy"
-	groups={editedGroups}
+	groups={workspace.editedGroups}
 	onConfirm={workspace.copySettings}
 />
 
@@ -242,6 +237,6 @@
 	title="sync settings"
 	description={`apply the chosen settings of this photograph to the ${syncTargetCount} other selected photo${syncTargetCount === 1 ? '' : 's'}.`}
 	confirmLabel="sync"
-	groups={editedGroups}
+	groups={workspace.editedGroups}
 	onConfirm={workspace.syncSettings}
 />

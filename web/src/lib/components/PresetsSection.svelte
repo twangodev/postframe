@@ -3,8 +3,7 @@
 	import Panel from './ui/Panel.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
-	import { defaultDevelopSettings } from '$lib/develop-settings';
-	import { changedGroups, presetNamed } from '$lib/preset';
+	import { presetNamed } from '$lib/preset';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -15,7 +14,6 @@
 
 	let saveOpen = $state(false);
 
-	const current = $derived(workspace.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings());
 	const meta = $derived(workspace.presets.length > 0 ? `${workspace.presets.length}` : undefined);
 
 	const groupCount = (count: number) => `${count} group${count === 1 ? '' : 's'}`;
@@ -72,7 +70,7 @@
 	title="save preset"
 	description="the chosen settings of this photograph, kept in your library."
 	confirmLabel={saveLabel}
-	groups={changedGroups(current)}
+	groups={workspace.editedGroups}
 	name={{ value: '', label: 'preset name' }}
 	onConfirm={(groups, name) => workspace.savePreset(name ?? '', groups)}
 />
