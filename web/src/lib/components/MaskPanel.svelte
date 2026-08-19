@@ -28,13 +28,17 @@
 	import { COLOR_SLIDERS, LIGHT_SLIDERS, MASK_EDGE_SLIDERS } from '$lib/develop-sliders';
 	import {
 		maskOperationSchema,
-		type ColorRangeComponent,
-		type LuminanceRangeComponent,
 		type MaskComponent,
 		type MaskOperation,
 		type NormalizedRegion
 	} from '$lib/edit-document';
-	import { rangeComponents, type RangeKind } from '$lib/mask-ranging';
+	import {
+		rangeComponents,
+		rangeSliderSpecs,
+		rangeSliderValue,
+		withRangeControl,
+		type RangeKind
+	} from '$lib/mask-ranging';
 	import { MASK_PREVIEW_MODES, type MaskPreviewMode } from '$lib/mask-preview';
 	import type { Mask, MaskKind, SubjectChoices, WorkspaceState } from '$lib/workspace.svelte';
 
@@ -76,37 +80,6 @@
 
 	let rangeOperation = $state<MaskOperation>('add');
 	const selectedRanges = $derived(rangeComponents(selectedMask));
-	const percent = (fraction: number) => Math.round(fraction * 100);
-
-	type LuminanceControl = keyof LuminanceRangeComponent['range'];
-	type ColorControl = keyof ColorRangeComponent['range'];
-
-	function luminanceRange(
-		component: LuminanceRangeComponent,
-		control: LuminanceControl,
-		value: number
-	) {
-		const range = { ...component.range, [control]: value / 100 };
-		if (control === 'low') range.high = Math.max(range.high, range.low);
-		if (control === 'high') range.low = Math.min(range.low, range.high);
-		return range;
-	}
-
-	function colorRange(component: ColorRangeComponent, control: ColorControl, value: number) {
-		const degrees = control === 'hue' || control === 'width';
-		return { ...component.range, [control]: degrees ? value : value / 100 };
-	}
-
-	const previewLuminance =
-		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
-			workspace.previewRange(component.id, luminanceRange(component, control, value));
-	const commitLuminance =
-		(component: LuminanceRangeComponent, control: LuminanceControl) => (value: number) =>
-			void workspace.commitRange(component.id, luminanceRange(component, control, value));
-	const previewColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
-		workspace.previewRange(component.id, colorRange(component, control, value));
-	const commitColor = (component: ColorRangeComponent, control: ColorControl) => (value: number) =>
-		void workspace.commitRange(component.id, colorRange(component, control, value));
 	const addRange = (kind: RangeKind) => () =>
 		void workspace.addRangeComponent(kind, rangeOperation);
 
@@ -334,81 +307,22 @@
 					<p class="text-[10px] text-muted lowercase">
 						{component.type === 'luminance-range' ? 'luminance' : 'colour'} · {component.operation}
 					</p>
-					{#if component.type === 'luminance-range'}
+					{#each rangeSliderSpecs(component) as spec (spec.control)}
 						<AdjustmentSlider
-							label="Low"
-							value={percent(component.range.low)}
-							min={0}
-							max={100}
-							defaultValue={50}
-							signed={false}
-							onValueChange={previewLuminance(component, 'low')}
-							onValueCommit={commitLuminance(component, 'low')}
+							{...spec}
+							value={rangeSliderValue(component, spec)}
+							onValueChange={(value) =>
+								workspace.previewRange(
+									component.id,
+									withRangeControl(component, spec.control, value)
+								)}
+							onValueCommit={(value) =>
+								void workspace.commitRange(
+									component.id,
+									withRangeControl(component, spec.control, value)
+								)}
 						/>
-						<AdjustmentSlider
-							label="High"
-							value={percent(component.range.high)}
-							min={0}
-							max={100}
-							defaultValue={100}
-							signed={false}
-							onValueChange={previewLuminance(component, 'high')}
-							onValueCommit={commitLuminance(component, 'high')}
-						/>
-						<AdjustmentSlider
-							label="Feather"
-							value={percent(component.range.feather)}
-							min={0}
-							max={100}
-							defaultValue={10}
-							signed={false}
-							onValueChange={previewLuminance(component, 'feather')}
-							onValueCommit={commitLuminance(component, 'feather')}
-						/>
-					{:else}
-						<AdjustmentSlider
-							label="Hue"
-							value={Math.round(component.range.hue)}
-							min={0}
-							max={360}
-							defaultValue={210}
-							suffix="°"
-							signed={false}
-							onValueChange={previewColor(component, 'hue')}
-							onValueCommit={commitColor(component, 'hue')}
-						/>
-						<AdjustmentSlider
-							label="Width"
-							value={Math.round(component.range.width)}
-							min={0}
-							max={90}
-							defaultValue={30}
-							suffix="°"
-							signed={false}
-							onValueChange={previewColor(component, 'width')}
-							onValueCommit={commitColor(component, 'width')}
-						/>
-						<AdjustmentSlider
-							label="Saturation floor"
-							value={percent(component.range.saturationFloor)}
-							min={0}
-							max={100}
-							defaultValue={20}
-							signed={false}
-							onValueChange={previewColor(component, 'saturationFloor')}
-							onValueCommit={commitColor(component, 'saturationFloor')}
-						/>
-						<AdjustmentSlider
-							label="Feather"
-							value={percent(component.range.feather)}
-							min={0}
-							max={100}
-							defaultValue={25}
-							signed={false}
-							onValueChange={previewColor(component, 'feather')}
-							onValueCommit={commitColor(component, 'feather')}
-						/>
-					{/if}
+					{/each}
 				</div>
 			{/each}
 			<div class="mb-1.5 flex gap-1" role="tablist" aria-label="Range operation">

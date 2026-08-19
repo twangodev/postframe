@@ -208,6 +208,75 @@ export function rangeComponents(mask: EditMask | null): RangeComponent[] {
 	return mask?.components.filter(isRangeComponent) ?? [];
 }
 
+export type RangeUnit = 'percent' | 'degrees';
+export type RangeControlName = (keyof LuminanceRange | keyof ColorRange) & string;
+
+/// One range slider, ready to spread onto AdjustmentSlider. Percent sliders
+/// show 0–100 for a 0–1 fraction; degree sliders show the stored value.
+export interface RangeSliderSpec {
+	readonly control: RangeControlName;
+	readonly label: string;
+	readonly min: number;
+	readonly max: number;
+	readonly unit: RangeUnit;
+	readonly suffix?: string;
+	readonly signed: boolean;
+	readonly defaultValue: number;
+}
+
+const toSlider = (unit: RangeUnit, value: number) =>
+	Math.round(unit === 'degrees' ? value : value * 100);
+const fromSlider = (unit: RangeUnit, value: number) => (unit === 'degrees' ? value : value / 100);
+
+type RangeSliderShape = Omit<RangeSliderSpec, 'signed' | 'defaultValue'>;
+
+function rangeSliders<Range extends RangeSettings>(
+	defaults: Range,
+	shapes: readonly (RangeSliderShape & { control: keyof Range & string })[]
+): readonly RangeSliderSpec[] {
+	return shapes.map((shape) => ({
+		...shape,
+		signed: shape.min < 0,
+		defaultValue: toSlider(shape.unit, defaults[shape.control] as number)
+	}));
+}
+
+export const LUMINANCE_RANGE_SLIDERS = rangeSliders(defaultLuminanceRange(), [
+	{ control: 'low', label: 'Low', min: 0, max: 100, unit: 'percent' },
+	{ control: 'high', label: 'High', min: 0, max: 100, unit: 'percent' },
+	{ control: 'feather', label: 'Feather', min: 0, max: 100, unit: 'percent' }
+]);
+
+export const COLOR_RANGE_SLIDERS = rangeSliders(defaultColorRange(), [
+	{ control: 'hue', label: 'Hue', min: 0, max: 360, unit: 'degrees', suffix: '°' },
+	{ control: 'width', label: 'Width', min: 0, max: 90, unit: 'degrees', suffix: '°' },
+	{ control: 'saturationFloor', label: 'Saturation floor', min: 0, max: 100, unit: 'percent' },
+	{ control: 'feather', label: 'Feather', min: 0, max: 100, unit: 'percent' }
+]);
+
+export function rangeSliderSpecs(component: RangeComponent): readonly RangeSliderSpec[] {
+	return component.type === 'luminance-range' ? LUMINANCE_RANGE_SLIDERS : COLOR_RANGE_SLIDERS;
+}
+
+export function rangeSliderValue(component: RangeComponent, spec: RangeSliderSpec): number {
+	return toSlider(spec.unit, (component.range as Record<string, number>)[spec.control] ?? 0);
+}
+
+export function withRangeControl(
+	component: RangeComponent,
+	control: RangeControlName,
+	sliderValue: number
+): RangeSettings {
+	if (component.type === 'luminance-range') {
+		const range = { ...component.range, [control]: sliderValue / 100 };
+		if (control === 'low') range.high = Math.max(range.high, range.low);
+		if (control === 'high') range.low = Math.min(range.low, range.high);
+		return range;
+	}
+	const unit: RangeUnit = control === 'hue' || control === 'width' ? 'degrees' : 'percent';
+	return { ...component.range, [control]: fromSlider(unit, sliderValue) };
+}
+
 function defaultRangeComponent(kind: RangeKind, operation: MaskOperation): RangeComponent {
 	const base = { id: entityId('component'), operation, raster: null };
 	return kind === 'luminance'
