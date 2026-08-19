@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	adjustmentSuffix,
 	COLOR_SLIDERS,
 	DETAIL_SLIDERS,
 	EFFECTS_SLIDERS,
@@ -89,4 +90,12 @@ test('pixel and degree suffixes survive on the mask edge sliders', () => {
 		MASK_EDGE_SLIDERS.map(({ suffix }) => suffix),
 		[undefined, ' px', ' px']
 	);
+});
+
+test('adjustmentSuffix resolves history-label suffixes from the tables', () => {
+	assert.equal(adjustmentSuffix('exposure'), ' EV');
+	assert.equal(adjustmentSuffix('feather'), ' px');
+	assert.equal(adjustmentSuffix('shift'), ' px');
+	assert.equal(adjustmentSuffix('contrast'), '');
+	assert.equal(adjustmentSuffix('shadows hue'), '');
 });

@@ -101,3 +101,19 @@ export const GRADING_BLEND_SLIDERS: readonly SliderSpec<GradingBlendControlName>
 		{ control: 'balance', label: 'balance', min: -100, max: 100 }
 	]
 );
+
+const SUFFIXES = new Map<string, string>(
+	[
+		...LIGHT_SLIDERS,
+		...COLOR_SLIDERS,
+		...PRESENCE_SLIDERS,
+		...DETAIL_SLIDERS,
+		...EFFECTS_SLIDERS,
+		...MASK_EDGE_SLIDERS,
+		...GRADING_BLEND_SLIDERS
+	].flatMap((spec) => (spec.suffix ? [[spec.control, spec.suffix] as const] : []))
+);
+
+export function adjustmentSuffix(control: string): string {
+	return SUFFIXES.get(control) ?? '';
+}

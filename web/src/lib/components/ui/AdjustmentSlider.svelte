@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Slider } from 'bits-ui';
 	import { onDestroy } from 'svelte';
+	import { formatAdjustment } from '$lib/adjustment-format';
 
 	interface Props {
 		label: string;
@@ -37,8 +38,7 @@
 	let wheelCommitTimer: ReturnType<typeof setTimeout> | undefined;
 	let wheelCommitPending = false;
 
-	const format = (candidate: number) =>
-		`${signed && candidate > 0 ? '+' : ''}${candidate.toFixed(decimals)}${suffix}`;
+	const format = (candidate: number) => formatAdjustment(candidate, { signed, decimals, suffix });
 	const formatted = $derived(format(value));
 	const inputValue = $derived(editing ? draft : formatted);
 

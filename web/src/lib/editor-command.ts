@@ -1,3 +1,5 @@
+import { formatAdjustment } from './adjustment-format.ts';
+import { adjustmentSuffix } from './develop-sliders.ts';
 import {
 	cloneEditDocument,
 	editDocumentSchema,
@@ -179,7 +181,12 @@ export function applyEditorCommand(
 		case 'geometry.rotate': {
 			if (next.geometry.rotation === command.rotation) return null;
 			next.geometry.rotation = command.rotation;
-			return transition(command, `rotated ${formatNumber(command.rotation)}°`, 'geometry', next);
+			return transition(
+				command,
+				`rotated ${formatAdjustment(command.rotation, { signed: false, suffix: '°' })}`,
+				'geometry',
+				next
+			);
 		}
 		case 'geometry.flip': {
 			const key = command.axis === 'horizontal' ? 'flipHorizontal' : 'flipVertical';
@@ -224,19 +231,9 @@ function targetLabel(target: AdjustmentTarget, value: number) {
 }
 
 function controlLabel(control: string, value: number) {
-	return adjustmentLabel(control, value, control === 'exposure' ? ' EV' : '');
+	return `${control} ${formatAdjustment(value, { signed: true, suffix: adjustmentSuffix(control) })}`;
 }
 
 function edgeLabel(control: MaskEdgeControlName, value: number) {
-	return `mask ${adjustmentLabel(control, value, control === 'contrast' ? '' : ' px')}`;
-}
-
-function adjustmentLabel(control: string, value: number, suffix = '') {
-	return `${control} ${value > 0 ? '+' : ''}${formatNumber(value)}${suffix}`;
-}
-
-function formatNumber(value: number) {
-	return Number.isInteger(value)
-		? String(value)
-		: value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+	return `mask ${controlLabel(control, value)}`;
 }
