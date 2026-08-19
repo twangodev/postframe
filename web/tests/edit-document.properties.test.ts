@@ -278,6 +278,12 @@ const maskArbitrary = fc.record({
 	})
 });
 
+const snapshotArbitrary = fc.record({
+	id: word,
+	name: word,
+	adjustments: developArbitrary
+});
+
 const documentArbitrary = fc
 	.record({
 		version: fc.constant(EDIT_DOCUMENT_VERSION),
@@ -289,7 +295,11 @@ const documentArbitrary = fc
 			flipVertical: fc.boolean(),
 			crop: fc.option(regionArbitrary)
 		}),
-		masks: fc.uniqueArray(maskArbitrary, { selector: (mask) => mask.id, maxLength: 3 })
+		masks: fc.uniqueArray(maskArbitrary, { selector: (mask) => mask.id, maxLength: 3 }),
+		snapshots: fc.uniqueArray(snapshotArbitrary, {
+			selector: (snapshot) => snapshot.id,
+			maxLength: 3
+		})
 	})
 	.map((document) => structuredClone(document));
 

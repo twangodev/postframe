@@ -4,14 +4,17 @@ import {
 	cloneEditDocument,
 	editDocumentSchema,
 	editMaskSchema,
+	editSnapshotSchema,
 	maskComponentSchema,
 	normalizedCropSchema,
 	type EditDocument,
 	type EditMask,
+	type EditSnapshot,
 	type MaskComponent,
 	type NormalizedCrop
 } from './edit-document.ts';
 import {
+	cloneDevelopSettings,
 	curvePointsSchema,
 	developSettingsSchema,
 	sameDevelopSettings,
@@ -58,6 +61,9 @@ export type EditorCommand =
 	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
 	| { type: 'mask.delete'; maskId: string }
+	| { type: 'snapshot.create'; snapshot: EditSnapshot }
+	| { type: 'snapshot.apply'; snapshotId: string }
+	| { type: 'snapshot.delete'; snapshotId: string }
 	| { type: 'geometry.rotate'; rotation: number }
 	| { type: 'geometry.flip'; axis: 'horizontal' | 'vertical' }
 	| { type: 'geometry.crop'; crop: NormalizedCrop | null };
@@ -177,6 +183,26 @@ export function applyEditorCommand(
 			if (!mask) return null;
 			next.masks = next.masks.filter(({ id }) => id !== command.maskId);
 			return transition(command, `deleted ${mask.name} mask`, 'render', next);
+		}
+		case 'snapshot.create': {
+			const snapshot = editSnapshotSchema.parse(command.snapshot);
+			if (next.snapshots.some(({ id }) => id === snapshot.id)) {
+				throw new Error(`Snapshot ${snapshot.id} exists`);
+			}
+			next.snapshots = [...next.snapshots, snapshot];
+			return transition(command, `saved ${snapshot.name} snapshot`, 'overlay', next);
+		}
+		case 'snapshot.apply': {
+			const snapshot = next.snapshots.find(({ id }) => id === command.snapshotId);
+			if (!snapshot || sameDevelopSettings(next.adjustments, snapshot.adjustments)) return null;
+			next.adjustments = cloneDevelopSettings(snapshot.adjustments);
+			return transition(command, `applied ${snapshot.name} snapshot`, 'render', next);
+		}
+		case 'snapshot.delete': {
+			const snapshot = next.snapshots.find(({ id }) => id === command.snapshotId);
+			if (!snapshot) return null;
+			next.snapshots = next.snapshots.filter(({ id }) => id !== command.snapshotId);
+			return transition(command, `deleted ${snapshot.name} snapshot`, 'overlay', next);
 		}
 		case 'geometry.rotate': {
 			if (next.geometry.rotation === command.rotation) return null;

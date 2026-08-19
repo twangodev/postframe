@@ -490,3 +490,77 @@ test('sets a whole mask curve channel as one undoable change', () => {
 	assert.notEqual(cloned.type === 'mask.curve.set' && cloned.value, shaped);
 	assert.notEqual(cloned.type === 'mask.curve.set' && cloned.value[1], shaped[1]);
 });
+
+test('saves, applies and deletes a snapshot of the develop settings', () => {
+	const before = defaultEditDocument('photo-one');
+	const brightened = applyEditorCommand(before, {
+		type: 'adjustment.set',
+		group: 'light',
+		control: 'exposure',
+		value: 1.5
+	})!.document;
+
+	const saved = applyEditorCommand(brightened, {
+		type: 'snapshot.create',
+		snapshot: { id: 'snapshot-one', name: 'bright', adjustments: brightened.adjustments }
+	})!;
+	assert.equal(saved.label, 'saved bright snapshot');
+	assert.equal(saved.invalidation, 'overlay');
+	assert.equal(saved.document.snapshots.length, 1);
+	assert.equal(before.snapshots.length, 0, 'the source document must not change');
+
+	const darkened = applyEditorCommand(saved.document, {
+		type: 'adjustment.set',
+		group: 'light',
+		control: 'exposure',
+		value: -1
+	})!.document;
+	assert.equal(darkened.snapshots.length, 1, 'editing keeps the snapshot');
+
+	const restored = applyEditorCommand(darkened, {
+		type: 'snapshot.apply',
+		snapshotId: 'snapshot-one'
+	})!;
+	assert.equal(restored.label, 'applied bright snapshot');
+	assert.equal(restored.invalidation, 'render');
+	assert.deepEqual(restored.document.adjustments, brightened.adjustments);
+
+	assert.equal(
+		applyEditorCommand(restored.document, { type: 'snapshot.apply', snapshotId: 'snapshot-one' }),
+		null,
+		'reapplying the settings already in place is not a history entry'
+	);
+	assert.equal(
+		applyEditorCommand(restored.document, { type: 'snapshot.apply', snapshotId: 'missing' }),
+		null
+	);
+
+	const deleted = applyEditorCommand(restored.document, {
+		type: 'snapshot.delete',
+		snapshotId: 'snapshot-one'
+	})!;
+	assert.equal(deleted.label, 'deleted bright snapshot');
+	assert.deepEqual(deleted.document.snapshots, []);
+	assert.deepEqual(
+		deleted.document.adjustments,
+		brightened.adjustments,
+		'deleting a snapshot leaves the photograph as it is'
+	);
+});
+
+test('a document saved before snapshots existed still opens', () => {
+	const legacy = { ...defaultEditDocument('photo-one') } as Record<string, unknown>;
+	delete legacy.snapshots;
+	const result = applyEditorCommand(legacy as never, {
+		type: 'snapshot.create',
+		snapshot: {
+			id: 'snapshot-one',
+			name: 'start',
+			adjustments: defaultDevelopSettings()
+		}
+	})!;
+	assert.deepEqual(
+		result.document.snapshots.map(({ name }) => name),
+		['start']
+	);
+});

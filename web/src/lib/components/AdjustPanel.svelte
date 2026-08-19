@@ -8,6 +8,7 @@
 	import GradingSection from './GradingSection.svelte';
 	import LightSection from './LightSection.svelte';
 	import PresetsSection from './PresetsSection.svelte';
+	import SnapshotsSection from './SnapshotsSection.svelte';
 	import ToneCurveSection from './ToneCurveSection.svelte';
 	import ImageScope from './ui/ImageScope.svelte';
 	import Panel from './ui/Panel.svelte';
@@ -60,6 +61,7 @@
 		</label>
 	</Panel>
 
+	<SnapshotsSection {workspace} />
 	<PresetsSection {workspace} />
 
 	<Panel title="History" open={false} meta={`${workspace.history.length}`}>

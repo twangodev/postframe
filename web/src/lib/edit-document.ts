@@ -152,11 +152,18 @@ export const editMaskSchema = z.object({
 	adjustments: maskAdjustmentsSchema
 });
 
+export const editSnapshotSchema = z.object({
+	id: z.string().min(1),
+	name: z.string().trim().min(1).max(60),
+	adjustments: developSettingsSchema
+});
+
 export const editDocumentSchema = z
 	.object({
 		version: z.literal(EDIT_DOCUMENT_VERSION),
 		photoId: z.string().min(1),
 		adjustments: developSettingsSchema,
+		snapshots: z.array(editSnapshotSchema).default([]),
 		geometry: z.object({
 			rotation: z.number().finite().min(-180).max(180),
 			flipHorizontal: z.boolean(),
@@ -179,6 +186,7 @@ export const editDocumentSchema = z
 		}
 	});
 
+export type EditSnapshot = z.infer<typeof editSnapshotSchema>;
 export type MaskKind = z.infer<typeof maskKindSchema>;
 export type MaskOperation = z.infer<typeof maskOperationSchema>;
 export type NormalizedPoint = z.infer<typeof normalizedPointSchema>;
@@ -207,7 +215,8 @@ export function defaultEditDocument(
 			flipVertical: false,
 			crop: null
 		},
-		masks: []
+		masks: [],
+		snapshots: []
 	};
 }
 

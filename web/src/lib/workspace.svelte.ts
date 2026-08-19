@@ -12,6 +12,7 @@ import type { RenderTileRequest } from './worker';
 import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
+	cloneDevelopSettings,
 	defaultCurveSettings,
 	defaultDevelopSettings,
 	defaultGradingSettings,
@@ -524,6 +525,28 @@ export class WorkspaceState {
 		this.presets = this.presets.filter(({ id }) => id !== presetId);
 		void this.persistence.queue((store) => store.deletePreset(presetId));
 	};
+
+	snapshots = $derived(this.selectedPhoto?.edit.snapshots ?? []);
+
+	saveSnapshot = (name: string) => {
+		const photo = this.selectedPhoto;
+		const trimmed = name.trim();
+		if (!photo || !trimmed) return;
+		this.editor.dispatch({
+			type: 'snapshot.create',
+			snapshot: {
+				id: entityId('snapshot'),
+				name: trimmed,
+				adjustments: cloneDevelopSettings(photo.edit.adjustments)
+			}
+		});
+	};
+
+	applySnapshot = (snapshotId: string) =>
+		this.editor.dispatch({ type: 'snapshot.apply', snapshotId });
+
+	deleteSnapshot = (snapshotId: string) =>
+		this.editor.dispatch({ type: 'snapshot.delete', snapshotId });
 
 	copySettings = (groups: readonly DevelopGroupName[]) => {
 		const photo = this.selectedPhoto;
