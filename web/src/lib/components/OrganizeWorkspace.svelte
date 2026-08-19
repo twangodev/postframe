@@ -6,6 +6,13 @@
 	import PhotoCard from './PhotoCard.svelte';
 	import PhotoDetailRail from './PhotoDetailRail.svelte';
 	import RemovePhotosDialog from './RemovePhotosDialog.svelte';
+	import {
+		librarySourceCounts,
+		visibleLibraryPhotos,
+		type LibrarySort,
+		type LibrarySource,
+		type LibraryView
+	} from '$lib/library-view';
 	import { contextTargets, photoMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import { type Photo, type WorkspaceState } from '$lib/workspace.svelte';
 
@@ -16,9 +23,9 @@
 
 	let { workspace, onImport }: Props = $props();
 	let search = $state('');
-	let view = $state('grid');
-	let source = $state('all');
-	let sort = $state('capture');
+	let view = $state<LibraryView>('grid');
+	let source = $state<LibrarySource>({ kind: 'all' });
+	let sort = $state<LibrarySort>('capture');
 	let importing = $state(false);
 	let removalIds = $state<string[] | null>(null);
 	const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -28,36 +35,10 @@
 			workspace.selectedIds.some((id) => stack.photoIds.includes(id))
 		)
 	);
-	const recentCount = $derived(
-		workspace.photos.filter((photo) => photo.importedAt >= recentCutoff).length
+	const counts = $derived(librarySourceCounts(workspace.photos, recentCutoff));
+	const visiblePhotos = $derived(
+		visibleLibraryPhotos(workspace, { search, source, sort, recentCutoff })
 	);
-	const visiblePhotos = $derived.by(() => {
-		const query = search.trim().toLowerCase();
-		const collection = source.startsWith('collection:')
-			? workspace.collections.find((candidate) => candidate.id === source.slice(11))
-			: null;
-		let photos = workspace.photos.filter((photo) => {
-			if (query && !photo.name.toLowerCase().includes(query)) return false;
-			if (source === 'recent' && photo.importedAt < recentCutoff) return false;
-			if (source === 'favorites' && !photo.flagged) return false;
-			if (collection && !collection.photoIds.includes(photo.id)) return false;
-			return true;
-		});
-
-		const filteredIds = new Set(photos.map((photo) => photo.id));
-		photos = photos.filter((photo) => {
-			if (!photo.stackId) return true;
-			const stack = workspace.stacks.find((candidate) => candidate.id === photo.stackId);
-			const firstVisible = stack?.photoIds.find((photoId) => filteredIds.has(photoId));
-			return !stack?.collapsed || firstVisible === photo.id;
-		});
-
-		return [...photos].sort((a, b) => {
-			if (sort === 'name') return a.name.localeCompare(b.name);
-			if (sort === 'rating') return b.rating - a.rating;
-			return a.captured.localeCompare(b.captured);
-		});
-	});
 
 	function stackFor(photo: Photo) {
 		return workspace.stacks.find((stack) => stack.id === photo.stackId);
@@ -134,7 +115,7 @@
 		? 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)]'
 		: 'grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)_16rem] bg-bg max-[1080px]:grid-cols-[11rem_minmax(0,1fr)_14rem]'}
 >
-	<LibrarySidebar {workspace} bind:source {recentCount} />
+	<LibrarySidebar {workspace} bind:source {counts} />
 
 	<section class="motion-panel-up flex min-h-0 min-w-0 flex-col bg-canvas">
 		{#if workspace.photos.length > 0}
@@ -185,7 +166,7 @@
 					<ToggleGroup.Root
 						type="single"
 						value={view}
-						onValueChange={(value) => value && (view = value)}
+						onValueChange={(value) => value && (view = value as LibraryView)}
 						class="flex h-7 rounded border border-subtle bg-surface p-0.5"
 					>
 						<ToggleGroup.Item

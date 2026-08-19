@@ -2,6 +2,7 @@
 	import { Flag, Layers3, Star } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import ContextMenu from './ui/ContextMenu.svelte';
+	import type { LibraryView } from '$lib/library-view';
 	import type { MenuEntry } from '$lib/menu';
 	import { labelColors } from '$lib/photo-format';
 	import type { PhotoMenuAction } from '$lib/photo-menu';
@@ -15,7 +16,7 @@
 	interface Props {
 		workspace: WorkspaceState;
 		photo: Photo;
-		view: string;
+		view: LibraryView;
 		index: number;
 		stack: PhotoStack | undefined;
 		menu: MenuEntry<PhotoMenuAction>[];
@@ -71,7 +72,7 @@
 				{#if view === 'grid'}
 					<div class="mt-1.5 flex items-center justify-between">
 						<div class="flex">
-							{#each [1, 2, 3, 4, 5] as rating}
+							{#each [1, 2, 3, 4, 5] as rating (rating)}
 								<button
 									type="button"
 									aria-label={`Rate ${rating} stars`}
