@@ -31,6 +31,7 @@
 	const maskPreviewMode = $derived(tools.maskPreviewMode);
 	const selectedMask = $derived(tools.selectedMask);
 	const imageSize = $derived(viewport.image);
+	const frame = $derived({ image: imageSize, scale: viewport.transform.scale });
 	const surfaceStyle = $derived(
 		`width: ${imageSize.width}px; height: ${imageSize.height}px; transform: translate3d(${viewport.imageOffset.x}px, ${viewport.imageOffset.y}px, 0) scale(${viewport.transform.scale}); transform-origin: top left; --viewport-scale: ${viewport.transform.scale};`
 	);
@@ -191,8 +192,7 @@
 						{#if viewport.livePaint ?? viewport.settlingPaint}
 							<MaskPaintPreview
 								paint={(viewport.livePaint ?? viewport.settlingPaint)!}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
+								image={imageSize}
 								mode={maskPreviewMode === 'matte' ? 'matte' : 'overlay'}
 							/>
 						{/if}
@@ -200,9 +200,7 @@
 							<MaskPromptOverlay
 								points={viewport.objectStroke.points}
 								label={viewport.objectStroke.label}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.edgeRefinementStroke}
@@ -210,9 +208,7 @@
 								points={viewport.edgeRefinementStroke.points}
 								label="refine"
 								brushRadius={viewport.edgeRefinementStroke.radius}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.maskStroke && tools.maskBrushOperation === 'subtract'}
@@ -220,9 +216,7 @@
 								points={viewport.maskStroke.points}
 								label="background"
 								brushRadius={viewport.maskBrushSize / 2}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.gizmoComponent}
@@ -231,9 +225,7 @@
 								hover={viewport.gizmoHover}
 								active={viewport.gizmoDrag?.grip ?? null}
 								angle={viewport.gizmoAngle}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if viewport.brushPoint && (activeTool === 'mask' || (activeTool === 'mask-refine' && !tools.smartMaskWorking))}
@@ -242,18 +234,11 @@
 								radius={activeTool === 'mask'
 									? viewport.maskBrushSize / 2
 									: (viewport.edgeRefinementStroke?.radius ?? viewport.refineBrushRadius)}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
+								{frame}
 							/>
 						{/if}
 						{#if tools.subjectChoices && tools.hoveredSubjectBox}
-							<SubjectHoverBox
-								box={tools.hoveredSubjectBox}
-								imageWidth={imageSize.width}
-								imageHeight={imageSize.height}
-								viewportScale={viewport.transform.scale}
-							/>
+							<SubjectHoverBox box={tools.hoveredSubjectBox} {frame} />
 						{/if}
 					</div>
 				{/key}

@@ -1,30 +1,31 @@
 <script lang="ts">
+	import ImageSpaceOverlay from './ui/ImageSpaceOverlay.svelte';
 	import type { NormalizedPoint } from '$lib/edit-document';
+	import { hairline, type OverlayFrame } from '$lib/overlay-frame';
+	import { normalizedLength, normalizedToPixel } from '$lib/photo-viewport';
 
 	interface Props {
 		points: NormalizedPoint[];
 		label: 'foreground' | 'background' | 'refine';
-		imageWidth: number;
-		imageHeight: number;
-		viewportScale: number;
+		frame: OverlayFrame;
 		brushRadius?: number;
 	}
 
-	let { points, label, imageWidth, imageHeight, viewportScale, brushRadius = 0 }: Props = $props();
+	let { points, label, frame, brushRadius = 0 }: Props = $props();
 	const coordinates = $derived(
-		points.map(({ x, y }) => `${x * imageWidth},${y * imageHeight}`).join(' ')
+		points
+			.map((point) => {
+				const { x, y } = normalizedToPixel(point, frame.image);
+				return `${x},${y}`;
+			})
+			.join(' ')
 	);
 	const strokeWidth = $derived(
-		brushRadius > 0 ? brushRadius * 2 * Math.max(imageWidth, imageHeight) : 7 / viewportScale
+		brushRadius > 0 ? normalizedLength(brushRadius * 2, frame.image) : hairline(frame, 7)
 	);
 </script>
 
-<svg
-	aria-hidden="true"
-	class="pointer-events-none absolute inset-0 size-full overflow-visible"
-	viewBox={`0 0 ${imageWidth} ${imageHeight}`}
-	preserveAspectRatio="none"
->
+<ImageSpaceOverlay image={frame.image}>
 	<polyline
 		points={coordinates}
 		fill="none"
@@ -36,4 +37,4 @@
 		stroke-linecap="round"
 		stroke-linejoin="round"
 	/>
-</svg>
+</ImageSpaceOverlay>

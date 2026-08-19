@@ -2,11 +2,10 @@ import { extendedStroke } from './drag-constraints.ts';
 import type { EditMask, NormalizedPoint } from './edit-document.ts';
 import { GizmoSession } from './gizmo-session.svelte.ts';
 import type { GradientComponent } from './mask-painting.ts';
-import type { MaskBrushStroke } from './mask-rasterizer.ts';
+import type { LivePaint, MaskBrushStroke } from './mask-rasterizer.ts';
 import { screenToImage, withinImage, type Point, type Size } from './photo-viewport.ts';
 import type { MaskEdgeStroke } from './smart-mask.ts';
 import { ViewportCamera } from './viewport-camera.svelte.ts';
-import type { LivePaint } from './components/MaskPaintPreview.svelte';
 
 export const MASK_BRUSH_FEATHER = 0.45;
 export const MASK_BRUSH_FLOW = 1;

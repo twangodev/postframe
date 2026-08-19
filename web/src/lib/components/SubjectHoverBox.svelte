@@ -1,30 +1,25 @@
 <script lang="ts">
+	import ImageSpaceOverlay from './ui/ImageSpaceOverlay.svelte';
 	import type { NormalizedRegion } from '$lib/edit-document';
+	import { dashes, hairline, type OverlayFrame } from '$lib/overlay-frame';
 
 	interface Props {
 		box: NormalizedRegion;
-		imageWidth: number;
-		imageHeight: number;
-		viewportScale: number;
+		frame: OverlayFrame;
 	}
 
-	let { box, imageWidth, imageHeight, viewportScale }: Props = $props();
+	let { box, frame }: Props = $props();
 </script>
 
-<svg
-	aria-hidden="true"
-	class="pointer-events-none absolute inset-0 size-full overflow-visible"
-	viewBox={`0 0 ${imageWidth} ${imageHeight}`}
-	preserveAspectRatio="none"
->
+<ImageSpaceOverlay image={frame.image}>
 	<rect
-		x={box.x * imageWidth}
-		y={box.y * imageHeight}
-		width={box.width * imageWidth}
-		height={box.height * imageHeight}
+		x={box.x * frame.image.width}
+		y={box.y * frame.image.height}
+		width={box.width * frame.image.width}
+		height={box.height * frame.image.height}
 		fill="none"
 		class="stroke-accent"
-		stroke-width={2 / viewportScale}
-		stroke-dasharray={`${6 / viewportScale} ${4 / viewportScale}`}
+		stroke-width={hairline(frame, 2)}
+		stroke-dasharray={dashes(frame)}
 	/>
-</svg>
+</ImageSpaceOverlay>
