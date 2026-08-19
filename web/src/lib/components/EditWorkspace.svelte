@@ -10,7 +10,7 @@
 	import ToolOptionsBar from './ToolOptionsBar.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import ViewportHeader from './ViewportHeader.svelte';
-	import { toolShortcutHandlers } from '$lib/editor-tools';
+	import { toolLabel, toolShortcutHandlers } from '$lib/editor-tools';
 	import type { NormalizedRegion } from '$lib/edit-document';
 	import { type MaskPreviewMode } from '$lib/mask-preview';
 	import { ViewportInteraction, editableTarget } from '$lib/viewport-interaction.svelte';
@@ -24,7 +24,6 @@
 	let { workspace, onExport }: Props = $props();
 
 	let activeTool = $state('move');
-	let activeToolLabel = $state('move');
 	let inspectorTab = $state('adjust');
 	let before = $state(false);
 	let maskPreviewMode = $state<MaskPreviewMode | null>('overlay');
@@ -34,6 +33,7 @@
 	let fittedPhotoKey = '';
 
 	const active = $derived(workspace.editingPhoto);
+	const activeToolLabel = $derived(toolLabel(activeTool));
 	const imageSize = $derived({
 		width: Math.max(1, active?.width ?? 1600),
 		height: Math.max(1, active?.height ?? 1067)
@@ -80,11 +80,10 @@
 		viewport.fitPhoto();
 	});
 
-	function chooseTool(tool: string, label = tool) {
+	function chooseTool(tool: string) {
 		// TODO(WASM_TODOS.editorTools): start the selected tool in the Wasm document.
 		if (tool === 'object-select' && activeTool !== 'object-select') workspace.selectMask(null);
 		activeTool = tool;
-		activeToolLabel = label;
 		viewport.brushPoint = null;
 		if (tool.startsWith('mask')) inspectorTab = 'mask';
 	}
@@ -123,28 +122,28 @@
 
 	function addMask(kind: MaskKind) {
 		workspace.createMask(kind);
-		if (kind === 'linear') chooseTool('mask-linear', 'linear gradient');
-		else if (kind === 'radial') chooseTool('mask-radial', 'radial gradient');
+		if (kind === 'linear') chooseTool('mask-linear');
+		else if (kind === 'radial') chooseTool('mask-radial');
 		else beginMaskBrush('add');
 		maskPreviewMode = 'overlay';
 	}
 
 	function beginMaskBrush(operation: 'add' | 'subtract') {
 		maskBrushOperation = operation;
-		chooseTool('mask', 'mask brush');
+		chooseTool('mask');
 		maskPreviewMode = 'overlay';
 	}
 
 	function beginObjectMask() {
 		workspace.selectMask(null);
-		chooseTool('object-select', 'object selection');
+		chooseTool('object-select');
 		inspectorTab = 'mask';
 		maskPreviewMode = 'overlay';
 	}
 
 	function beginEdgeRefinement() {
 		if (!canRefineSelectedMask) return;
-		chooseTool('mask-refine', 'refine edge');
+		chooseTool('mask-refine');
 		maskPreviewMode = 'overlay';
 	}
 </script>

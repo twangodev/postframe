@@ -16,7 +16,7 @@
 	interface Props {
 		workspace: WorkspaceState;
 		activeTool: string;
-		onPickTool: (tool: string, label?: string) => void;
+		onPickTool: (tool: string) => void;
 	}
 
 	let { workspace, activeTool, onPickTool }: Props = $props();
