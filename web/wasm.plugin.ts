@@ -23,7 +23,7 @@ const threadedPackage = JSON.stringify({
 const threadedRustFlags = [
 	'-C target-feature=+simd128,+atomics,+bulk-memory',
 	'-C link-arg=--shared-memory',
-	'-C link-arg=--max-memory=2147483648',
+	'-C link-arg=--max-memory=4294967296',
 	'-C link-arg=--import-memory',
 	'-C link-arg=--export=__wasm_init_tls',
 	'-C link-arg=--export=__tls_size',
