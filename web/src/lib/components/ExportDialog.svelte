@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { Dialog } from 'bits-ui';
 	import { Check, Download } from '@lucide/svelte';
+	import DialogFooter from './ui/DialogFooter.svelte';
 	import DialogHeader from './ui/DialogHeader.svelte';
 	import DialogShell from './ui/DialogShell.svelte';
+	import { primaryButtonClass } from '$lib/button';
 	import { DEFAULT_EXPORT_QUALITY, exportProgressPercent, type ExportPhase } from '$lib/export';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -131,16 +132,11 @@
 			<p class="font-mono text-[11px] tracking-wide text-muted">
 				JPEG · quality {quality}
 			</p>
-			<div class="flex gap-2">
-				<Dialog.Close
-					class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted hover:text-text"
-				>
-					cancel
-				</Dialog.Close>
+			<DialogFooter cancel>
 				<button
 					type="submit"
 					disabled={!canExport || exporting}
-					class="flex min-w-28 cursor-pointer items-center justify-center gap-1.5 rounded bg-text px-3 py-2 text-[11px] text-bg disabled:cursor-not-allowed disabled:opacity-50"
+					class="flex min-w-28 items-center justify-center gap-1.5 {primaryButtonClass}"
 				>
 					{#if status.kind === 'completed'}
 						<Check size={12} /> saved
@@ -150,7 +146,7 @@
 						<Download size={12} /> export
 					{/if}
 				</button>
-			</div>
+			</DialogFooter>
 		</div>
 	</form>
 </DialogShell>

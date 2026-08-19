@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Dialog } from 'bits-ui';
+	import DialogFooter from './ui/DialogFooter.svelte';
 	import DialogHeader from './ui/DialogHeader.svelte';
 	import DialogShell from './ui/DialogShell.svelte';
+	import { primaryButtonClass } from '$lib/button';
 	import { DEVELOP_GROUP_NAMES, type DevelopGroupName } from '$lib/develop-settings';
 	import { DEVELOP_GROUP_LABELS } from '$lib/preset';
 
@@ -94,19 +95,10 @@
 			{/each}
 		</div>
 
-		<div class="mt-4 flex justify-end gap-2">
-			<Dialog.Close
-				class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted hover:text-text"
-			>
-				cancel
-			</Dialog.Close>
-			<button
-				type="submit"
-				disabled={!canConfirm}
-				class="cursor-pointer rounded bg-text px-3 py-2 text-[11px] text-bg disabled:cursor-not-allowed disabled:opacity-35"
-			>
+		<DialogFooter cancel class="mt-4">
+			<button type="submit" disabled={!canConfirm} class={primaryButtonClass}>
 				{label}
 			</button>
-		</div>
+		</DialogFooter>
 	</form>
 </DialogShell>

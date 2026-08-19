@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { Images, Upload } from '@lucide/svelte';
+	import DialogFooter from './ui/DialogFooter.svelte';
 	import DialogHeader from './ui/DialogHeader.svelte';
 	import DialogShell from './ui/DialogShell.svelte';
+	import { primaryButtonClass } from '$lib/button';
 
 	interface Props {
 		open?: boolean;
@@ -84,14 +86,10 @@
 				{/if}
 			</label>
 		{/if}
-		<div class="mt-4 flex justify-end">
-			<button
-				type="submit"
-				disabled={!name.trim() || busy}
-				class="cursor-pointer rounded bg-text px-3 py-2 text-[11px] text-bg disabled:opacity-35"
-			>
+		<DialogFooter class="mt-4">
+			<button type="submit" disabled={!name.trim() || busy} class={primaryButtonClass}>
 				create collection
 			</button>
-		</div>
+		</DialogFooter>
 	</form>
 </DialogShell>

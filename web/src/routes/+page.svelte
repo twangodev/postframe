@@ -8,6 +8,7 @@
 	import TaskManager from '$lib/components/ui/TaskManager.svelte';
 	import Welcome from '$lib/components/Welcome.svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
+	import { secondaryButtonClass } from '$lib/button';
 	import { WorkspaceState } from '$lib/workspace.svelte';
 
 	const workspace = new WorkspaceState();
@@ -65,11 +66,7 @@
 			postframe's editing workspace is designed for displays at least 900 pixels wide. your files
 			remain in this browser's local storage.
 		</p>
-		<button
-			type="button"
-			class="mt-6 cursor-pointer rounded border border-subtle px-4 py-2 text-[11px] tracking-wide text-muted hover:text-text"
-			onclick={workspace.reset}
-		>
+		<button type="button" class="mt-6 {secondaryButtonClass}" onclick={workspace.reset}>
 			back to start
 		</button>
 	</div>

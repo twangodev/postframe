@@ -5,6 +5,7 @@
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 	import DialogHeader from './ui/DialogHeader.svelte';
 	import DialogShell from './ui/DialogShell.svelte';
+	import { buttonClass } from '$lib/button';
 	import StorageBar from './StorageBar.svelte';
 
 	type Action = 'refresh' | 'persist' | 'cleanup' | 'clear';
@@ -121,7 +122,7 @@
 					<button
 						type="button"
 						disabled={busy}
-						class="cursor-pointer rounded border border-subtle px-3 py-2 text-[11px] text-muted transition-colors hover:bg-surface hover:text-text disabled:cursor-wait disabled:opacity-40"
+						class={buttonClass('secondary', { busy: true })}
 						onclick={() => (confirmingClear = false)}
 					>
 						cancel
@@ -129,7 +130,7 @@
 					<button
 						type="button"
 						disabled={busy}
-						class="cursor-pointer rounded bg-negative px-3 py-2 text-[11px] font-medium text-bg transition-opacity disabled:cursor-wait disabled:opacity-45"
+						class={buttonClass('destructive', { busy: true })}
 						onclick={() => run('clear', workspace.clearLocalData)}
 					>
 						{action === 'clear' ? 'clearing…' : 'clear everything'}
@@ -155,7 +156,7 @@
 				<button
 					type="button"
 					disabled={busy}
-					class="flex cursor-pointer items-center gap-1.5 rounded border border-subtle px-3 py-2 text-[11px] text-muted transition-colors hover:bg-surface hover:text-text disabled:cursor-wait disabled:opacity-40"
+					class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
 					onclick={() => run('cleanup', workspace.cleanupLocalData)}
 				>
 					<RefreshCw size={12} class={action === 'cleanup' ? 'animate-spin' : ''} />
@@ -164,7 +165,7 @@
 				<button
 					type="button"
 					disabled={busy}
-					class="flex cursor-pointer items-center gap-1.5 rounded border border-subtle px-3 py-2 text-[11px] text-muted transition-colors hover:bg-surface hover:text-text disabled:cursor-wait disabled:opacity-40"
+					class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
 					onclick={() => (confirmingClear = true)}
 				>
 					<Trash2 size={12} /> clear
@@ -173,7 +174,7 @@
 					<button
 						type="button"
 						disabled={busy}
-						class="flex cursor-pointer items-center gap-1.5 rounded bg-text px-3 py-2 text-[11px] font-medium text-bg transition-opacity disabled:cursor-wait disabled:opacity-45"
+						class="flex items-center gap-1.5 {buttonClass('primary', { busy: true })}"
 						onclick={() => run('persist', workspace.requestPersistentStorage)}
 					>
 						<ShieldCheck size={12} />
