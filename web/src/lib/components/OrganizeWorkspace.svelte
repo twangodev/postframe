@@ -272,7 +272,10 @@
 	<PhotoDetailRail {workspace} />
 </div>
 
-<CollectionDialog {workspace} />
+<CollectionDialog
+	bind:open={workspace.collectionDialogOpen}
+	onCreate={(name) => workspace.createCollection(name, [])}
+/>
 
 <RemovePhotosDialog
 	ids={removalIds}
