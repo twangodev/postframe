@@ -13,19 +13,16 @@ export class DisplayTransform {
     [Symbol.dispose](): void;
     apply_rgba(rgba: Uint8Array, width: number, height: number): Uint8Array;
     /**
-     * Develop one tile of a display document, told where in the image it sits
-     * and how many image pixels each of its own pixels spans.
+     * Develop one tile, given its region and how many image pixels each of its pixels spans.
      */
     apply_tile_rgba(rgba: Uint8Array, tile_width: number, tile_height: number, region: any, bin: number): Uint8Array;
     /**
-     * Pixels of context a tile needs on each side so its planes match a
-     * whole-image blur, in output (binned) pixels; 0 when detail is neutral.
+     * Binned-pixel context a tile needs per side to match a whole-image blur; 0 when detail is neutral.
      */
     detail_apron(image_width: number, image_height: number, bin: number): number;
     constructor(settings: any, crop: any);
     /**
-     * The red, green and blue curves back to back, empty while all three are
-     * the identity.
+     * Red, green and blue curves back to back; empty when all three are the identity.
      */
     readonly channel_luts: Float32Array;
     readonly grading_scalars: Float32Array;
@@ -150,8 +147,7 @@ export function auto_tone(rgba: Uint8Array, width: number, height: number): any;
 export function auto_white_balance(rgba: Uint8Array, width: number, height: number): Float32Array;
 
 /**
- * One alpha byte per pixel: how far each encoded RGBA pixel's hue and chroma
- * fall inside a colour range.
+ * One alpha byte per pixel: how far each RGBA pixel's hue and chroma fall inside a colour range.
  */
 export function color_range_mask(rgba: Uint8Array, width: number, height: number, range: any): Uint8Array;
 
@@ -162,8 +158,7 @@ export function initThreadPool(num_threads: number): Promise<any>;
 export function inspect_raw(raw: Uint8Array, thumbnail_dimension: number): RawInspection;
 
 /**
- * One alpha byte per pixel: how far each encoded RGBA pixel's luma falls
- * inside a luminance range.
+ * One alpha byte per pixel: how far each RGBA pixel's luma falls inside a luminance range.
  */
 export function luminance_range_mask(rgba: Uint8Array, width: number, height: number, range: any): Uint8Array;
 
@@ -191,15 +186,27 @@ export function wbg_rayon_start_worker(receiver: number): void;
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
+    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
+    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
+    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
+    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
+    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any, g: number) => [number, number, number, number];
+    readonly displaytransform_channel_luts: (a: number) => [number, number];
+    readonly displaytransform_detail_apron: (a: number, b: number, c: number, d: number) => number;
+    readonly displaytransform_grading_scalars: (a: number) => [number, number];
+    readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_mixer_luts: (a: number) => [number, number];
+    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
+    readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
-    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
     readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
-    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
     readonly lineartile_detail: (a: number) => [number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
@@ -210,18 +217,6 @@ export interface InitOutput {
     readonly previewframe_waveform: (a: number) => [number, number];
     readonly previewframe_waveform_height: (a: number) => number;
     readonly previewframe_waveform_width: (a: number) => number;
-    readonly rawinspection_camera_make: (a: number) => [number, number];
-    readonly rawinspection_camera_model: (a: number) => [number, number];
-    readonly rawinspection_captured_at: (a: number) => [number, number];
-    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
-    readonly rawinspection_f_number: (a: number) => [number, number];
-    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
-    readonly rawinspection_height: (a: number) => number;
-    readonly rawinspection_iso: (a: number) => number;
-    readonly rawinspection_lens: (a: number) => [number, number];
-    readonly rawinspection_orientation: (a: number) => number;
-    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
-    readonly rawinspection_width: (a: number) => number;
     readonly renderedtile_height: (a: number) => number;
     readonly renderedtile_rgba: (a: number) => [number, number];
     readonly renderedtile_width: (a: number) => number;
@@ -248,30 +243,30 @@ export interface InitOutput {
     readonly session_render_tile_linear: (a: number, b: number, c: number, d: number, e: number, f: number, g: any) => [number, number, number];
     readonly session_restore_cache: (a: number, b: number, c: number, d: number) => [number, number];
     readonly session_width: (a: number) => [number, number, number];
-    readonly supported_raw_extensions: () => [number, number];
-    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly renderprofile_lookup_low_bits: (a: number) => number;
     readonly renderprofile_transfer_lut_length: (a: number) => number;
     readonly scopeframe_sample_count: (a: number) => number;
     readonly scopeframe_waveform_height: (a: number) => number;
     readonly scopeframe_waveform_width: (a: number) => number;
+    readonly __wbg_rawinspection_free: (a: number, b: number) => void;
+    readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
+    readonly rawinspection_camera_make: (a: number) => [number, number];
+    readonly rawinspection_camera_model: (a: number) => [number, number];
+    readonly rawinspection_captured_at: (a: number) => [number, number];
+    readonly rawinspection_exposure_seconds: (a: number) => [number, number];
+    readonly rawinspection_f_number: (a: number) => [number, number];
+    readonly rawinspection_focal_length_mm: (a: number) => [number, number];
+    readonly rawinspection_height: (a: number) => number;
+    readonly rawinspection_iso: (a: number) => number;
+    readonly rawinspection_lens: (a: number) => [number, number];
+    readonly rawinspection_orientation: (a: number) => number;
+    readonly rawinspection_thumbnail_jpeg: (a: number) => [number, number];
+    readonly rawinspection_width: (a: number) => number;
+    readonly supported_raw_extensions: () => [number, number];
+    readonly validate_raw: (a: number, b: number) => [number, number];
     readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
-    readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
-    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
-    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
-    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
-    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
-    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
-    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any, g: number) => [number, number, number, number];
-    readonly displaytransform_channel_luts: (a: number) => [number, number];
-    readonly displaytransform_detail_apron: (a: number, b: number, c: number, d: number) => number;
-    readonly displaytransform_grading_scalars: (a: number) => [number, number];
-    readonly displaytransform_luminance_lut: (a: number) => [number, number];
-    readonly displaytransform_mixer_luts: (a: number) => [number, number];
-    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
     readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
