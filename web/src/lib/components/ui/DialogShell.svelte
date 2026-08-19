@@ -7,6 +7,7 @@
 		onOpenChange?: (open: boolean) => void;
 		size?: 'sm' | 'lg';
 		class?: string;
+		trigger?: Snippet<[Record<string, unknown>]>;
 		children: Snippet;
 	}
 
@@ -15,11 +16,19 @@
 		onOpenChange,
 		size = 'lg',
 		class: className = '',
+		trigger,
 		children
 	}: Props = $props();
 </script>
 
 <Dialog.Root bind:open {onOpenChange}>
+	{#if trigger}
+		<Dialog.Trigger>
+			{#snippet child({ props })}
+				{@render trigger(props)}
+			{/snippet}
+		</Dialog.Trigger>
+	{/if}
 	<Dialog.Portal>
 		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
 		<div class="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">

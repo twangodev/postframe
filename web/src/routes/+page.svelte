@@ -32,22 +32,14 @@
 	</main>
 {:else if workspace.mode === 'welcome'}
 	<Welcome
+		{workspace}
 		acceptedPhotos={workspace.acceptedPhotos}
 		sourceReady={workspace.capabilitiesReady}
 		ingestError={workspace.ingestError}
 		libraryError={workspace.libraryError}
-		localStorageAvailable={workspace.localStorageAvailable}
-		storageStatus={workspace.browserStorageStatus}
-		storageBreakdown={workspace.browserStorageBreakdown}
-		storageError={workspace.browserStorageError}
-		cleanupResult={workspace.storageCleanupResult}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
 		onEnterLibrary={workspace.enterLibrary}
-		onClearLocalData={workspace.clearLocalData}
-		onRefreshStorage={workspace.refreshBrowserStorage}
-		onRequestPersistence={workspace.requestPersistentStorage}
-		onCleanup={workspace.cleanupLocalData}
 	/>
 {:else}
 	<div class="hidden h-svh min-h-0 flex-col bg-bg text-text min-[900px]:flex">

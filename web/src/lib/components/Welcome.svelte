@@ -4,49 +4,30 @@
 	import postframeLogo from '$lib/assets/favicon.svg';
 	import CollectionDialog from './CollectionDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
-	import type { BrowserStorageStatus } from '$lib/browser-storage';
-	import type { CleanupResult } from '$lib/library-service';
-	import type { StorageBreakdown } from '$lib/storage-breakdown';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
+		workspace: WorkspaceState;
 		acceptedPhotos: string;
 		sourceReady: boolean;
 		ingestError: string | null;
 		libraryError: string | null;
-		localStorageAvailable: boolean;
-		storageStatus: BrowserStorageStatus | null;
-		storageBreakdown: StorageBreakdown | null;
-		storageError: string | null;
-		cleanupResult: CleanupResult | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onEnterLibrary: () => void;
-		onClearLocalData: () => Promise<void>;
-		onRefreshStorage: () => Promise<void>;
-		onRequestPersistence: () => Promise<void>;
-		onCleanup: () => Promise<void>;
 	}
 
 	let {
+		workspace,
 		acceptedPhotos,
 		sourceReady,
 		ingestError,
 		libraryError,
-		localStorageAvailable,
-		storageStatus,
-		storageBreakdown,
-		storageError,
-		cleanupResult,
 		onOpenPhoto,
 		onCreateCollection,
-		onEnterLibrary,
-		onClearLocalData,
-		onRefreshStorage,
-		onRequestPersistence,
-		onCleanup
+		onEnterLibrary
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
-	let storageOpen = $state(false);
 	let busy = $state(false);
 	let openPhotoInput: HTMLInputElement;
 
@@ -59,11 +40,6 @@
 		} finally {
 			busy = false;
 		}
-	}
-
-	function openStorage() {
-		storageOpen = true;
-		void onRefreshStorage();
 	}
 
 	async function createCollection(name: string, files: File[]) {
@@ -103,14 +79,18 @@
 		<SiGithub size={15} aria-hidden="true" />
 	</a>
 
-	{#if localStorageAvailable}
-		<button
-			type="button"
-			class="motion-enter absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] text-muted/70 transition-colors hover:bg-surface hover:text-text"
-			onclick={openStorage}
-		>
-			local storage
-		</button>
+	{#if workspace.localStorageAvailable}
+		<StorageManagementDialog {workspace}>
+			{#snippet trigger(props)}
+				<button
+					{...props}
+					type="button"
+					class="motion-enter absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] text-muted/70 transition-colors hover:bg-surface hover:text-text"
+				>
+					local storage
+				</button>
+			{/snippet}
+		</StorageManagementDialog>
 	{/if}
 
 	<section class="motion-enter w-full max-w-md">
@@ -168,16 +148,4 @@
 	onOpenChange={collectionDialogClosed}
 	onCreate={createCollection}
 	photos={{ accept: acceptedPhotos, ready: sourceReady }}
-/>
-
-<StorageManagementDialog
-	bind:open={storageOpen}
-	status={storageStatus}
-	breakdown={storageBreakdown}
-	error={storageError}
-	{cleanupResult}
-	onRefresh={onRefreshStorage}
-	{onRequestPersistence}
-	{onCleanup}
-	{onClearLocalData}
 />

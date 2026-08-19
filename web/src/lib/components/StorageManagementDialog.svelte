@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { Database, RefreshCw, ShieldCheck, Trash2 } from '@lucide/svelte';
-	import type { BrowserStorageStatus } from '$lib/browser-storage';
-	import type { CleanupResult } from '$lib/library-service';
-	import type { StorageBreakdown } from '$lib/storage-breakdown';
+	import type { Snippet } from 'svelte';
 	import { formatBytes } from '$lib/format-bytes';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 	import DialogHeader from './ui/DialogHeader.svelte';
 	import DialogShell from './ui/DialogShell.svelte';
 	import StorageBar from './StorageBar.svelte';
@@ -12,33 +11,21 @@
 	type Callback = () => void | Promise<void>;
 
 	interface Props {
-		open?: boolean;
-		status: BrowserStorageStatus | null;
-		breakdown?: StorageBreakdown | null;
-		error?: string | null;
-		cleanupResult?: CleanupResult | null;
-		onRefresh: Callback;
-		onRequestPersistence: Callback;
-		onCleanup: Callback;
-		onClearLocalData: Callback;
+		workspace: WorkspaceState;
+		trigger: Snippet<[Record<string, unknown>]>;
 	}
 
-	let {
-		open = $bindable(false),
-		status,
-		breakdown = null,
-		error = null,
-		cleanupResult = null,
-		onRefresh,
-		onRequestPersistence,
-		onCleanup,
-		onClearLocalData
-	}: Props = $props();
+	let { workspace, trigger }: Props = $props();
+	let open = $state(false);
 	let action = $state<Action | null>(null);
 	let actionError = $state<string | null>(null);
 	let confirmingClear = $state(false);
 
 	const busy = $derived(action !== null);
+	const status = $derived(workspace.browserStorageStatus);
+	const breakdown = $derived(workspace.browserStorageBreakdown);
+	const error = $derived(workspace.browserStorageError);
+	const cleanupResult = $derived(workspace.storageCleanupResult);
 
 	async function run(nextAction: Action, callback: Callback) {
 		if (busy) return;
@@ -58,15 +45,17 @@
 		}
 	}
 
-	function closeChanged(nextOpen: boolean) {
-		if (!nextOpen && !busy) {
+	function openChanged(nextOpen: boolean) {
+		if (nextOpen) {
+			void workspace.refreshBrowserStorage();
+		} else if (!busy) {
 			confirmingClear = false;
 			actionError = null;
 		}
 	}
 </script>
 
-<DialogShell bind:open onOpenChange={closeChanged} size="lg">
+<DialogShell bind:open onOpenChange={openChanged} size="lg" {trigger}>
 	<DialogHeader
 		class="border-b border-subtle p-4"
 		eyebrow={{ icon: Database, label: 'local storage' }}
@@ -141,7 +130,7 @@
 						type="button"
 						disabled={busy}
 						class="cursor-pointer rounded bg-negative px-3 py-2 text-[11px] font-medium text-bg transition-opacity disabled:cursor-wait disabled:opacity-45"
-						onclick={() => run('clear', onClearLocalData)}
+						onclick={() => run('clear', workspace.clearLocalData)}
 					>
 						{action === 'clear' ? 'clearing…' : 'clear everything'}
 					</button>
@@ -157,7 +146,7 @@
 				disabled={busy}
 				aria-label="Refresh storage details"
 				class="flex cursor-pointer items-center gap-1.5 rounded px-2 py-2 text-[11px] text-muted transition-colors hover:text-text disabled:cursor-wait disabled:opacity-40"
-				onclick={() => run('refresh', onRefresh)}
+				onclick={() => run('refresh', workspace.refreshBrowserStorage)}
 			>
 				<RefreshCw size={12} class={action === 'refresh' ? 'animate-spin' : ''} />
 				refresh
@@ -167,7 +156,7 @@
 					type="button"
 					disabled={busy}
 					class="flex cursor-pointer items-center gap-1.5 rounded border border-subtle px-3 py-2 text-[11px] text-muted transition-colors hover:bg-surface hover:text-text disabled:cursor-wait disabled:opacity-40"
-					onclick={() => run('cleanup', onCleanup)}
+					onclick={() => run('cleanup', workspace.cleanupLocalData)}
 				>
 					<RefreshCw size={12} class={action === 'cleanup' ? 'animate-spin' : ''} />
 					{action === 'cleanup' ? 'cleaning…' : 'clean up'}
@@ -185,7 +174,7 @@
 						type="button"
 						disabled={busy}
 						class="flex cursor-pointer items-center gap-1.5 rounded bg-text px-3 py-2 text-[11px] font-medium text-bg transition-opacity disabled:cursor-wait disabled:opacity-45"
-						onclick={() => run('persist', onRequestPersistence)}
+						onclick={() => run('persist', workspace.requestPersistentStorage)}
 					>
 						<ShieldCheck size={12} />
 						{action === 'persist' ? 'requesting…' : 'keep locally'}

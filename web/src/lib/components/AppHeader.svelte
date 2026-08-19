@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Tabs } from 'bits-ui';
+	import { mergeProps, Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import { Database, Download, Plus, Upload } from '@lucide/svelte';
@@ -21,7 +21,6 @@
 
 	let { workspace, onImport, onExport }: Props = $props();
 	let importing = $state(false);
-	let storageOpen = $state(false);
 	let copyOpen = $state(false);
 	let syncOpen = $state(false);
 	let importInput: HTMLInputElement;
@@ -76,11 +75,6 @@
 			case 'sync-settings':
 				if (workspace.canSync) syncOpen = true;
 		}
-	}
-
-	function openStorage() {
-		storageOpen = true;
-		void workspace.refreshBrowserStorage();
 	}
 
 	function shortcut(action: EditorMenuAction) {
@@ -200,19 +194,22 @@
 				{/snippet}
 			</Tooltip>
 			{#if workspace.localStorageAvailable}
-				<Tooltip text="Local storage">
-					{#snippet children(props)}
-						<button
-							{...props}
-							type="button"
-							aria-label="Manage local storage"
-							class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
-							onclick={openStorage}
-						>
-							<Database size={13} strokeWidth={1.5} />
-						</button>
+				<StorageManagementDialog {workspace}>
+					{#snippet trigger(triggerProps)}
+						<Tooltip text="Local storage">
+							{#snippet children(props)}
+								<button
+									{...mergeProps(props, triggerProps)}
+									type="button"
+									aria-label="Manage local storage"
+									class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
+								>
+									<Database size={13} strokeWidth={1.5} />
+								</button>
+							{/snippet}
+						</Tooltip>
 					{/snippet}
-				</Tooltip>
+				</StorageManagementDialog>
 			{/if}
 			<Tooltip text="Import more photos">
 				{#snippet children(props)}
@@ -254,18 +251,6 @@
 		/>
 	{/if}
 </header>
-
-<StorageManagementDialog
-	bind:open={storageOpen}
-	status={workspace.browserStorageStatus}
-	breakdown={workspace.browserStorageBreakdown}
-	error={workspace.browserStorageError}
-	cleanupResult={workspace.storageCleanupResult}
-	onRefresh={workspace.refreshBrowserStorage}
-	onRequestPersistence={workspace.requestPersistentStorage}
-	onCleanup={workspace.cleanupLocalData}
-	onClearLocalData={workspace.clearLocalData}
-/>
 
 <SettingsGroupDialog
 	bind:open={copyOpen}
