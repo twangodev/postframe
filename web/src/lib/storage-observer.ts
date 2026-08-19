@@ -51,7 +51,7 @@ export class StorageObserver {
 		try {
 			await this.refresh();
 		} catch {
-			// The next write tries again; a failed probe must not wedge the observer.
+			// A failed probe waits for the next write.
 		} finally {
 			this.refreshing = false;
 		}

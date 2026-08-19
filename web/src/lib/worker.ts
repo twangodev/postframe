@@ -177,13 +177,20 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			}
 		}
 	} catch (error) {
-		// String(error) below drops the stack, so log it here first.
-		reportError(`worker request "${message.type}" failed`, error);
-		post({ id: message.id, type: 'error', message: String(error) });
+		post({
+			id: message.id,
+			type: 'error',
+			message: reportedFailure(`worker request "${message.type}" failed`, error)
+		});
 	}
 };
 
 reportUncaught('pipeline worker', self);
+
+function reportedFailure(context: string, error: unknown) {
+	reportError(context, error);
+	return String(error);
+}
 
 function inspectDocument(message: Extract<Request, { type: 'inspect' }>) {
 	const result = measure(

@@ -31,25 +31,30 @@ export function imageData(pixels: Uint8Array, width: number, height: number) {
 	return new ImageData(new Uint8ClampedArray(pixels), width, height);
 }
 
-// Pads the source rect (clamped to image) so spatial stages see neighbourhood context; crop locates the tile within it.
 export function apronRegion(region: DisplayRegion, apron: number, image: ImageSize) {
-	const pad = apron * region.bin;
+	const source = neighbourhoodSource(region, apron * region.bin, image);
+	return { source, crop: tileWithinSource(region, source) };
+}
+
+function neighbourhoodSource(region: DisplayRegion, pad: number, image: ImageSize): DisplayRegion {
 	const x = Math.max(0, region.x - pad);
 	const y = Math.max(0, region.y - pad);
-	const source: DisplayRegion = {
+	return {
 		x,
 		y,
 		width: Math.min(image.width, region.x + region.width + pad) - x,
 		height: Math.min(image.height, region.y + region.height + pad) - y,
 		bin: region.bin
 	};
-	const crop: PixelRect = {
-		x: (region.x - x) / region.bin,
-		y: (region.y - y) / region.bin,
+}
+
+function tileWithinSource(region: DisplayRegion, source: DisplayRegion): PixelRect {
+	return {
+		x: (region.x - source.x) / region.bin,
+		y: (region.y - source.y) / region.bin,
 		width: Math.ceil(region.width / region.bin),
 		height: Math.ceil(region.height / region.bin)
 	};
-	return { source, crop };
 }
 
 export function cropRgba(rgba: Uint8Array | Uint8ClampedArray, stride: number, crop: PixelRect) {

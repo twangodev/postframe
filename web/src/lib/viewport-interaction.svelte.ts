@@ -404,7 +404,7 @@ export class ViewportInteraction {
 			this.element.setPointerCapture(pointerId);
 			return true;
 		} catch {
-			// Rapid taps can end the pointer before capture; bail instead of waiting for moves.
+			// Rapid taps can end the pointer before capture; bail instead of waiting.
 			return false;
 		}
 	}
