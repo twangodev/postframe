@@ -5,21 +5,20 @@
 	import LibrarySidebar from './LibrarySidebar.svelte';
 	import PhotoCard from './PhotoCard.svelte';
 	import PhotoDetailRail from './PhotoDetailRail.svelte';
+	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import RemovePhotosDialog from './RemovePhotosDialog.svelte';
 	import { contextTargets, photoMenu, type PhotoMenuAction } from '$lib/photo-menu';
 	import { type Photo, type WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
-		onImport: (files: File[]) => Promise<void>;
 	}
 
-	let { workspace, onImport }: Props = $props();
+	let { workspace }: Props = $props();
 	let search = $state('');
 	let view = $state('grid');
 	let source = $state('all');
 	let sort = $state('capture');
-	let importing = $state(false);
 	let removalIds = $state<string[] | null>(null);
 	const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
@@ -120,13 +119,6 @@
 		if (removalIds) workspace.deletePhotos(removalIds);
 		removalIds = null;
 	}
-
-	async function importFiles(list: FileList | null) {
-		if (!list?.length) return;
-		importing = true;
-		await onImport([...list]);
-		importing = false;
-	}
 </script>
 
 <div
@@ -220,14 +212,7 @@
 					<label
 						class="mt-4 flex h-8 cursor-pointer items-center rounded bg-text px-3 text-[11px] font-medium text-bg hover:opacity-85"
 					>
-						<input
-							type="file"
-							multiple
-							accept={workspace.acceptedPhotos}
-							class="sr-only"
-							disabled={importing}
-							onchange={(event) => importFiles(event.currentTarget.files)}
-						/>
+						<PhotoFileInput {workspace} />
 						import photos
 					</label>
 				</div>
@@ -272,7 +257,10 @@
 	<PhotoDetailRail {workspace} />
 </div>
 
-<CollectionDialog {workspace} />
+<CollectionDialog
+	bind:open={workspace.collectionDialogOpen}
+	onCreate={(name) => workspace.createCollection(name, [])}
+/>
 
 <RemovePhotosDialog
 	ids={removalIds}

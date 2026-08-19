@@ -8,6 +8,7 @@
 	import TaskManager from '$lib/components/ui/TaskManager.svelte';
 	import Welcome from '$lib/components/Welcome.svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
+	import { secondaryButtonClass } from '$lib/button';
 	import { WorkspaceState } from '$lib/workspace.svelte';
 
 	const workspace = new WorkspaceState();
@@ -32,30 +33,22 @@
 	</main>
 {:else if workspace.mode === 'welcome'}
 	<Welcome
+		{workspace}
 		acceptedPhotos={workspace.acceptedPhotos}
 		sourceReady={workspace.capabilitiesReady}
 		ingestError={workspace.ingestError}
 		libraryError={workspace.libraryError}
-		localStorageAvailable={workspace.localStorageAvailable}
-		storageStatus={workspace.browserStorageStatus}
-		storageBreakdown={workspace.browserStorageBreakdown}
-		storageError={workspace.browserStorageError}
-		cleanupResult={workspace.storageCleanupResult}
 		onOpenPhoto={workspace.openSingle}
 		onCreateCollection={workspace.createCollection}
 		onEnterLibrary={workspace.enterLibrary}
-		onClearLocalData={workspace.clearLocalData}
-		onRefreshStorage={workspace.refreshBrowserStorage}
-		onRequestPersistence={workspace.requestPersistentStorage}
-		onCleanup={workspace.cleanupLocalData}
 	/>
 {:else}
 	<div class="hidden h-svh min-h-0 flex-col bg-bg text-text min-[900px]:flex">
-		<AppHeader {workspace} onImport={workspace.importFiles} onExport={() => (exportOpen = true)} />
+		<AppHeader {workspace} onExport={() => (exportOpen = true)} />
 		{#key workspace.mode}
 			<div class="motion-workspace flex min-h-0 flex-1 overflow-hidden">
 				{#if workspace.mode === 'organize'}
-					<OrganizeWorkspace {workspace} onImport={workspace.importFiles} />
+					<OrganizeWorkspace {workspace} />
 				{:else}
 					<EditWorkspace {workspace} onExport={() => (exportOpen = true)} />
 				{/if}
@@ -73,11 +66,7 @@
 			postframe's editing workspace is designed for displays at least 900 pixels wide. your files
 			remain in this browser's local storage.
 		</p>
-		<button
-			type="button"
-			class="mt-6 cursor-pointer rounded border border-subtle px-4 py-2 text-[11px] tracking-wide text-muted hover:text-text"
-			onclick={workspace.reset}
-		>
+		<button type="button" class="mt-6 {secondaryButtonClass}" onclick={workspace.reset}>
 			back to start
 		</button>
 	</div>

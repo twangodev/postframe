@@ -64,7 +64,7 @@ import { ObjectUrlRegistry } from './object-url-registry';
 import { PhotoIngest } from './photo-ingest';
 import { PhotoOrganizer } from './photo-organizer';
 import type { ColorLabel, Photo, PhotoStack } from './photo-record';
-import { applyGroups, savedPreset, type Preset } from './preset';
+import { applyGroups, changedGroups, savedPreset, type Preset } from './preset';
 import { copiedSettings, type SettingsClipboard } from './settings-clipboard';
 import { SmartMasking, type SmartMaskStatus, type SubjectChoices } from './smart-masking';
 import { StorageObserver } from './storage-observer';
@@ -130,6 +130,7 @@ export class WorkspaceState {
 	localStorageAvailable = this.libraryService !== null;
 	storageStatus = $state<StorageStatus>(this.libraryService ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
+	importing = $state(false);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageBreakdown = $state<StorageBreakdown | null>(null);
 	browserStorageError = $state<string | null>(null);
@@ -172,6 +173,9 @@ export class WorkspaceState {
 	canRedo = $state(false);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
+	editedGroups = $derived(
+		changedGroups(this.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings())
+	);
 	selectedPhotos = $derived(this.photos.filter((photo) => this.selectedIds.includes(photo.id)));
 	editingPhoto = $derived(
 		this.selectedPhoto
@@ -340,13 +344,18 @@ export class WorkspaceState {
 	};
 
 	importFiles = async (files: File[]) => {
-		await this.ensureCapabilities();
-		this.ingestError = null;
-		const imported = await this.ingest.photosFromFiles(files);
-		const committed = await this.persistence.commitImports(imported);
-		if (!committed) return;
-		this.photos.push(...committed.photos);
-		if (!this.activePhotoId && committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
+		this.importing = true;
+		try {
+			await this.ensureCapabilities();
+			this.ingestError = null;
+			const imported = await this.ingest.photosFromFiles(files);
+			const committed = await this.persistence.commitImports(imported);
+			if (!committed) return;
+			this.photos.push(...committed.photos);
+			if (!this.activePhotoId && committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
+		} finally {
+			this.importing = false;
+		}
 	};
 
 	async save() {

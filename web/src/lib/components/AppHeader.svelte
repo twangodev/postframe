@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Tabs } from 'bits-ui';
+	import { mergeProps, Tabs } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import { Database, Download, Plus, Upload } from '@lucide/svelte';
@@ -7,36 +7,23 @@
 	import EditorMenuBar from './EditorMenuBar.svelte';
 	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
+	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
-	import { defaultDevelopSettings } from '$lib/develop-settings';
 	import type { EditorMenuAction } from '$lib/editor-menu';
-	import { changedGroups } from '$lib/preset';
+	import { editableTarget } from '$lib/viewport-interaction.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
 		workspace: WorkspaceState;
-		onImport: (files: File[]) => Promise<void>;
 		onExport: () => void;
 	}
 
-	let { workspace, onImport, onExport }: Props = $props();
-	let importing = $state(false);
-	let storageOpen = $state(false);
+	let { workspace, onExport }: Props = $props();
 	let copyOpen = $state(false);
 	let syncOpen = $state(false);
-	let importInput: HTMLInputElement;
+	let importInput = $state<HTMLInputElement>();
 
-	const editedGroups = $derived(
-		changedGroups(workspace.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings())
-	);
 	const syncTargetCount = $derived(workspace.syncTargetIds.length);
-
-	async function importFiles(list: FileList | null) {
-		if (!list?.length) return;
-		importing = true;
-		await onImport([...list]);
-		importing = false;
-	}
 
 	function runMenuAction(action: EditorMenuAction) {
 		switch (action) {
@@ -47,7 +34,7 @@
 				workspace.reset();
 				break;
 			case 'import-photos':
-				importInput.click();
+				importInput?.click();
 				break;
 			case 'show-organizer':
 				workspace.setMode('organize');
@@ -78,11 +65,6 @@
 		}
 	}
 
-	function openStorage() {
-		storageOpen = true;
-		void workspace.refreshBrowserStorage();
-	}
-
 	function shortcut(action: EditorMenuAction) {
 		return (event: KeyboardEvent) => {
 			event.preventDefault();
@@ -96,15 +78,6 @@
 			event.preventDefault();
 			runMenuAction(action);
 		};
-	}
-
-	function editableTarget(target: EventTarget | null) {
-		return (
-			target instanceof HTMLInputElement ||
-			target instanceof HTMLTextAreaElement ||
-			target instanceof HTMLSelectElement ||
-			(target instanceof HTMLElement && target.isContentEditable)
-		);
 	}
 
 	onMount(() =>
@@ -200,19 +173,22 @@
 				{/snippet}
 			</Tooltip>
 			{#if workspace.localStorageAvailable}
-				<Tooltip text="Local storage">
-					{#snippet children(props)}
-						<button
-							{...props}
-							type="button"
-							aria-label="Manage local storage"
-							class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
-							onclick={openStorage}
-						>
-							<Database size={13} strokeWidth={1.5} />
-						</button>
+				<StorageManagementDialog {workspace}>
+					{#snippet trigger(triggerProps)}
+						<Tooltip text="Local storage">
+							{#snippet children(props)}
+								<button
+									{...mergeProps(props, triggerProps)}
+									type="button"
+									aria-label="Manage local storage"
+									class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
+								>
+									<Database size={13} strokeWidth={1.5} />
+								</button>
+							{/snippet}
+						</Tooltip>
 					{/snippet}
-				</Tooltip>
+				</StorageManagementDialog>
 			{/if}
 			<Tooltip text="Import more photos">
 				{#snippet children(props)}
@@ -220,15 +196,7 @@
 						{...props}
 						class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
 					>
-						<input
-							bind:this={importInput}
-							type="file"
-							multiple
-							accept={workspace.acceptedPhotos}
-							class="sr-only"
-							disabled={importing}
-							onchange={(event) => importFiles(event.currentTarget.files)}
-						/>
+						<PhotoFileInput {workspace} bind:element={importInput} />
 						<Upload size={14} strokeWidth={1.5} />
 					</label>
 				{/snippet}
@@ -255,24 +223,12 @@
 	{/if}
 </header>
 
-<StorageManagementDialog
-	bind:open={storageOpen}
-	status={workspace.browserStorageStatus}
-	breakdown={workspace.browserStorageBreakdown}
-	error={workspace.browserStorageError}
-	cleanupResult={workspace.storageCleanupResult}
-	onRefresh={workspace.refreshBrowserStorage}
-	onRequestPersistence={workspace.requestPersistentStorage}
-	onCleanup={workspace.cleanupLocalData}
-	onClearLocalData={workspace.clearLocalData}
-/>
-
 <SettingsGroupDialog
 	bind:open={copyOpen}
 	title="copy settings"
 	description="choose which settings of this photograph to copy."
 	confirmLabel="copy"
-	groups={editedGroups}
+	groups={workspace.editedGroups}
 	onConfirm={workspace.copySettings}
 />
 
@@ -281,6 +237,6 @@
 	title="sync settings"
 	description={`apply the chosen settings of this photograph to the ${syncTargetCount} other selected photo${syncTargetCount === 1 ? '' : 's'}.`}
 	confirmLabel="sync"
-	groups={editedGroups}
+	groups={workspace.editedGroups}
 	onConfirm={workspace.syncSettings}
 />

@@ -1,55 +1,33 @@
 <script lang="ts">
-	import { Dialog } from 'bits-ui';
 	import { SiGithub } from '@icons-pack/svelte-simple-icons';
-	import { Images, Upload, X } from '@lucide/svelte';
+	import { X } from '@lucide/svelte';
 	import postframeLogo from '$lib/assets/favicon.svg';
-	import CenteredDialogContent from './ui/CenteredDialogContent.svelte';
+	import CollectionDialog from './CollectionDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
-	import type { BrowserStorageStatus } from '$lib/browser-storage';
-	import type { CleanupResult } from '$lib/library-service';
-	import type { StorageBreakdown } from '$lib/storage-breakdown';
+	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
+		workspace: WorkspaceState;
 		acceptedPhotos: string;
 		sourceReady: boolean;
 		ingestError: string | null;
 		libraryError: string | null;
-		localStorageAvailable: boolean;
-		storageStatus: BrowserStorageStatus | null;
-		storageBreakdown: StorageBreakdown | null;
-		storageError: string | null;
-		cleanupResult: CleanupResult | null;
 		onOpenPhoto: (file: File) => Promise<void>;
 		onCreateCollection: (name: string, files: File[]) => Promise<void>;
 		onEnterLibrary: () => void;
-		onClearLocalData: () => Promise<void>;
-		onRefreshStorage: () => Promise<void>;
-		onRequestPersistence: () => Promise<void>;
-		onCleanup: () => Promise<void>;
 	}
 
 	let {
+		workspace,
 		acceptedPhotos,
 		sourceReady,
 		ingestError,
 		libraryError,
-		localStorageAvailable,
-		storageStatus,
-		storageBreakdown,
-		storageError,
-		cleanupResult,
 		onOpenPhoto,
 		onCreateCollection,
-		onEnterLibrary,
-		onClearLocalData,
-		onRefreshStorage,
-		onRequestPersistence,
-		onCleanup
+		onEnterLibrary
 	}: Props = $props();
 	let newCollectionOpen = $state(false);
-	let storageOpen = $state(false);
-	let collectionName = $state('');
-	let files = $state<File[]>([]);
 	let busy = $state(false);
 	let openPhotoInput: HTMLInputElement;
 
@@ -64,34 +42,17 @@
 		}
 	}
 
-	function openStorage() {
-		storageOpen = true;
-		void onRefreshStorage();
-	}
-
-	function chooseFiles(list: FileList | null) {
-		if (list) files = [...list];
-	}
-
-	function dropFiles(event: DragEvent) {
-		event.preventDefault();
-		chooseFiles(event.dataTransfer?.files ?? null);
-	}
-
-	async function createCollection(event: SubmitEvent) {
-		event.preventDefault();
-		if (!collectionName.trim()) return;
+	async function createCollection(name: string, files: File[]) {
 		busy = true;
 		try {
-			await onCreateCollection(collectionName, files);
+			await onCreateCollection(name, files);
 			newCollectionOpen = false;
 		} finally {
 			busy = false;
 		}
 	}
 
-	function setCollectionDialogOpen(open: boolean) {
-		newCollectionOpen = open;
+	function collectionDialogClosed(open: boolean) {
 		if (!open && !busy) onEnterLibrary();
 	}
 </script>
@@ -118,14 +79,18 @@
 		<SiGithub size={15} aria-hidden="true" />
 	</a>
 
-	{#if localStorageAvailable}
-		<button
-			type="button"
-			class="motion-enter absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] text-muted/70 transition-colors hover:bg-surface hover:text-text"
-			onclick={openStorage}
-		>
-			local storage
-		</button>
+	{#if workspace.localStorageAvailable}
+		<StorageManagementDialog {workspace}>
+			{#snippet trigger(props)}
+				<button
+					{...props}
+					type="button"
+					class="motion-enter absolute bottom-5 left-5 rounded px-2.5 py-2 text-[11px] text-muted/70 transition-colors hover:bg-surface hover:text-text"
+				>
+					local storage
+				</button>
+			{/snippet}
+		</StorageManagementDialog>
 	{/if}
 
 	<section class="motion-enter w-full max-w-md">
@@ -178,88 +143,9 @@
 	</section>
 </main>
 
-<Dialog.Root open={newCollectionOpen} onOpenChange={setCollectionDialogOpen}>
-	<Dialog.Portal>
-		<Dialog.Overlay class="motion-dialog-overlay fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
-		<CenteredDialogContent class="p-5">
-			<form onsubmit={createCollection}>
-				<div class="mb-5 flex items-start justify-between">
-					<div>
-						<Dialog.Title class="text-sm font-medium tracking-tight">new collection</Dialog.Title>
-						<Dialog.Description class="mt-1 text-xs text-muted">
-							group photographs without moving them.
-						</Dialog.Description>
-					</div>
-					<Dialog.Close
-						aria-label="Close"
-						class="cursor-pointer rounded p-1 text-muted transition-colors hover:text-text"
-					>
-						<X size={16} />
-					</Dialog.Close>
-				</div>
-
-				<label class="mb-4 block">
-					<span class="mb-1.5 block text-[11px] tracking-[0.04em] text-muted">collection name</span>
-					<input
-						bind:value={collectionName}
-						placeholder="untitled collection"
-						class="w-full rounded border border-subtle bg-surface px-3 py-2.5 text-xs placeholder:text-muted/50 focus:border-accent focus:outline-none"
-					/>
-				</label>
-
-				<label
-					class="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded border border-dashed border-muted/45 bg-surface/45 px-6 text-center transition-colors hover:border-accent/70 hover:bg-surface"
-					ondragover={(event) => event.preventDefault()}
-					ondrop={dropFiles}
-				>
-					<input
-						type="file"
-						multiple
-						accept={acceptedPhotos}
-						disabled={!sourceReady}
-						class="sr-only"
-						onchange={(event) => chooseFiles(event.currentTarget.files)}
-					/>
-					{#if files.length > 0}
-						<Images size={22} strokeWidth={1.25} class="mb-3 text-accent" />
-						<p class="text-xs text-text">
-							{files.length} photo{files.length === 1 ? '' : 's'} ready
-						</p>
-						<p class="mt-1 max-w-xs truncate font-mono text-[11px] text-muted">
-							{files
-								.slice(0, 3)
-								.map((file) => file.name)
-								.join(' · ')}
-						</p>
-					{:else}
-						<Upload size={22} strokeWidth={1.25} class="mb-3 text-muted" />
-						<p class="text-xs text-text">choose photos or drop them here</p>
-						<p class="mt-1 text-[11px] text-muted">local files only</p>
-					{/if}
-				</label>
-
-				<div class="mt-5 flex justify-end">
-					<button
-						type="submit"
-						disabled={!collectionName.trim() || busy}
-						class="cursor-pointer rounded bg-text px-4 py-2 text-[11px] tracking-wide text-bg transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
-					>
-						create collection
-					</button>
-				</div>
-			</form>
-		</CenteredDialogContent>
-	</Dialog.Portal>
-</Dialog.Root>
-
-<StorageManagementDialog
-	bind:open={storageOpen}
-	status={storageStatus}
-	breakdown={storageBreakdown}
-	error={storageError}
-	{cleanupResult}
-	onRefresh={onRefreshStorage}
-	{onRequestPersistence}
-	{onCleanup}
-	{onClearLocalData}
+<CollectionDialog
+	bind:open={newCollectionOpen}
+	onOpenChange={collectionDialogClosed}
+	onCreate={createCollection}
+	photos={{ accept: acceptedPhotos, ready: sourceReady }}
 />

@@ -38,3 +38,5 @@ export const menuItemClass =
 
 export const menuContentClass =
 	'motion-menu border-subtle bg-bg z-50 min-w-52 rounded border p-1 shadow-2xl';
+
+export const menuSeparatorClass = 'my-1 h-px bg-subtle';
