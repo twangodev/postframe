@@ -11,6 +11,7 @@
 	} from '$lib/develop-settings';
 	import type { DevelopBinding } from '$lib/develop-binding';
 	import { histogramProfile, type HistogramChannel, type ImageScopeData } from '$lib/image-scope';
+	import { pointerFraction } from '$lib/pointer-fraction';
 	import { addCurvePoint, curveSamples, draggedCurve, nearestCurvePoint } from '$lib/tone-curve';
 
 	interface Props {
@@ -76,11 +77,8 @@
 	}
 
 	function positionOf(event: PlotEvent): CurvePoint {
-		const bounds = event.currentTarget.getBoundingClientRect();
-		return {
-			x: (event.clientX - bounds.left) / bounds.width,
-			y: 1 - (event.clientY - bounds.top) / bounds.height
-		};
+		const { x, y } = pointerFraction(event, event.currentTarget);
+		return { x, y: 1 - y };
 	}
 
 	function grab(event: PlotEvent) {

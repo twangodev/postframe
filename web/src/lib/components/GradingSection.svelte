@@ -12,6 +12,7 @@
 		type DiscPoint
 	} from '$lib/grading-wheel';
 	import type { DevelopBinding } from '$lib/develop-binding';
+	import { pointerFraction } from '$lib/pointer-fraction';
 
 	interface Props {
 		binding: DevelopBinding;
@@ -46,11 +47,8 @@
 	type DiscEvent = PointerEvent & { currentTarget: SVGSVGElement };
 
 	function discPosition(event: DiscEvent) {
-		const bounds = event.currentTarget.getBoundingClientRect();
-		return clampToDisc({
-			x: ((2 * (event.clientX - bounds.left)) / bounds.width - 1) * DISC_MARGIN,
-			y: ((2 * (event.clientY - bounds.top)) / bounds.height - 1) * DISC_MARGIN
-		});
+		const { x, y } = pointerFraction(event, event.currentTarget);
+		return clampToDisc({ x: (2 * x - 1) * DISC_MARGIN, y: (2 * y - 1) * DISC_MARGIN });
 	}
 
 	function beginDrag(event: DiscEvent) {
