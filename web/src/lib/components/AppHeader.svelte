@@ -7,6 +7,7 @@
 	import EditorMenuBar from './EditorMenuBar.svelte';
 	import SettingsGroupDialog from './SettingsGroupDialog.svelte';
 	import StorageManagementDialog from './StorageManagementDialog.svelte';
+	import PhotoFileInput from './ui/PhotoFileInput.svelte';
 	import Tooltip from './ui/Tooltip.svelte';
 	import { defaultDevelopSettings } from '$lib/develop-settings';
 	import type { EditorMenuAction } from '$lib/editor-menu';
@@ -15,27 +16,18 @@
 
 	interface Props {
 		workspace: WorkspaceState;
-		onImport: (files: File[]) => Promise<void>;
 		onExport: () => void;
 	}
 
-	let { workspace, onImport, onExport }: Props = $props();
-	let importing = $state(false);
+	let { workspace, onExport }: Props = $props();
 	let copyOpen = $state(false);
 	let syncOpen = $state(false);
-	let importInput: HTMLInputElement;
+	let importInput = $state<HTMLInputElement>();
 
 	const editedGroups = $derived(
 		changedGroups(workspace.selectedPhoto?.edit.adjustments ?? defaultDevelopSettings())
 	);
 	const syncTargetCount = $derived(workspace.syncTargetIds.length);
-
-	async function importFiles(list: FileList | null) {
-		if (!list?.length) return;
-		importing = true;
-		await onImport([...list]);
-		importing = false;
-	}
 
 	function runMenuAction(action: EditorMenuAction) {
 		switch (action) {
@@ -46,7 +38,7 @@
 				workspace.reset();
 				break;
 			case 'import-photos':
-				importInput.click();
+				importInput?.click();
 				break;
 			case 'show-organizer':
 				workspace.setMode('organize');
@@ -217,15 +209,7 @@
 						{...props}
 						class="flex size-7 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-text"
 					>
-						<input
-							bind:this={importInput}
-							type="file"
-							multiple
-							accept={workspace.acceptedPhotos}
-							class="sr-only"
-							disabled={importing}
-							onchange={(event) => importFiles(event.currentTarget.files)}
-						/>
+						<PhotoFileInput {workspace} bind:element={importInput} />
 						<Upload size={14} strokeWidth={1.5} />
 					</label>
 				{/snippet}

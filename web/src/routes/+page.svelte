@@ -43,11 +43,11 @@
 	/>
 {:else}
 	<div class="hidden h-svh min-h-0 flex-col bg-bg text-text min-[900px]:flex">
-		<AppHeader {workspace} onImport={workspace.importFiles} onExport={() => (exportOpen = true)} />
+		<AppHeader {workspace} onExport={() => (exportOpen = true)} />
 		{#key workspace.mode}
 			<div class="motion-workspace flex min-h-0 flex-1 overflow-hidden">
 				{#if workspace.mode === 'organize'}
-					<OrganizeWorkspace {workspace} onImport={workspace.importFiles} />
+					<OrganizeWorkspace {workspace} />
 				{:else}
 					<EditWorkspace {workspace} onExport={() => (exportOpen = true)} />
 				{/if}

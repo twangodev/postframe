@@ -130,6 +130,7 @@ export class WorkspaceState {
 	localStorageAvailable = this.libraryService !== null;
 	storageStatus = $state<StorageStatus>(this.libraryService ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
+	importing = $state(false);
 	browserStorageStatus = $state<BrowserStorageStatus | null>(null);
 	browserStorageBreakdown = $state<StorageBreakdown | null>(null);
 	browserStorageError = $state<string | null>(null);
@@ -340,13 +341,18 @@ export class WorkspaceState {
 	};
 
 	importFiles = async (files: File[]) => {
-		await this.ensureCapabilities();
-		this.ingestError = null;
-		const imported = await this.ingest.photosFromFiles(files);
-		const committed = await this.persistence.commitImports(imported);
-		if (!committed) return;
-		this.photos.push(...committed.photos);
-		if (!this.activePhotoId && committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
+		this.importing = true;
+		try {
+			await this.ensureCapabilities();
+			this.ingestError = null;
+			const imported = await this.ingest.photosFromFiles(files);
+			const committed = await this.persistence.commitImports(imported);
+			if (!committed) return;
+			this.photos.push(...committed.photos);
+			if (!this.activePhotoId && committed.photoIds[0]) this.selectPhoto(committed.photoIds[0]);
+		} finally {
+			this.importing = false;
+		}
 	};
 
 	async save() {
