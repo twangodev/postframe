@@ -6,11 +6,9 @@ import {
 	withMaskCurve,
 	type AdjustmentMirror,
 	type AdjustmentTarget,
-	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
 	type DevelopSettings,
-	type LightControlName,
 	type MaskAdjustmentTarget,
 	type ScalarControlName,
 	type ScalarGroupName
@@ -112,48 +110,10 @@ export class AdjustmentControls {
 		}
 	}
 
-	previewLight(control: LightControlName, value: number) {
-		this.previewAdjustment('light', control, value);
-	}
-
-	commitLight(control: LightControlName, value: number) {
-		this.commitAdjustment('light', control, value);
-	}
-
-	previewColor(control: ColorControlName, value: number) {
-		this.previewAdjustment('color', control, value);
-	}
-
-	commitColor(control: ColorControlName, value: number) {
-		this.commitAdjustment('color', control, value);
-	}
-
 	private releaseUnchangedPreview() {
 		this.develop.release();
 		const edit = this.host.selectedPhoto?.edit;
 		if (edit) this.develop.refreshScope(edit.adjustments, edit.geometry.crop);
-	}
-
-	previewMaskLight(control: LightControlName, value: number) {
-		const document = this.previewedMaskDocument((mask) => {
-			mask.adjustments.light = { ...mask.adjustments.light, [control]: value };
-		});
-		if (document) this.pipeline.scheduleMaskRender(document);
-	}
-
-	commitMaskLight(control: LightControlName, value: number) {
-		this.commitMaskCommand((maskId) => ({ type: 'mask.light.set', maskId, control, value }));
-	}
-
-	previewMaskColor(control: ColorControlName, value: number) {
-		const document = this.previewedMaskDocument((mask) => {
-			mask.adjustments.color = { ...mask.adjustments.color, [control]: value };
-		});
-		if (document) this.pipeline.scheduleMaskRender(document);
-	}
-
-	commitMaskColor(control: ColorControlName, value: number) {
-		this.commitMaskCommand((maskId) => ({ type: 'mask.color.set', maskId, control, value }));
 	}
 
 	previewMaskAdjustmentAt(target: MaskAdjustmentTarget, value: number) {

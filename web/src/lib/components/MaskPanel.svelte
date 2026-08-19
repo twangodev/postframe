@@ -73,13 +73,13 @@
 	}: Props = $props();
 
 	const previewMaskLight = (control: LightControlName) => (value: number) =>
-		workspace.previewMaskLight(control, value);
+		workspace.previewMaskAdjustmentAt({ group: 'light', control }, value);
 	const commitMaskLight = (control: LightControlName) => (value: number) =>
-		workspace.commitMaskLight(control, value);
+		workspace.commitMaskAdjustmentAt({ group: 'light', control }, value);
 	const previewMaskColor = (control: ColorControlName) => (value: number) =>
-		workspace.previewMaskColor(control, value);
+		workspace.previewMaskAdjustmentAt({ group: 'color', control }, value);
 	const commitMaskColor = (control: ColorControlName) => (value: number) =>
-		workspace.commitMaskColor(control, value);
+		workspace.commitMaskAdjustmentAt({ group: 'color', control }, value);
 	const previewMaskEdge = (control: MaskEdgeControlName) => (value: number) =>
 		workspace.previewMaskEdge(control, value);
 	const commitMaskEdge = (control: MaskEdgeControlName) => (value: number) =>

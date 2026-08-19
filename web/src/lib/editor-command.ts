@@ -10,10 +10,8 @@ import {
 	type NormalizedCrop
 } from './edit-document.ts';
 import {
-	colorSettingsSchema,
 	curvePointsSchema,
 	developSettingsSchema,
-	lightSettingsSchema,
 	sameDevelopSettings,
 	sameMaskAdjustments,
 	withAdjustmentAt,
@@ -21,11 +19,9 @@ import {
 	withMaskAdjustmentAt,
 	withMaskCurve,
 	type AdjustmentTarget,
-	type ColorControlName,
 	type CurveChannelName,
 	type CurvePoints,
 	type DevelopSettings,
-	type LightControlName,
 	type MaskAdjustments,
 	type MaskAdjustmentTarget
 } from './develop-settings.ts';
@@ -53,8 +49,6 @@ export function curveCommand(channel: CurveChannelName, points: CurvePoints): Ad
 export type EditorCommand =
 	| AdjustmentCommand
 	| { type: 'adjustment.replace'; adjustments: DevelopSettings; label: string }
-	| { type: 'mask.light.set'; maskId: string; control: LightControlName; value: number }
-	| { type: 'mask.color.set'; maskId: string; control: ColorControlName; value: number }
 	| { type: 'mask.adjustment.set'; maskId: string; target: MaskAdjustmentTarget; value: number }
 	| { type: 'mask.curve.set'; maskId: string; channel: CurveChannelName; value: CurvePoints }
 	| { type: 'mask.edge.set'; maskId: string; control: MaskEdgeControlName; value: number }
@@ -123,28 +117,6 @@ export function applyEditorCommand(
 			if (sameDevelopSettings(next.adjustments, adjustments)) return null;
 			next.adjustments = adjustments;
 			return transition(command, command.label, 'render', next);
-		}
-		case 'mask.light.set': {
-			const mask = next.masks.find(({ id }) => id === command.maskId);
-			if (!mask) return null;
-			const light = lightSettingsSchema.parse({
-				...mask.adjustments.light,
-				[command.control]: command.value
-			});
-			if (mask.adjustments.light[command.control] === light[command.control]) return null;
-			mask.adjustments.light = light;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
-		}
-		case 'mask.color.set': {
-			const mask = next.masks.find(({ id }) => id === command.maskId);
-			if (!mask) return null;
-			const color = colorSettingsSchema.parse({
-				...mask.adjustments.color,
-				[command.control]: command.value
-			});
-			if (mask.adjustments.color[command.control] === color[command.control]) return null;
-			mask.adjustments.color = color;
-			return transition(command, controlLabel(command.control, command.value), 'render', next);
 		}
 		case 'mask.adjustment.set':
 			return maskAdjustmentTransition(
