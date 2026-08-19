@@ -2,14 +2,7 @@
 	import { Flag } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import RatingStars from './ui/RatingStars.svelte';
-	import {
-		camera,
-		colorLabelChoices,
-		dimensions,
-		exposure,
-		formatDecimal,
-		labelColors
-	} from '$lib/photo-format';
+	import { colorLabelChoices, labelColors, metadataRows } from '$lib/photo-format';
 	import { formatBytes, type WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -75,22 +68,10 @@
 		<div class="border-b border-subtle p-3">
 			<p class="mb-3 text-[11px] tracking-[0.04em] text-muted">metadata</p>
 			<dl class="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-[11px]">
-				<dt class="text-muted">captured</dt>
-				<dd class="text-right text-text/80">{active.captured}</dd>
-				<dt class="text-muted">dimensions</dt>
-				<dd class="text-right font-mono text-text/80">{dimensions(active)}</dd>
-				<dt class="text-muted">camera</dt>
-				<dd class="text-right text-text/80">{camera(active)}</dd>
-				<dt class="text-muted">lens</dt>
-				<dd class="text-right text-text/80">{active.metadata?.lens ?? '—'}</dd>
-				<dt class="text-muted">focal length</dt>
-				<dd class="text-right font-mono text-text/80">
-					{active.metadata?.focalLengthMm
-						? `${formatDecimal(active.metadata.focalLengthMm)} mm`
-						: '—'}
-				</dd>
-				<dt class="text-muted">exposure</dt>
-				<dd class="text-right font-mono text-text/80">{exposure(active)}</dd>
+				{#each metadataRows(active) as row (row.label)}
+					<dt class="text-muted">{row.label}</dt>
+					<dd class="text-right text-text/80" class:font-mono={row.mono}>{row.value}</dd>
+				{/each}
 			</dl>
 		</div>
 

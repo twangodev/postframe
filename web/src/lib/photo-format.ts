@@ -19,6 +19,26 @@ export function camera(photo: Photo) {
 	return [photo.metadata?.cameraMake, photo.metadata?.cameraModel].filter(Boolean).join(' ') || '—';
 }
 
+export function lens(photo: Photo) {
+	return photo.metadata?.lens ?? '—';
+}
+
+export function focalLength(photo: Photo) {
+	const millimetres = photo.metadata?.focalLengthMm;
+	return millimetres ? `${formatDecimal(millimetres)} mm` : '—';
+}
+
+export function metadataRows(photo: Photo): { label: string; value: string; mono?: boolean }[] {
+	return [
+		{ label: 'captured', value: photo.captured },
+		{ label: 'dimensions', value: dimensions(photo), mono: true },
+		{ label: 'camera', value: camera(photo) },
+		{ label: 'lens', value: lens(photo) },
+		{ label: 'focal length', value: focalLength(photo), mono: true },
+		{ label: 'exposure', value: exposure(photo), mono: true }
+	];
+}
+
 export function exposure(photo: Photo) {
 	const metadata = photo.metadata;
 	if (!metadata) return '—';
@@ -30,7 +50,7 @@ export function exposure(photo: Photo) {
 	return values.join(' · ') || '—';
 }
 
-export function formatDecimal(value: number) {
+function formatDecimal(value: number) {
 	return Number(value.toFixed(1)).toString();
 }
 
