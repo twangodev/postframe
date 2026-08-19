@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { Flag, Star } from '@lucide/svelte';
+	import { Flag } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
+	import RatingStars from './ui/RatingStars.svelte';
 	import {
 		camera,
 		colorLabelChoices,
@@ -50,20 +51,12 @@
 				</button>
 			</div>
 			<div class="mt-3 flex items-center justify-between">
-				<div class="flex gap-0.5">
-					{#each [1, 2, 3, 4, 5] as rating}
-						<button
-							type="button"
-							aria-label={`Rate ${rating} stars`}
-							class="cursor-pointer text-muted transition-colors hover:text-text"
-							onclick={() => workspace.setRating(active.id, rating)}
-						>
-							<Star size={12} class={active.rating >= rating ? 'fill-text text-text' : ''} />
-						</button>
-					{/each}
-				</div>
+				<RatingStars
+					rating={active.rating}
+					onRate={(rating) => workspace.setRating(active.id, rating)}
+				/>
 				<div class="flex gap-1.5">
-					{#each colorLabelChoices as color}
+					{#each colorLabelChoices as color (color)}
 						<button
 							type="button"
 							aria-label={`${color} label`}

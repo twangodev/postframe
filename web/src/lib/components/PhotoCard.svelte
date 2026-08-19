@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Flag, Layers3, Star } from '@lucide/svelte';
+	import { Flag, Layers3 } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
 	import ContextMenu from './ui/ContextMenu.svelte';
+	import RatingStars from './ui/RatingStars.svelte';
 	import type { LibraryView } from '$lib/library-view';
 	import type { MenuEntry } from '$lib/menu';
 	import { labelColors } from '$lib/photo-format';
@@ -71,21 +72,12 @@
 				<p class="truncate font-mono text-[11px] text-text">{photo.name}</p>
 				{#if view === 'grid'}
 					<div class="mt-1.5 flex items-center justify-between">
-						<div class="flex">
-							{#each [1, 2, 3, 4, 5] as rating (rating)}
-								<button
-									type="button"
-									aria-label={`Rate ${rating} stars`}
-									class="cursor-pointer text-muted/55 transition-colors hover:text-text"
-									onclick={(event) => {
-										event.stopPropagation();
-										workspace.setRating(photo.id, rating);
-									}}
-								>
-									<Star size={10} class={photo.rating >= rating ? 'fill-text text-text' : ''} />
-								</button>
-							{/each}
-						</div>
+						<RatingStars
+							rating={photo.rating}
+							size={10}
+							class="text-muted/55"
+							onRate={(rating) => workspace.setRating(photo.id, rating)}
+						/>
 						<span
 							class="size-1.5 rounded-full"
 							style:background={labelColors[photo.colorLabel]}
