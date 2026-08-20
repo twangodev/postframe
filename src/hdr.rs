@@ -3,6 +3,7 @@ use ultrahdr_rs::{Encoder, GainMapMetadata};
 use crate::bracket::Merged;
 use crate::color::WorkingSpace;
 use crate::error::{Error, Result};
+use crate::fit::transfer::Transfer;
 use crate::light::srgb_to_linear;
 
 pub struct UltraHdr {
@@ -15,13 +16,13 @@ const BASE_QUALITY: u8 = 92;
 const MAP_QUALITY: u8 = 90;
 const MIN_MEANINGFUL_STOPS: f32 = 0.05;
 
-pub fn encode(merged: &Merged) -> Result<UltraHdr> {
+pub fn encode(merged: &Merged, transfer: &Transfer) -> Result<UltraHdr> {
     if merged.space != WorkingSpace::LinearSrgb {
         return Err(Error::Unsupported(
             "ultra hdr output requires an sRGB bracket",
         ));
     }
-    let base = merged.render(0.0);
+    let base = merged.render_with(transfer, 0.0);
     let (width, height) = (base.width, base.height);
 
     let gains: Vec<f32> = merged

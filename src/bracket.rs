@@ -229,7 +229,13 @@ pub fn merge(mut frames: Vec<Frame>) -> Result<Merged> {
 
 impl Merged {
     pub fn render(&self, ev: f32) -> Rendered {
-        render(&self.radiance, &self.transfer, ev)
+        self.render_with(&self.transfer, ev)
+    }
+
+    /// Renders through a transfer of the caller's choosing, so a camera look
+    /// weaker than the fitted one reaches the output as well as the preview.
+    pub fn render_with(&self, transfer: &Transfer, ev: f32) -> Rendered {
+        render(&self.radiance, transfer, ev)
     }
 
     pub fn thumbnail(&self, max_dimension: usize) -> Merged {

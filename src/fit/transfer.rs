@@ -47,7 +47,47 @@ impl Curve {
     }
 }
 
+/// The camera look at full strength: the fitted transfer exactly as measured.
+pub const FULL_CAMERA_LOOK: f32 = 100.0;
+
+pub const IDENTITY_MIX: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+fn neutral_coded(log2_value: f32) -> f32 {
+    255.0 * crate::light::encode_srgb(log2_value.exp2()).clamp(0.0, 1.0)
+}
+
 impl Transfer {
+    /// Fades the camera's rendering toward a plain sRGB one: `FULL_CAMERA_LOOK`
+    /// keeps the fit as measured, zero leaves an unmixed sRGB encode, and the
+    /// values between walk the mix and the curves across together.
+    pub fn with_camera_look(&self, camera_look: f32) -> Transfer {
+        let strength = if camera_look.is_finite() {
+            (camera_look / FULL_CAMERA_LOOK).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let blend = |fitted: f32, neutral: f32| neutral + strength * (fitted - neutral);
+        Transfer {
+            mix: std::array::from_fn(|row| {
+                std::array::from_fn(|column| {
+                    blend(self.mix[row][column], IDENTITY_MIX[row][column])
+                })
+            }),
+            channels: std::array::from_fn(|channel| {
+                let curve = &self.channels[channel];
+                Curve {
+                    knots_log2: curve.knots_log2.clone(),
+                    coded: curve
+                        .knots_log2
+                        .iter()
+                        .zip(&curve.coded)
+                        .map(|(&knot, &coded)| blend(coded, neutral_coded(knot)))
+                        .collect(),
+                }
+            }),
+        }
+    }
+
     pub fn eval(&self, linear: [f32; 3]) -> [f32; 3] {
         let mixed = crate::color::apply(&self.mix, linear);
         [
@@ -358,5 +398,94 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn warm_transfer() -> Transfer {
+        let samples: Vec<Sample> = (0..6_000)
+            .map(|i| {
+                let x = (2.0f32).powf(-10.0 + 10.0 * i as f32 / 6_000.0);
+                Sample {
+                    linear: [x, x * 0.9, x * 0.8],
+                    coded: [srgb_encode(x), srgb_encode(x * 0.9), srgb_encode(x * 0.8)],
+                    grad: [0.0; 3],
+                }
+            })
+            .collect();
+        measure(
+            &Pairing {
+                samples,
+                rejected: 0,
+            },
+            WorkingSpace::LinearSrgb,
+        )
+        .unwrap()
+        .0
+    }
+
+    #[test]
+    fn a_full_camera_look_is_the_fitted_transfer_itself() {
+        let fitted = warm_transfer();
+        let kept = fitted.with_camera_look(FULL_CAMERA_LOOK);
+
+        assert_eq!(kept.mix, fitted.mix);
+        for channel in 0..3 {
+            assert_eq!(kept.channels[channel].coded, fitted.channels[channel].coded);
+        }
+    }
+
+    #[test]
+    fn dropping_the_camera_look_leaves_a_plain_srgb_rendering() {
+        let neutral = warm_transfer().with_camera_look(0.0);
+
+        assert_eq!(neutral.mix, IDENTITY_MIX);
+        for channel in 0..3 {
+            let curve = &neutral.channels[channel];
+            for (knot, coded) in curve.knots_log2.iter().zip(&curve.coded) {
+                let truth = srgb_encode(knot.exp2());
+                assert!(
+                    (coded - truth).abs() < 0.001,
+                    "channel {channel} at 2^{knot}: {coded} != {truth}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn half_a_camera_look_sits_between_the_two() {
+        let fitted = warm_transfer();
+        let half = fitted.with_camera_look(FULL_CAMERA_LOOK / 2.0);
+
+        for channel in 0..3 {
+            let curve = &fitted.channels[channel];
+            for (index, knot) in curve.knots_log2.iter().enumerate() {
+                let midpoint = (curve.coded[index] + srgb_encode(knot.exp2())) / 2.0;
+                assert!((half.channels[channel].coded[index] - midpoint).abs() < 0.001);
+            }
+            for (row, (fitted_row, identity_row)) in
+                fitted.mix.iter().zip(&IDENTITY_MIX).enumerate()
+            {
+                for (column, (&fitted_cell, &identity_cell)) in
+                    fitted_row.iter().zip(identity_row).enumerate()
+                {
+                    let midpoint = (fitted_cell + identity_cell) / 2.0;
+                    assert!((half.mix[row][column] - midpoint).abs() < 1e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_camera_look_outside_its_range_clamps() {
+        let fitted = warm_transfer();
+
+        assert_eq!(
+            fitted.with_camera_look(400.0).channels[0].coded,
+            fitted.with_camera_look(FULL_CAMERA_LOOK).channels[0].coded
+        );
+        assert_eq!(
+            fitted.with_camera_look(-10.0).mix,
+            fitted.with_camera_look(0.0).mix
+        );
+        assert_eq!(fitted.with_camera_look(f32::NAN).mix, fitted.mix);
     }
 }

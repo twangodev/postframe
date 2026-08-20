@@ -148,7 +148,7 @@ fn merge(raws: &[PathBuf], output: &Path, ev: f32, tone: bool) -> anyhow::Result
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
     if jpeg_out && !tone {
-        let encoded = postframe::hdr::encode(&merged)?;
+        let encoded = postframe::hdr::encode(&merged, &merged.transfer)?;
         std::fs::write(output, &encoded.bytes)?;
         println!(
             "{LABEL}hdr headroom{LABEL:#}    {HEADER}{:.2}{HEADER:#} stops above SDR white",

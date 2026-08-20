@@ -1,6 +1,7 @@
 use crate::color;
 use crate::detail::DetailPlanes;
 use crate::develop::PixelContext;
+use crate::fit::transfer::Transfer;
 use crate::{
     ColorSettings, DevelopSettings, DevelopTransform, DevelopedTileRegion, LightSettings, Merged,
     Rendered, Result, parallel,
@@ -335,6 +336,12 @@ impl MipLevel {
 
 impl Preview {
     pub fn new(merged: &Merged) -> Self {
+        Self::from_transfer(&merged.transfer)
+    }
+
+    /// The table a render samples, which is where a camera look is fixed: the
+    /// caller decides how much of the fitted transfer to bake in.
+    pub fn from_transfer(transfer: &Transfer) -> Self {
         let low = LOOKUP_LOW_BITS;
         let high = LOOKUP_HIGH_BITS;
         let buckets = ((high - low) >> LOOKUP_SHIFT) as usize;
@@ -342,13 +349,13 @@ impl Preview {
             (0..=buckets)
                 .map(|i| {
                     let x = f32::from_bits(low + ((i as u32) << LOOKUP_SHIFT));
-                    merged.transfer.channels[channel].eval(x)
+                    transfer.channels[channel].eval(x)
                 })
                 .collect()
         });
         Self {
             coded,
-            mix: merged.transfer.mix,
+            mix: transfer.mix,
         }
     }
 

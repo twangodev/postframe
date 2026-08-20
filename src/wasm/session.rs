@@ -6,6 +6,7 @@ use wasm_bindgen::prelude::*;
 use super::shared::{develop_settings, encode_jpeg, err, vignette_frame};
 use crate::bracket::{self, Frame, FrameData};
 use crate::effects::VignetteFrame;
+use crate::fit::transfer::FULL_CAMERA_LOOK;
 use crate::preview::{MipPyramid, PreparedRegion};
 use crate::{DetailSettings, DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
 
@@ -198,6 +199,7 @@ impl PreviewFrame {
 #[wasm_bindgen]
 pub struct Session {
     frames: Vec<Frame>,
+    camera_look: f32,
     merged: Option<Merged>,
     thumb: Option<(Merged, Preview)>,
     pyramid: Option<MipPyramid>,
@@ -320,6 +322,7 @@ impl Session {
     pub fn new() -> Session {
         Session {
             frames: Vec::new(),
+            camera_look: FULL_CAMERA_LOOK,
             merged: None,
             thumb: None,
             pyramid: None,
@@ -360,6 +363,31 @@ impl Session {
         Ok(())
     }
 
+    /// How much of the camera's own rendering the photograph keeps, from zero
+    /// for a plain sRGB one to `FULL_CAMERA_LOOK` for the fit as measured. The
+    /// merged radiance and its cache never carry it, so it stays reversible.
+    pub fn set_camera_look(&mut self, camera_look: f32) -> Result<(), JsError> {
+        if !camera_look.is_finite() || !(0.0..=FULL_CAMERA_LOOK).contains(&camera_look) {
+            return Err(JsError::new("camera look sits between 0 and 100"));
+        }
+        if self.camera_look == camera_look {
+            return Ok(());
+        }
+        self.camera_look = camera_look;
+        if let Some((thumb, lut)) = self.thumb.as_mut() {
+            *lut = Preview::from_transfer(&thumb.transfer.with_camera_look(camera_look));
+        }
+        self.tiles.clear();
+        self.preview = None;
+        self.preview_source = None;
+        Ok(())
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn camera_look(&self) -> f32 {
+        self.camera_look
+    }
+
     pub fn cache_bytes(&self) -> Result<Vec<u8>, JsError> {
         self.merged
             .as_ref()
@@ -370,7 +398,7 @@ impl Session {
     fn install_merged(&mut self, merged: Merged, preview_dimension: usize) {
         let pyramid = MipPyramid::new(&merged, MAX_PYRAMID_BIN);
         let thumb = pyramid.thumbnail(&merged, preview_dimension.max(256));
-        let lut = Preview::new(&thumb);
+        let lut = Preview::from_transfer(&thumb.transfer.with_camera_look(self.camera_look));
         self.tiles.clear();
         self.preview = None;
         self.preview_source = None;
@@ -407,7 +435,13 @@ impl Session {
         Ok(RenderProfile {
             transfer_lut_length: (transfer_lut.len() / 3) as u32,
             transfer_lut,
-            mix: merged.transfer.mix.into_iter().flatten().collect(),
+            mix: merged
+                .transfer
+                .with_camera_look(self.camera_look)
+                .mix
+                .into_iter()
+                .flatten()
+                .collect(),
             lookup_low_bits: Preview::gpu_lookup_low_bits(),
             lookup_shift: Preview::gpu_lookup_shift(),
             radiance_max: merged.report.radiance_max,
@@ -597,13 +631,15 @@ impl Session {
     /// Ultra HDR JPEG at the thumbnail size, for HDR-capable display.
     pub fn preview_ultra(&self) -> Result<Vec<u8>, JsError> {
         let (thumb, _) = self.thumb.as_ref().ok_or(JsError::new("merge first"))?;
-        Ok(crate::hdr::encode(thumb).map_err(err)?.bytes)
+        let transfer = thumb.transfer.with_camera_look(self.camera_look);
+        Ok(crate::hdr::encode(thumb, &transfer).map_err(err)?.bytes)
     }
 
     /// Ultra HDR JPEG at the merged resolution.
     pub fn export_ultra(&self) -> Result<Vec<u8>, JsError> {
         let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
-        Ok(crate::hdr::encode(merged).map_err(err)?.bytes)
+        let transfer = merged.transfer.with_camera_look(self.camera_look);
+        Ok(crate::hdr::encode(merged, &transfer).map_err(err)?.bytes)
     }
 
     fn prepare_develop(
