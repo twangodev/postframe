@@ -9,6 +9,7 @@ import { primaryStoredFrame, type Photo } from './photo-record';
 import type { SmartMasking, SmartMaskStatus, SubjectChoices } from './smart-masking';
 import type { PostframeWorkerClient } from './worker-client';
 import type { WorkspacePersistence } from './workspace-persistence';
+import type { CameraMatchResult, CameraMatchTarget } from './camera-match.ts';
 
 export type DocumentStatus =
 	| { kind: 'idle' }
@@ -36,6 +37,7 @@ export interface DocumentSessionHost {
 	subjectChoices: SubjectChoices | null;
 	smartMaskStatus: SmartMaskStatus;
 	resetEditState(document: EditDocument): void;
+	applyCameraMatch(result: CameraMatchResult, target: CameraMatchTarget): boolean;
 }
 
 export class DocumentSession {
@@ -104,9 +106,14 @@ export class DocumentSession {
 				cache,
 				previewDimension(),
 				photo.edit.adjustments,
-				photo.edit.geometry.crop
+				photo.edit.geometry.crop,
+				photo.edit.profile.cameraLookEnabled ? photo.edit.profile.cameraLook : 0,
+				photo.edit.profile.cameraMatch.status === 'pending'
 			);
 			if (revision !== this.revision) return;
+			if (result.cameraMatch) {
+				this.host.applyCameraMatch(result.cameraMatch, cameraMatchTarget(photo));
+			}
 			await this.pipeline.installMaskCompositors(photo.edit, () => revision === this.revision);
 			if (revision !== this.revision) return;
 			this.install(photoId, result);
@@ -203,6 +210,10 @@ export class DocumentSession {
 		this.objectUrls.revoke(this.host.editPreview.src);
 		this.host.editPreview = null;
 	}
+}
+
+function cameraMatchTarget(photo: Photo): CameraMatchTarget {
+	return photo.frames.some(({ display }) => display !== null) ? 'camera-jpeg' : 'embedded-preview';
 }
 
 function previewDimension() {

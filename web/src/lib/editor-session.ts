@@ -52,7 +52,14 @@ export class EditorSession {
 		const before = cloneEditDocument(this.host.selectedPhoto.edit);
 		const transition = applyEditorCommand(before, command);
 		if (!transition) return false;
-		this.editorHistory.commit(before, transition);
+		const historyBefore =
+			command.type === 'profile.cameraMatch' && before.profile.cameraMatch.status === 'pending'
+				? cloneEditDocument({
+						...before,
+						profile: { ...before.profile, cameraMatch: { status: 'dismissed' } }
+					})
+				: before;
+		this.editorHistory.commit(historyBefore, transition);
 		this.apply(transition.document, transition.invalidation);
 		this.syncHistory();
 		return true;
@@ -83,7 +90,7 @@ export class EditorSession {
 		this.host.imageScope = null;
 		this.editorHistory.reset();
 		const adjustments = document?.adjustments ?? defaultDevelopSettings();
-		if (document) this.host.pushCameraLook(document.profile.cameraLook);
+		if (document) this.host.pushCameraLook(effectiveCameraLook(document));
 		this.host.masks = document?.masks.map(cloneEditMask) ?? [];
 		this.host.selectedMaskId = null;
 		this.host.selectedMaskRaster = null;
@@ -105,7 +112,7 @@ export class EditorSession {
 			next.adjustments
 		);
 		const cameraLookChanged =
-			this.host.selectedPhoto.edit.profile.cameraLook !== next.profile.cameraLook;
+			effectiveCameraLook(this.host.selectedPhoto.edit) !== effectiveCameraLook(next);
 		this.host.selectedPhoto.edit = next;
 		this.host.masks = next.masks.map(cloneEditMask);
 		if (
@@ -117,7 +124,7 @@ export class EditorSession {
 		mirrorAdjustments(this.host, next.adjustments);
 
 		if (invalidation === 'render') {
-			if (cameraLookChanged) this.host.pushCameraLook(next.profile.cameraLook);
+			if (cameraLookChanged) this.host.pushCameraLook(effectiveCameraLook(next));
 			if (globalAdjustmentsChanged) {
 				this.develop.request(next.adjustments, next.geometry.crop, 'refining');
 			}
@@ -133,4 +140,8 @@ export class EditorSession {
 		this.host.canUndo = this.editorHistory.canUndo;
 		this.host.canRedo = this.editorHistory.canRedo;
 	}
+}
+
+function effectiveCameraLook(document: EditDocument) {
+	return document.profile.cameraLookEnabled ? document.profile.cameraLook : 0;
 }

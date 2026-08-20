@@ -97,7 +97,7 @@ export class LibraryService {
 
 	async loadEditDocument(photoId: string) {
 		const file = await this.assets.readEdit(editDocumentStorageName(photoId));
-		if (!file) return defaultEditDocument(photoId);
+		if (!file) return defaultEditDocument(photoId, undefined, { status: 'legacy' });
 		return parseEditDocument(JSON.parse(await file.text()), photoId);
 	}
 

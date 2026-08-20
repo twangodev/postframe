@@ -111,6 +111,7 @@ export class Session {
     add_frame(raw: Uint8Array, jpeg?: Uint8Array | null): void;
     boost_stops(): number;
     cache_bytes(): Uint8Array;
+    camera_match(): any;
     /**
      * Ultra HDR JPEG at the merged resolution.
      */
@@ -197,14 +198,15 @@ export interface InitOutput {
     readonly rawinspection_width: (a: number) => number;
     readonly supported_raw_extensions: () => [number, number];
     readonly validate_raw: (a: number, b: number) => [number, number];
+    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_lineartile_free: (a: number, b: number) => void;
     readonly __wbg_previewframe_free: (a: number, b: number) => void;
     readonly __wbg_renderedtile_free: (a: number, b: number) => void;
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
-    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
-    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_detail: (a: number) => [number, number];
@@ -212,7 +214,6 @@ export interface InitOutput {
     readonly lineartile_rgba: (a: number) => [number, number];
     readonly lineartile_width: (a: number) => number;
     readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
-    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly previewframe_histogram: (a: number) => [number, number];
     readonly previewframe_jpeg: (a: number) => [number, number];
     readonly previewframe_sample_count: (a: number) => number;
@@ -232,6 +233,7 @@ export interface InitOutput {
     readonly session_boost_stops: (a: number) => number;
     readonly session_cache_bytes: (a: number) => [number, number, number, number];
     readonly session_camera_look: (a: number) => number;
+    readonly session_camera_match: (a: number) => [number, number, number];
     readonly session_export_ultra: (a: number) => [number, number, number, number];
     readonly session_frame_count: (a: number) => number;
     readonly session_height: (a: number) => [number, number, number];

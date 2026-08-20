@@ -73,6 +73,7 @@ export const WASM_BINDINGS = {
 	render_profile: { rust: 'Session::render_profile', worker: ['open-raw', 'camera-look'] },
 	set_camera_look: { rust: 'Session::set_camera_look', worker: 'camera-look' },
 	camera_look: { rust: 'Session::camera_look', worker: null },
+	camera_match: { rust: 'Session::camera_match', worker: ['open-raw', 'camera-match'] },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'open-raw' },
 	preview_scope: { rust: 'Session::preview_scope', worker: 'scope' },
@@ -166,7 +167,8 @@ export const WASM_TODOS = {
 			'preview_ultra',
 			'export_ultra',
 			'set_camera_look',
-			'camera_look'
+			'camera_look',
+			'camera_match'
 		],
 		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
 	},

@@ -133,7 +133,7 @@ test('round-trips versioned edit documents through the asset store', async () =>
 	const assets = new MemoryAssetStore();
 	const service = new LibraryService(catalog, assets as unknown as AssetStore);
 	try {
-		const neutral = defaultEditDocument('photo-one');
+		const neutral = defaultEditDocument('photo-one', undefined, { status: 'legacy' });
 		assert.deepEqual(await service.loadEditDocument('photo-one'), neutral);
 		const adjusted = defaultEditDocument('photo-one', {
 			...neutral.adjustments.light,

@@ -9,6 +9,7 @@ import type {
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
+import type { CameraMatchResult } from './camera-match.ts';
 
 export interface RawFrameHandleInput {
 	raw: FileSystemFileHandle;
@@ -117,6 +118,8 @@ export type Request =
 			maxDimension: number;
 			adjustments: DevelopSettings;
 			crop: NormalizedCrop | null;
+			cameraLook: number;
+			matchCamera: boolean;
 	  }
 	| {
 			id: number;
@@ -130,6 +133,7 @@ export type Request =
 	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
 	| { id: number; type: 'camera-look'; amount: number }
+	| { id: number; type: 'camera-match' }
 	| {
 			id: number;
 			type: 'preview';
@@ -183,10 +187,12 @@ export type Response =
 			boostStops: number | null;
 			width: number;
 			height: number;
+			cameraMatch?: CameraMatchResult;
 	  }
 	| { id: number; type: 'tile'; bitmap: ImageBitmap }
 	| { id: number; type: 'masks-set' }
 	| { id: number; type: 'camera-look-set' }
+	| { id: number; type: 'camera-matched'; result: CameraMatchResult }
 	| {
 			id: number;
 			type: 'preview';

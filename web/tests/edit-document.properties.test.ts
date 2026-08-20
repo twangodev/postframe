@@ -284,6 +284,28 @@ const snapshotArbitrary = fc.record({
 	adjustments: developArbitrary
 });
 
+const cameraMatchResultArbitrary = fc.record({
+	light: lightArbitrary,
+	color: colorArbitrary,
+	curve: curveSettingsArbitrary,
+	cameraLook: bounded(0, 100),
+	meanError: bounded(0, 255),
+	p99Error: bounded(0, 255),
+	settingsOnlyError: bounded(0, 255),
+	fitError: bounded(0, 255)
+});
+
+const cameraMatchArbitrary = fc.oneof(
+	fc.constant({ status: 'legacy' as const }),
+	fc.constant({ status: 'pending' as const }),
+	fc.constant({ status: 'dismissed' as const }),
+	fc.record({
+		status: fc.constant('applied' as const),
+		target: fc.constantFrom('camera-jpeg' as const, 'embedded-preview' as const),
+		result: cameraMatchResultArbitrary
+	})
+);
+
 const documentArbitrary = fc
 	.record({
 		version: fc.constant(EDIT_DOCUMENT_VERSION),
@@ -296,7 +318,11 @@ const documentArbitrary = fc
 			crop: fc.option(regionArbitrary)
 		}),
 		masks: fc.uniqueArray(maskArbitrary, { selector: (mask) => mask.id, maxLength: 3 }),
-		profile: fc.record({ cameraLook: bounded(0, 100) }),
+		profile: fc.record({
+			cameraLook: bounded(0, 100),
+			cameraLookEnabled: fc.boolean(),
+			cameraMatch: cameraMatchArbitrary
+		}),
 		snapshots: fc.uniqueArray(snapshotArbitrary, {
 			selector: (snapshot) => snapshot.id,
 			maxLength: 3

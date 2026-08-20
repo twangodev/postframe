@@ -70,7 +70,7 @@ test('reports document progress before resolving the developed preview', async (
 
 	const adjustments = adjusted('light', 'exposure', 1.25);
 	const cache = { name: 'render-v1-photo-one.pfc' } as FileSystemFileHandle;
-	const opened = client.openRawDocument([], cache, 2048, adjustments, null);
+	const opened = client.openRawDocument([], cache, 2048, adjustments, null, 31, true);
 	assert.deepEqual(workers[0]?.messages, [
 		{
 			id: 1,
@@ -79,7 +79,9 @@ test('reports document progress before resolving the developed preview', async (
 			cache,
 			maxDimension: 2048,
 			adjustments,
-			crop: null
+			crop: null,
+			cameraLook: 31,
+			matchCamera: true
 		}
 	]);
 
@@ -157,6 +159,26 @@ test('reports worker performance measurements without consuming pending requests
 			}
 		]
 	});
+	client.destroy();
+});
+
+test('requests and validates a camera match from the active RAW', async () => {
+	const { client, workers } = setup();
+	const pending = client.cameraMatch();
+	assert.deepEqual(workers[0]?.messages, [{ id: 1, type: 'camera-match' }]);
+	const result = {
+		light: neutral,
+		color: neutralColor,
+		curve: neutralAdjustments.curve,
+		cameraLook: 31,
+		meanError: 3.32,
+		p99Error: 9,
+		settingsOnlyError: 4.69,
+		fitError: 3.37
+	};
+	workers[0]?.respond({ id: 1, type: 'camera-matched', result });
+
+	assert.deepEqual(await pending, result);
 	client.destroy();
 });
 

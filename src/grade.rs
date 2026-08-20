@@ -6,7 +6,7 @@ pub const MAX_TEMPERATURE_SHIFT_STOPS: f32 = 0.5;
 pub const MAX_TINT_SHIFT_STOPS: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize, serde::Serialize))]
 pub struct ColorSettings {
     pub temperature: f32,
     pub tint: f32,

@@ -23,6 +23,7 @@ import {
 	type RenderPerformanceControls,
 	type RenderRuntimeSummary
 } from './render-performance.ts';
+import { cameraMatchResultSchema } from './camera-match.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ExportProgressResponse = Extract<Response, { type: 'export-progress' }>;
@@ -124,7 +125,9 @@ export class PostframeWorkerClient {
 		cache: FileSystemFileHandle,
 		maxDimension: number,
 		adjustments: DevelopSettings,
-		crop: NormalizedCrop | null
+		crop: NormalizedCrop | null,
+		cameraLook: number,
+		matchCamera: boolean
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -134,7 +137,9 @@ export class PostframeWorkerClient {
 				cache,
 				maxDimension,
 				adjustments: cloneDevelopSettings(adjustments),
-				crop: cloneCrop(crop)
+				crop: cloneCrop(crop),
+				cameraLook,
+				matchCamera
 			}),
 			'opened'
 		);
@@ -188,6 +193,11 @@ export class PostframeWorkerClient {
 
 	async setCameraLook(amount: number) {
 		await this.send((id) => ({ id, type: 'camera-look', amount }), 'camera-look-set');
+	}
+
+	async cameraMatch() {
+		const response = await this.send((id) => ({ id, type: 'camera-match' }), 'camera-matched');
+		return cameraMatchResultSchema.parse(response.result);
 	}
 
 	async adjustMask(mask: MaskEdgeInput) {
@@ -566,6 +576,9 @@ function openedDocument(response: Extract<Response, { type: 'opened' }>) {
 		scope: imageScopeFromTransfer(response.scope),
 		boostStops: response.boostStops,
 		width: response.width,
-		height: response.height
+		height: response.height,
+		...(response.cameraMatch
+			? { cameraMatch: cameraMatchResultSchema.parse(response.cameraMatch) }
+			: {})
 	};
 }

@@ -137,7 +137,11 @@ export class PhotoIngest {
 			rejected: false,
 			colorLabel: 'none',
 			stackId: null,
-			edit: defaultEditDocument(photoId)
+			edit: defaultEditDocument(
+				photoId,
+				undefined,
+				group.kind === 'display' ? { status: 'legacy' } : { status: 'pending' }
+			)
 		} satisfies Photo;
 
 		return {

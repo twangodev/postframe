@@ -10,6 +10,7 @@ import { measure, measureAsync } from './worker-performance.ts';
 import { fileSize, readFile, writeFileHandle } from './worker-files.ts';
 import { displayPreview, renderDisplayPreview, renderRawPreview } from './worker-render.ts';
 import { clearMaskCompositors } from './worker-masks.ts';
+import { applyCameraMatchSettings, cameraMatchResultSchema } from './camera-match.ts';
 
 export interface SourceImageMemo {
 	maxDimension: number;
@@ -196,6 +197,14 @@ async function publishRawDocument(
 	message: Extract<Request, { type: 'open-raw' }>,
 	session: WasmSession
 ) {
+	session.set_camera_look(message.cameraLook);
+	const cameraMatch = message.matchCamera
+		? cameraMatchResultSchema.parse(session.camera_match())
+		: undefined;
+	if (cameraMatch) session.set_camera_look(cameraMatch.cameraLook);
+	const adjustments = cameraMatch
+		? applyCameraMatchSettings(message.adjustments, cameraMatch)
+		: message.adjustments;
 	document = {
 		kind: 'raw',
 		image: { width: session.width(), height: session.height() },
@@ -206,7 +215,7 @@ async function publishRawDocument(
 		sourceImage: null
 	};
 	const preview = measure('preview', () =>
-		renderRawPreview(session, message.adjustments, message.crop, true)
+		renderRawPreview(session, adjustments, message.crop, true)
 	);
 	post(
 		{
@@ -217,7 +226,8 @@ async function publishRawDocument(
 			scope: preview.scope,
 			boostStops: session.boost_stops(),
 			width: session.width(),
-			height: session.height()
+			height: session.height(),
+			...(cameraMatch ? { cameraMatch } : {})
 		},
 		preview.transfer
 	);
@@ -239,6 +249,10 @@ export function applyCameraLook(amount: number) {
 	} finally {
 		freeQuietly('render profile', profile);
 	}
+}
+
+export function deriveCameraMatch() {
+	return cameraMatchResultSchema.parse(activeRawDocument().camera_match());
 }
 
 export function deferRawCacheWrite(active: ActiveDocument) {

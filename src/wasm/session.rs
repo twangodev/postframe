@@ -8,7 +8,9 @@ use crate::bracket::{self, Frame, FrameData};
 use crate::effects::VignetteFrame;
 use crate::fit::transfer::FULL_CAMERA_LOOK;
 use crate::preview::{MipPyramid, PreparedRegion};
-use crate::{DetailSettings, DevelopSettings, DevelopTransform, ImageScope, Merged, Preview};
+use crate::{
+    DetailSettings, DevelopSettings, DevelopTransform, ImageScope, Merged, Preview, camera_match,
+};
 
 const MAX_TILE_DIMENSION: usize = 1024;
 const MAX_PYRAMID_BIN: usize = 64;
@@ -386,6 +388,12 @@ impl Session {
     #[wasm_bindgen(getter)]
     pub fn camera_look(&self) -> f32 {
         self.camera_look
+    }
+
+    pub fn camera_match(&self) -> Result<JsValue, JsError> {
+        let merged = self.merged.as_ref().ok_or(JsError::new("merge first"))?;
+        let matched = camera_match(merged).map_err(err)?;
+        serde_wasm_bindgen::to_value(&matched).map_err(|error| JsError::new(&error.to_string()))
     }
 
     pub fn cache_bytes(&self) -> Result<Vec<u8>, JsError> {

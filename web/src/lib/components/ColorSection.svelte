@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Pipette, SlidersHorizontal } from '@lucide/svelte';
-	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
+	import CameraMatchDialog from './CameraMatchDialog.svelte';
 	import Panel from './ui/Panel.svelte';
 	import { COLOR_SLIDERS } from '$lib/develop-sliders';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -16,6 +16,34 @@
 	let { workspace, activeTool, onPickTool, onOpenMixer }: Props = $props();
 
 	const eyedropperActive = $derived(activeTool === 'eyedropper');
+	let reviewOpen = $state(false);
+	let matching = $state(false);
+	const matchTarget = $derived(
+		workspace.selectedPhoto?.frames.some(({ display }) => display !== null)
+			? 'camera JPEG'
+			: 'embedded preview'
+	);
+	const matchLabel = $derived.by(() => {
+		if (workspace.cameraMatch.status === 'applied') {
+			return `matched to ${workspace.cameraMatch.target === 'camera-jpeg' ? 'camera JPEG' : 'embedded preview'} · see what changed`;
+		}
+		if (workspace.cameraMatch.status === 'pending' || matching)
+			return `matching to ${matchTarget}…`;
+		return `match to ${matchTarget}`;
+	});
+
+	async function openCameraMatch() {
+		if (workspace.cameraMatch.status === 'applied') {
+			reviewOpen = true;
+			return;
+		}
+		matching = true;
+		try {
+			await workspace.matchCamera();
+		} finally {
+			matching = false;
+		}
+	}
 </script>
 
 <Panel title="Color">
@@ -51,18 +79,16 @@
 	/>
 	{#if workspace.hasCameraLook}
 		<div class="mt-3 border-t border-subtle pt-3">
-			<AdjustmentSlider
-				label="camera look"
-				value={workspace.cameraLook}
-				min={0}
-				max={100}
-				step={1}
-				defaultValue={100}
-				signed={false}
-				suffix="%"
-				disabled={!workspace.canAdjustLight}
-				onValueCommit={(value) => workspace.setCameraLook(value)}
-			/>
+			<button
+				type="button"
+				disabled={!workspace.canAdjustLight ||
+					workspace.cameraMatch.status === 'pending' ||
+					matching}
+				onclick={() => void openCameraMatch()}
+				class="w-full cursor-pointer text-left text-[11px] text-muted hover:text-text disabled:cursor-default disabled:opacity-50"
+			>
+				{matchLabel}
+			</button>
 		</div>
 	{/if}
 	<button
@@ -74,3 +100,5 @@
 		color mixer <SlidersHorizontal size={12} />
 	</button>
 </Panel>
+
+<CameraMatchDialog bind:open={reviewOpen} {workspace} />

@@ -36,6 +36,19 @@ test('creates an independent versioned non-destructive document', () => {
 	assert.notEqual(first, second);
 	assert.notEqual(first.adjustments.light, second.adjustments.light);
 	assert.equal(editDocumentStorageName('photo-one'), 'photo-one.json');
+	assert.deepEqual(first.profile.cameraMatch, { status: 'pending' });
+});
+
+test('defaults camera-match fields safely for documents saved before decomposition', () => {
+	const current = defaultEditDocument('photo-one');
+	const legacy = structuredClone(current) as Record<string, unknown>;
+	legacy.profile = { cameraLook: 42 };
+
+	const parsed = parseEditDocument(legacy, 'photo-one');
+
+	assert.equal(parsed.profile.cameraLook, 42);
+	assert.equal(parsed.profile.cameraLookEnabled, true);
+	assert.deepEqual(parsed.profile.cameraMatch, { status: 'legacy' });
 });
 
 test('rejects mismatched photos, duplicate masks, and invalid normalized crops', () => {

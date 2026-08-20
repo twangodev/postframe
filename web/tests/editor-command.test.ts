@@ -597,3 +597,74 @@ test('a document saved before the camera look existed opens at the full look', (
 	const result = applyEditorCommand(legacy as never, { type: 'profile.cameraLook', amount: 0 })!;
 	assert.equal(result.document.profile.cameraLook, 0);
 });
+
+test('applies camera-match settings and residual as one render transition', () => {
+	const before = defaultEditDocument('photo-one');
+	const adjustments = defaultDevelopSettings();
+	adjustments.light.exposure = 0.25;
+	adjustments.color.temperature = -18;
+	const result = {
+		light: adjustments.light,
+		color: adjustments.color,
+		curve: adjustments.curve,
+		cameraLook: 31,
+		meanError: 3.32,
+		p99Error: 9,
+		settingsOnlyError: 4.69,
+		fitError: 3.37
+	};
+
+	const matched = applyEditorCommand(before, {
+		type: 'profile.cameraMatch',
+		adjustments,
+		result,
+		target: 'camera-jpeg'
+	})!;
+
+	assert.equal(matched.label, 'matched to camera JPEG');
+	assert.equal(matched.invalidation, 'render');
+	assert.deepEqual(matched.document.adjustments, adjustments);
+	assert.equal(matched.document.profile.cameraLook, 31);
+	assert.equal(matched.document.profile.cameraLookEnabled, true);
+	assert.deepEqual(matched.document.profile.cameraMatch, {
+		status: 'applied',
+		target: 'camera-jpeg',
+		result
+	});
+	assert.equal(before.profile.cameraMatch.status, 'pending');
+	assert.equal(
+		applyEditorCommand(matched.document, {
+			type: 'profile.cameraMatch',
+			adjustments,
+			result,
+			target: 'camera-jpeg'
+		}),
+		null
+	);
+
+	const dismissedSettings = defaultDevelopSettings();
+	dismissedSettings.effects.grainAmount = 20;
+	const dismissed = applyEditorCommand(matched.document, {
+		type: 'profile.cameraMatch.dismiss',
+		adjustments: dismissedSettings
+	})!;
+	assert.equal(dismissed.label, 'discarded camera match');
+	assert.deepEqual(dismissed.document.adjustments, dismissedSettings);
+	assert.deepEqual(dismissed.document.profile, {
+		cameraLook: 100,
+		cameraLookEnabled: true,
+		cameraMatch: { status: 'dismissed' }
+	});
+});
+
+test('camera look visibility is persistent without changing its amount', () => {
+	const before = defaultEditDocument('photo-one');
+	const hidden = applyEditorCommand(before, {
+		type: 'profile.cameraLookEnabled',
+		enabled: false
+	})!;
+
+	assert.equal(hidden.document.profile.cameraLookEnabled, false);
+	assert.equal(hidden.document.profile.cameraLook, 100);
+	assert.equal(hidden.label, 'hid camera look');
+});
