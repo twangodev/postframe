@@ -14,6 +14,7 @@ const isolationHeaders = {
 const desktop = process.env.POSTFRAME_TARGET === 'desktop';
 
 export default defineConfig({
+	define: { __POSTFRAME_DESKTOP__: desktop },
 	server: { headers: isolationHeaders },
 	preview: { headers: isolationHeaders },
 	plugins: [

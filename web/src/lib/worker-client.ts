@@ -1,5 +1,6 @@
 import type {
 	DevelopedMaskInput,
+	FileSource,
 	MaskEdgeInput,
 	RangeComponentInput,
 	RawFrameHandleInput,
@@ -142,7 +143,7 @@ export class PostframeWorkerClient {
 	}
 
 	async openDisplayDocument(
-		source: FileSystemFileHandle,
+		source: FileSource | FileSystemFileHandle,
 		maxDimension: number,
 		adjustments: DevelopSettings,
 		crop: NormalizedCrop | null
@@ -151,7 +152,7 @@ export class PostframeWorkerClient {
 			(id) => ({
 				id,
 				type: 'open-display',
-				source,
+				source: 'getFile' in source ? { kind: 'handle', handle: source } : source,
 				maxDimension,
 				adjustments: cloneDevelopSettings(adjustments),
 				crop: cloneCrop(crop)

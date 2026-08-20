@@ -1,7 +1,7 @@
 import type { DevelopPhase, DevelopProgress, RawFrameHandleInput } from './worker';
 import type { EditDocument } from './edit-document';
 import type { ImageScopeData } from './image-scope';
-import type { LibraryService } from './library-service';
+import type { LibraryBackend } from './library-backend.ts';
 import type { DevelopPreviewController } from './develop-preview';
 import type { MaskRasterPipeline, SelectedMaskRaster } from './mask-raster-pipeline';
 import type { ObjectUrlRegistry } from './object-url-registry';
@@ -43,7 +43,7 @@ export class DocumentSession {
 	private removeProgressListener: (() => void) | null = null;
 
 	constructor(
-		private readonly service: LibraryService | null,
+		private readonly service: LibraryBackend | null,
 		private readonly workerClient: PostframeWorkerClient | null,
 		private readonly persistence: WorkspacePersistence,
 		private readonly objectUrls: ObjectUrlRegistry,
@@ -124,7 +124,7 @@ export class DocumentSession {
 		const store = this.service;
 		const display = primaryStoredFrame(photo).display;
 		if (!store || !display) throw new Error('Display original is unavailable');
-		const source = await store.originalHandle(display.storageName);
+		const source = await store.originalSource(display.storageName);
 		if (revision !== this.revision) return;
 		const result = await this.workerClient!.openDisplayDocument(
 			source,
@@ -156,9 +156,9 @@ export class DocumentSession {
 		return Promise.all(
 			photo.frames.map(async (frame) => {
 				if (!frame.raw) throw new Error('Every bracket frame needs a RAW source');
-				const raw = await store.originalHandle(frame.raw.storageName);
+				const raw = await store.originalSource(frame.raw.storageName);
 				const jpeg = frame.display
-					? await store.originalHandle(frame.display.storageName)
+					? await store.originalSource(frame.display.storageName)
 					: undefined;
 				return { raw, jpeg };
 			})

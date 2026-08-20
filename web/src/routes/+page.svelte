@@ -3,6 +3,7 @@
 	import { MonitorUp } from '@lucide/svelte';
 	import AppHeader from '$lib/components/AppHeader.svelte';
 	import EditWorkspace from '$lib/components/EditWorkspace.svelte';
+	import DesktopLibraryLauncher from '$lib/components/DesktopLibraryLauncher.svelte';
 	import ExportDialog from '$lib/components/ExportDialog.svelte';
 	import OrganizeWorkspace from '$lib/components/OrganizeWorkspace.svelte';
 	import TaskManager from '$lib/components/ui/TaskManager.svelte';
@@ -31,6 +32,8 @@
 			<span class="text-[14px] font-medium tracking-tight">postframe</span>
 		</div>
 	</main>
+{:else if workspace.desktopLibraryRequired}
+	<DesktopLibraryLauncher {workspace} />
 {:else if workspace.mode === 'welcome'}
 	<Welcome
 		{workspace}

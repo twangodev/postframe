@@ -1,4 +1,5 @@
 import { freeQuietly } from './diagnostics.ts';
+import { sourceFile } from './worker-files.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import {
 	cropRegion,
@@ -48,7 +49,7 @@ async function originalBytes(active: ActiveDocument) {
 	const source = active.kind === 'display' ? active.source : active.metadataSource;
 	if (!source) return undefined;
 	try {
-		const file = await source.getFile();
+		const file = await sourceFile(source);
 		return new Uint8Array(await file.arrayBuffer());
 	} catch {
 		return undefined;

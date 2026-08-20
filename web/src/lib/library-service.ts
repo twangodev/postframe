@@ -71,6 +71,10 @@ export class LibraryService {
 		return this.assets.originalHandle(storageName);
 	}
 
+	async originalSource(storageName: string) {
+		return { kind: 'handle' as const, handle: await this.originalHandle(storageName) };
+	}
+
 	renderCacheHandle(photoId: string) {
 		return this.assets.derivedHandle(renderCacheStorageName(photoId));
 	}

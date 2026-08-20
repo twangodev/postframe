@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Database, RefreshCw, ShieldCheck, Trash2 } from '@lucide/svelte';
+	import { Database, FolderOpen, RefreshCw, ShieldCheck, Trash2 } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 	import { formatBytes } from '$lib/format-bytes';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -8,7 +8,7 @@
 	import { buttonClass } from '$lib/button';
 	import StorageBar from './StorageBar.svelte';
 
-	type Action = 'refresh' | 'persist' | 'cleanup' | 'clear';
+	type Action = 'refresh' | 'persist' | 'cleanup' | 'clear' | 'change' | 'reveal';
 	type Callback = () => void | Promise<void>;
 
 	interface Props {
@@ -61,37 +61,47 @@
 		class="border-b border-subtle p-4"
 		eyebrow={{ icon: Database, label: 'local storage' }}
 		title="on this device"
-		description="originals and edits stay in this browser."
+		description={workspace.desktop
+			? 'originals and edits stay in your managed library.'
+			: 'originals and edits stay in this browser.'}
 		closeDisabled={busy}
 	/>
 
 	<div class="space-y-4 p-4">
+		{#if workspace.desktop && workspace.desktopLibraryPath}
+			<div class="rounded border border-subtle bg-surface/45 p-3">
+				<p class="text-[10px] tracking-[0.08em] text-muted uppercase">managed library</p>
+				<p class="mt-1 truncate font-mono text-[11px]" title={workspace.desktopLibraryPath}>
+					{workspace.desktopLibraryPath}
+				</p>
+			</div>
+		{/if}
 		{#if status}
 			{#if breakdown}
 				<StorageBar {breakdown} />
 			{/if}
 
-			<div class="flex items-start gap-3">
-				<ShieldCheck
-					size={15}
-					strokeWidth={1.35}
-					class={status.persisted ? 'mt-0.5 text-positive' : 'mt-0.5 text-muted'}
-				/>
-				<div class="min-w-0 flex-1">
-					<p class="text-xs">
-						{status.persisted
-							? 'kept on this device'
-							: status.capabilities.persistence
-								? 'browser-managed storage'
-								: 'persistence unavailable'}
-					</p>
-					<p class="mt-0.5 text-[11px] leading-relaxed text-muted">
-						{status.persisted
-							? 'the browser granted protection from routine storage eviction.'
-							: 'local data may be removed when the browser needs space.'}
-					</p>
-				</div>
-			</div>
+			{#if !workspace.desktop}<div class="flex items-start gap-3">
+					<ShieldCheck
+						size={15}
+						strokeWidth={1.35}
+						class={status.persisted ? 'mt-0.5 text-positive' : 'mt-0.5 text-muted'}
+					/>
+					<div class="min-w-0 flex-1">
+						<p class="text-xs">
+							{status.persisted
+								? 'kept on this device'
+								: status.capabilities.persistence
+									? 'browser-managed storage'
+									: 'persistence unavailable'}
+						</p>
+						<p class="mt-0.5 text-[11px] leading-relaxed text-muted">
+							{status.persisted
+								? 'the browser granted protection from routine storage eviction.'
+								: 'local data may be removed when the browser needs space.'}
+						</p>
+					</div>
+				</div>{/if}
 		{:else}
 			<div class="flex h-24 items-center justify-center text-[11px] text-muted">
 				storage details unavailable
@@ -153,24 +163,47 @@
 				refresh
 			</button>
 			<div class="flex gap-2">
+				{#if workspace.desktop}
+					<button
+						type="button"
+						disabled={busy}
+						class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
+						onclick={() => run('reveal', workspace.revealDesktopLibrary)}
+					>
+						<FolderOpen size={12} /> reveal
+					</button>
+					<button
+						type="button"
+						disabled={busy}
+						class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
+						onclick={() => run('change', workspace.openDesktopLibrary)}
+					>
+						<FolderOpen size={12} />
+						{action === 'change' ? 'opening…' : 'change library'}
+					</button>
+				{/if}
 				<button
 					type="button"
 					disabled={busy}
 					class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
-					onclick={() => run('cleanup', workspace.cleanupLocalData)}
+					onclick={() =>
+						run(
+							'cleanup',
+							workspace.desktop ? workspace.clearDesktopCaches : workspace.cleanupLocalData
+						)}
 				>
 					<RefreshCw size={12} class={action === 'cleanup' ? 'animate-spin' : ''} />
-					{action === 'cleanup' ? 'cleaning…' : 'clean up'}
+					{action === 'cleanup' ? 'cleaning…' : workspace.desktop ? 'clear caches' : 'clean up'}
 				</button>
-				<button
-					type="button"
-					disabled={busy}
-					class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
-					onclick={() => (confirmingClear = true)}
-				>
-					<Trash2 size={12} /> clear
-				</button>
-				{#if status?.capabilities.persistence && !status.persisted}
+				{#if !workspace.desktop}<button
+						type="button"
+						disabled={busy}
+						class="flex items-center gap-1.5 {buttonClass('secondary', { busy: true })}"
+						onclick={() => (confirmingClear = true)}
+					>
+						<Trash2 size={12} /> clear
+					</button>{/if}
+				{#if !workspace.desktop && status?.capabilities.persistence && !status.persisted}
 					<button
 						type="button"
 						disabled={busy}

@@ -26,6 +26,7 @@ pub fn run() {
             shell::close_library,
             shell::reveal_library,
             shell::asset_source,
+            shell::asset_exists,
             shell::begin_asset_write,
             shell::begin_export_write,
             shell::append_asset_write,

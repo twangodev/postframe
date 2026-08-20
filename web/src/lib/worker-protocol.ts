@@ -10,9 +10,13 @@ import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
 
+export type FileSource =
+	| { kind: 'handle'; handle: FileSystemFileHandle }
+	| { kind: 'url'; url: string; name: string; size: number };
+
 export interface RawFrameHandleInput {
-	raw: FileSystemFileHandle;
-	jpeg?: FileSystemFileHandle;
+	raw: FileSource;
+	jpeg?: FileSource;
 }
 
 export interface RawMetadata {
@@ -121,7 +125,7 @@ export type Request =
 	| {
 			id: number;
 			type: 'open-display';
-			source: FileSystemFileHandle;
+			source: FileSource;
 			maxDimension: number;
 			adjustments: DevelopSettings;
 			crop: NormalizedCrop | null;

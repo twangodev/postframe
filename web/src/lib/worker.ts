@@ -21,6 +21,7 @@ import { autoBalance, autoTone } from './worker-auto.ts';
 
 export type {
 	DevelopedMaskInput,
+	FileSource,
 	DevelopPhase,
 	DevelopProgress,
 	MaskEdgeInput,

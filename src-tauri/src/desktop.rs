@@ -466,6 +466,15 @@ fn insert_photo(transaction: &Transaction<'_>, photo: &Value) -> Result<()> {
 fn upsert_collection(transaction: &Transaction<'_>, collection: &Value) -> Result<()> {
     let id = required_string(collection, "id")?;
     let name = required_string(collection, "name")?;
+    let normalized_name = collection
+        .get("normalizedName")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| normalize_name(name));
+    let mut payload = collection.clone();
+    if let Some(payload) = payload.as_object_mut() {
+        payload.remove("normalizedName");
+    }
     transaction.execute(
         "INSERT INTO collections (id, normalized_name, created_at, updated_at, payload)
          VALUES (?1, ?2, ?3, ?4, ?5)
@@ -476,10 +485,10 @@ fn upsert_collection(transaction: &Transaction<'_>, collection: &Value) -> Resul
            payload = excluded.payload",
         params![
             id,
-            normalize_name(name),
+            normalized_name,
             required_u64(collection, "createdAt")?,
             required_u64(collection, "updatedAt")?,
-            serde_json::to_string(collection)?
+            serde_json::to_string(&payload)?
         ],
     )?;
     transaction.execute(
@@ -616,6 +625,22 @@ pub mod shell {
             name: storage_name,
             size,
         })
+    }
+
+    #[tauri::command(rename_all = "camelCase")]
+    pub fn asset_exists(
+        kind: String,
+        storage_name: String,
+        state: State<'_, DesktopState>,
+    ) -> CommandResult<bool> {
+        validate_kind(&kind).map_err(command_error)?;
+        validate_storage_name(&storage_name).map_err(command_error)?;
+        let inner = state.inner.lock().expect("desktop state poisoned");
+        let library = inner
+            .library
+            .as_ref()
+            .ok_or_else(|| command_error(DesktopError::NoLibrary))?;
+        Ok(library.root.join(kind).join(storage_name).is_file())
     }
 
     #[tauri::command(rename_all = "camelCase")]
@@ -958,12 +983,12 @@ pub mod shell {
     pub fn catalog_save_preset(preset: Value, state: State<'_, DesktopState>) -> CommandResult<()> {
         with_library(&state, |library| {
         let id = required_string(&preset, "id")?;
-        let name = required_string(&preset, "name")?;
+        let normalized_name = required_string(&preset, "normalizedName")?;
         let updated_at = required_string(&preset, "updatedAt")?;
         library.connection.execute(
             "INSERT INTO presets (id, normalized_name, updated_at, payload) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(id) DO UPDATE SET normalized_name = excluded.normalized_name, updated_at = excluded.updated_at, payload = excluded.payload",
-            params![id, normalize_name(name), updated_at, serde_json::to_string(&preset)?],
+            params![id, normalized_name, updated_at, serde_json::to_string(&preset)?],
         )?;
         Ok(())
     })

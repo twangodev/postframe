@@ -1,5 +1,5 @@
 import { acceptedPhotoTypes, normalizedRawExtensions } from './photo-source';
-import { LibraryService, type CleanupResult } from './library-service';
+import type { CleanupResult } from './library-service';
 import type { PhotoCollection } from './library-schema';
 import { PostframeWorkerClient } from './worker-client';
 import {
@@ -72,6 +72,7 @@ import { StorageObserver } from './storage-observer';
 import { StorageOverview } from './storage-overview';
 import { ThumbnailLoader } from './thumbnail-loader';
 import { WorkspacePersistence, type StorageStatus } from './workspace-persistence';
+import { createPlatformServices } from './platform-services.ts';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type { ColorLabel, Photo, PhotoStack } from './photo-record';
@@ -88,7 +89,9 @@ export type { SettingsClipboard } from './settings-clipboard';
 export type Mask = EditMask;
 
 export class WorkspaceState {
-	private readonly libraryService = LibraryService.supported() ? new LibraryService() : null;
+	private readonly platform = createPlatformServices();
+	private readonly libraryService = this.platform.library;
+	private readonly desktopLibrary = this.platform.desktopLibrary;
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
 	private readonly rawExtensions = new Set<string>();
@@ -129,6 +132,9 @@ export class WorkspaceState {
 	libraryError = $state<string | null>(null);
 	collectionDialogOpen = $state(false);
 	startupReady = $state(false);
+	desktop = this.platform.desktop;
+	desktopLibraryRequired = $state(false);
+	desktopLibraryPath = $state<string | null>(null);
 	localStorageAvailable = this.libraryService !== null;
 	storageStatus = $state<StorageStatus>(this.libraryService ? 'saved' : 'memory');
 	storageError = $state<string | null>(null);
@@ -433,7 +439,21 @@ export class WorkspaceState {
 		await this.refreshBrowserStorage();
 	};
 
+	clearDesktopCaches = async () => {
+		if (!this.desktopLibrary) return;
+		await this.persistence.whenIdle();
+		await this.desktopLibrary.clearCaches();
+		this.storageCleanupResult = null;
+		await this.refreshBrowserStorage();
+	};
+
 	requestPersistentStorage = () => this.storage.requestPersistence();
+
+	createDesktopLibrary = () => this.activateDesktopLibrary(() => this.desktopLibrary?.create());
+
+	openDesktopLibrary = () => this.activateDesktopLibrary(() => this.desktopLibrary?.open());
+
+	revealDesktopLibrary = () => this.desktopLibrary?.reveal();
 
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
 		if (mode === 'edit' && this.photos.length === 0) return;
@@ -669,6 +689,9 @@ export class WorkspaceState {
 		return { jpeg, fileName: exportFileName(photo.name) };
 	};
 
+	saveExport = (jpeg: ArrayBuffer, fileName: string) =>
+		this.platform.exportSink.save(jpeg, fileName);
+
 	renderTile = async (photoId: string, tile: RenderTileRequest, signal: AbortSignal) => {
 		if (
 			!this.workerClient ||
@@ -844,14 +867,48 @@ export class WorkspaceState {
 	}
 
 	private async initialize() {
+		await this.ensureCapabilities();
+		if (this.desktopLibrary) {
+			const status = await this.desktopLibrary.status();
+			if (status.kind !== 'ready') {
+				this.desktopLibraryRequired = true;
+				this.libraryReady = true;
+				this.libraryError = status.kind === 'error' ? status.message : null;
+				this.startupReady = true;
+				return;
+			}
+			this.desktopLibraryPath = status.path;
+		}
 		await Promise.all([
-			this.ensureCapabilities(),
 			this.refreshBrowserStorage().catch(() => undefined),
 			this.resumePendingDeletions()
 		]);
 		await this.persistence.loadLibrary();
 		if (this.photos.length > 0) this.mode = 'organize';
 		this.startupReady = true;
+	}
+
+	private async activateDesktopLibrary(action: () => Promise<string | null> | undefined) {
+		if (!this.desktopLibrary) return;
+		await this.persistence.whenIdle();
+		const path = await action();
+		if (!path) return;
+		this.session.close();
+		this.clearFiles();
+		this.photos = [];
+		this.collections = [];
+		this.stacks = [];
+		this.presets = [];
+		this.selectedIds = [];
+		this.activePhotoId = null;
+		this.mode = 'welcome';
+		this.desktopLibraryPath = path;
+		this.desktopLibraryRequired = false;
+		this.libraryError = null;
+		await this.resumePendingDeletions();
+		await this.persistence.loadLibrary();
+		await this.refreshBrowserStorage().catch(() => undefined);
+		if (this.photos.length > 0) this.mode = 'organize';
 	}
 
 	private async resumePendingDeletions() {
