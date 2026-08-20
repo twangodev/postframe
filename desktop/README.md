@@ -31,8 +31,8 @@ bun run desktop:build --no-sign
 From the repository root, the native storage core can be validated without host GUI libraries:
 
 ```sh
-cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --all-targets
-cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
-cargo deny --manifest-path src-tauri/Cargo.toml --config src-tauri/deny.toml --all-features check
+cargo fmt --manifest-path desktop/Cargo.toml --all --check
+cargo clippy --manifest-path desktop/Cargo.toml --no-default-features --all-targets
+cargo test --manifest-path desktop/Cargo.toml --no-default-features
+cargo deny --manifest-path desktop/Cargo.toml --config desktop/deny.toml --all-features check
 ```

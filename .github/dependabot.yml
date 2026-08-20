@@ -6,7 +6,7 @@ updates:
       interval: weekly
 
   - package-ecosystem: cargo
-    directory: /src-tauri
+    directory: /desktop
     schedule:
       interval: weekly
 

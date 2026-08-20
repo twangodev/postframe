@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "dev.twango.postframe",
   "build": {
-    "beforeDevCommand": "bun --cwd web run dev",
-    "beforeBuildCommand": "bun --cwd web run build:desktop",
+    "beforeDevCommand": "bun run --cwd web dev",
+    "beforeBuildCommand": "bun run --cwd web build:desktop",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../web/build"
   },
