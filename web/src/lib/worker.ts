@@ -9,6 +9,7 @@ import {
 	applyCameraLook,
 	closeDocument,
 	deferRawCacheWrite,
+	deriveCameraMatch,
 	openDisplayDocument,
 	openRawDocument
 } from './worker-documents.ts';
@@ -97,6 +98,9 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'camera-look':
 				applyCameraLook(message.amount);
 				post({ id: message.id, type: 'camera-look-set' });
+				break;
+			case 'camera-match':
+				post({ id: message.id, type: 'camera-matched', result: deriveCameraMatch() });
 				break;
 			case 'preview': {
 				const preview = await renderPreviewImage(

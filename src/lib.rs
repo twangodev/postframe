@@ -41,6 +41,7 @@ pub use detail::{DetailPlanes, DetailSample, DetailSettings, DetailTransform};
 pub use develop::{DevelopSettings, DevelopTransform, PixelContext};
 pub use effects::{EffectsSettings, VignetteFrame};
 pub use error::{Error, Result};
+pub use fit::camera_match::{CameraMatch, camera_match};
 pub use fit::transfer::{Report, Transfer};
 pub use grade::{ColorSettings, ColorTransform};
 pub use grading::{GradingRange, GradingSettings, GradingTransform, GradingWheel};

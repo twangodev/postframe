@@ -1,17 +1,7 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
-	import {
-		CircleDashed,
-		Eye,
-		EyeOff,
-		Lock,
-		MoreHorizontal,
-		Plus,
-		SlidersHorizontal,
-		Trash2
-	} from '@lucide/svelte';
+	import { CircleDashed, Eye, EyeOff, Lock, SlidersHorizontal } from '@lucide/svelte';
 	import PhotoVisual from './PhotoVisual.svelte';
-	import IconButton from './ui/IconButton.svelte';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -24,33 +14,41 @@
 </script>
 
 <Tabs.Content value="layers" class="motion-tab">
-	<!-- TODO(WASM_TODOS.layersAndHistory): back this panel with document layers and history. -->
-	<div class="flex items-center gap-2 border-b border-subtle p-2">
-		<select
-			aria-label="Layer blend mode"
-			class="h-7 min-w-0 flex-1 cursor-pointer rounded border border-subtle bg-surface px-2 text-[11px] text-text focus:outline-none"
-		>
-			<option>normal</option>
-			<option>multiply</option>
-			<option>screen</option>
-			<option>overlay</option>
-			<option>soft light</option>
-		</select>
-		<span class="text-[11px] text-muted">opacity</span>
-		<span class="font-mono text-[11px]">100%</span>
-	</div>
-
 	<div class="space-y-1 p-2">
-		<div class="flex h-11 items-center gap-2 rounded border border-accent bg-surface px-2">
-			<Eye size={12} class="shrink-0 text-muted" />
-			<div
-				class="flex size-7 shrink-0 items-center justify-center rounded-sm bg-elevated text-muted"
-			>
-				<SlidersHorizontal size={12} />
+		{#if workspace.hasCameraLook}
+			<div class="rounded border border-accent bg-surface px-2 py-2">
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						aria-label={workspace.cameraLookEnabled ? 'Hide camera look' : 'Show camera look'}
+						aria-pressed={workspace.cameraLookEnabled}
+						disabled={!workspace.canAdjustLight}
+						onclick={workspace.toggleCameraLook}
+						class="cursor-pointer text-muted hover:text-text disabled:cursor-default disabled:opacity-40"
+					>
+						{#if workspace.cameraLookEnabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+					</button>
+					<div
+						class="flex size-7 shrink-0 items-center justify-center rounded-sm bg-elevated text-muted"
+					>
+						<SlidersHorizontal size={12} />
+					</div>
+					<span class="min-w-0 flex-1 truncate text-[11px]">camera look</span>
+					<span class="font-mono text-[10px] text-muted">{Math.round(workspace.cameraLook)}%</span>
+				</div>
+				<input
+					type="range"
+					aria-label="Camera look amount"
+					min="0"
+					max="100"
+					step="1"
+					value={workspace.cameraLook}
+					disabled={!workspace.canAdjustLight || !workspace.cameraLookEnabled}
+					onchange={(event) => workspace.setCameraLook(event.currentTarget.valueAsNumber)}
+					class="mt-1 h-3 w-full cursor-pointer accent-accent disabled:cursor-default disabled:opacity-40"
+				/>
 			</div>
-			<span class="min-w-0 flex-1 truncate text-[11px]">color & tone</span>
-			<div class="size-6 rounded-sm bg-white"></div>
-		</div>
+		{/if}
 
 		{#each workspace.masks as mask (mask.id)}
 			<div class="flex h-10 items-center gap-2 rounded border border-subtle px-2">
@@ -64,9 +62,6 @@
 					<CircleDashed size={12} />
 				</div>
 				<span class="min-w-0 flex-1 truncate text-[11px]">{mask.name}</span>
-				<IconButton label="Layer options">
-					<MoreHorizontal size={12} />
-				</IconButton>
 			</div>
 		{/each}
 
@@ -80,19 +75,5 @@
 			</span>
 			<Lock size={11} class="text-muted" />
 		</div>
-	</div>
-
-	<div
-		class="sticky bottom-0 mt-4 flex h-9 items-center justify-end gap-1 border-t border-subtle bg-bg px-2"
-	>
-		<IconButton label="Add layer mask">
-			<CircleDashed size={12} />
-		</IconButton>
-		<IconButton label="New layer">
-			<Plus size={12} />
-		</IconButton>
-		<IconButton label="Delete layer" tone="danger">
-			<Trash2 size={12} />
-		</IconButton>
 	</div>
 </Tabs.Content>

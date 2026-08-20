@@ -9,6 +9,7 @@ import {
 	type LightSettings
 } from './develop-settings.ts';
 import { defaultMaskEdgeSettings, maskEdgeSettingsSchema } from './mask-edge-settings.ts';
+import { cameraMatchResultSchema, cameraMatchTargetSchema } from './camera-match.ts';
 
 export const EDIT_DOCUMENT_VERSION = 11;
 
@@ -154,8 +155,21 @@ export const editMaskSchema = z.object({
 
 export const FULL_CAMERA_LOOK = 100;
 
+export const cameraMatchSchema = z.discriminatedUnion('status', [
+	z.object({ status: z.literal('legacy') }),
+	z.object({ status: z.literal('pending') }),
+	z.object({ status: z.literal('dismissed') }),
+	z.object({
+		status: z.literal('applied'),
+		target: cameraMatchTargetSchema,
+		result: cameraMatchResultSchema
+	})
+]);
+
 export const editProfileSchema = z.object({
-	cameraLook: z.number().finite().min(0).max(FULL_CAMERA_LOOK).default(FULL_CAMERA_LOOK)
+	cameraLook: z.number().finite().min(0).max(FULL_CAMERA_LOOK).default(FULL_CAMERA_LOOK),
+	cameraLookEnabled: z.boolean().default(true),
+	cameraMatch: cameraMatchSchema.default({ status: 'legacy' })
 });
 
 export const editSnapshotSchema = z.object({
@@ -169,7 +183,11 @@ export const editDocumentSchema = z
 		version: z.literal(EDIT_DOCUMENT_VERSION),
 		photoId: z.string().min(1),
 		adjustments: developSettingsSchema,
-		profile: editProfileSchema.default({ cameraLook: FULL_CAMERA_LOOK }),
+		profile: editProfileSchema.default({
+			cameraLook: FULL_CAMERA_LOOK,
+			cameraLookEnabled: true,
+			cameraMatch: { status: 'legacy' }
+		}),
 		snapshots: z.array(editSnapshotSchema).default([]),
 		geometry: z.object({
 			rotation: z.number().finite().min(-180).max(180),
@@ -194,6 +212,7 @@ export const editDocumentSchema = z
 	});
 
 export type EditProfile = z.infer<typeof editProfileSchema>;
+export type CameraMatch = z.infer<typeof cameraMatchSchema>;
 export type EditSnapshot = z.infer<typeof editSnapshotSchema>;
 export type MaskKind = z.infer<typeof maskKindSchema>;
 export type MaskOperation = z.infer<typeof maskOperationSchema>;
@@ -211,7 +230,8 @@ export type EditDocument = z.infer<typeof editDocumentSchema>;
 
 export function defaultEditDocument(
 	photoId: string,
-	light: LightSettings = defaultLightSettings()
+	light: LightSettings = defaultLightSettings(),
+	cameraMatch: CameraMatch = { status: 'pending' }
 ): EditDocument {
 	return {
 		version: EDIT_DOCUMENT_VERSION,
@@ -224,7 +244,11 @@ export function defaultEditDocument(
 			crop: null
 		},
 		masks: [],
-		profile: { cameraLook: FULL_CAMERA_LOOK },
+		profile: {
+			cameraLook: FULL_CAMERA_LOOK,
+			cameraLookEnabled: true,
+			cameraMatch: cameraMatchSchema.parse(cameraMatch)
+		},
 		snapshots: []
 	};
 }

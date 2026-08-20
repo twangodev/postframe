@@ -71,8 +71,13 @@ import { SmartMasking, type SmartMaskStatus, type SubjectChoices } from './smart
 import { StorageObserver } from './storage-observer';
 import { StorageOverview } from './storage-overview';
 import { ThumbnailLoader } from './thumbnail-loader';
-import { WorkspacePersistence, type StorageStatus } from './workspace-persistence';
+import {
+	applyCameraMatchSettings,
+	type CameraMatchResult,
+	type CameraMatchTarget
+} from './camera-match.ts';
 import { createPlatformServices } from './platform-services.ts';
+import { WorkspacePersistence, type StorageStatus } from './workspace-persistence';
 
 export type WorkspaceMode = 'welcome' | 'organize' | 'edit';
 export type { ColorLabel, Photo, PhotoStack } from './photo-record';
@@ -307,6 +312,8 @@ export class WorkspaceState {
 				selectMask: (maskId: string | null) => this.selectMask(maskId),
 				markRefining: (revision: number) => this.develop.markRefining(revision),
 				pushCameraLook: (amount: number) => this.pushCameraLook(amount),
+				applyCameraMatch: (result: CameraMatchResult, target: CameraMatchTarget) =>
+					this.applyCameraMatch(result, target),
 				failSmartMask: (error: unknown) => this.smartMasks.fail(error),
 				cancelDocument: () => this.cancelDocument(),
 				openDocument: (photoId: string) => {
@@ -550,9 +557,74 @@ export class WorkspaceState {
 	};
 
 	cameraLook = $derived(this.selectedPhoto?.edit.profile.cameraLook ?? FULL_CAMERA_LOOK);
+	cameraLookEnabled = $derived(this.selectedPhoto?.edit.profile.cameraLookEnabled ?? true);
+	cameraMatch = $derived(
+		this.selectedPhoto?.edit.profile.cameraMatch ?? ({ status: 'legacy' } as const)
+	);
 	hasCameraLook = $derived(this.selectedPhoto?.kind !== 'display');
 
 	setCameraLook = (amount: number) => this.editor.dispatch({ type: 'profile.cameraLook', amount });
+	toggleCameraLook = () =>
+		this.editor.dispatch({
+			type: 'profile.cameraLookEnabled',
+			enabled: !this.cameraLookEnabled
+		});
+
+	applyCameraMatch = (result: CameraMatchResult, target: CameraMatchTarget) => {
+		const photo = this.selectedPhoto;
+		if (!photo || photo.kind === 'display') return false;
+		return this.editor.dispatch({
+			type: 'profile.cameraMatch',
+			adjustments: applyCameraMatchSettings(photo.edit.adjustments, result),
+			result,
+			target
+		});
+	};
+
+	matchCamera = async () => {
+		const photo = this.selectedPhoto;
+		if (!photo || photo.kind === 'display' || !this.workerClient || !this.canAdjustLight) return;
+		try {
+			const result = await this.workerClient.cameraMatch();
+			if (this.selectedPhoto?.id !== photo.id) return;
+			this.applyCameraMatch(
+				result,
+				photo.frames.some(({ display }) => display !== null) ? 'camera-jpeg' : 'embedded-preview'
+			);
+		} catch (error) {
+			this.ingestError =
+				error instanceof Error ? error.message : 'Unable to match camera rendering';
+		}
+	};
+
+	reviewCameraMatch = (groups: readonly ('light' | 'color' | 'curve')[]) => {
+		const photo = this.selectedPhoto;
+		const match = photo?.edit.profile.cameraMatch;
+		if (!photo || match?.status !== 'applied') return false;
+		const neutral = defaultDevelopSettings();
+		const settings = cloneDevelopSettings(photo.edit.adjustments);
+		settings.light = groups.includes('light') ? match.result.light : neutral.light;
+		settings.color = groups.includes('color') ? match.result.color : neutral.color;
+		settings.curve = groups.includes('curve') ? match.result.curve : neutral.curve;
+		return this.editor.dispatch({
+			type: 'profile.cameraMatch',
+			adjustments: settings,
+			result: match.result,
+			target: match.target,
+			label: 'reviewed camera match'
+		});
+	};
+
+	discardCameraMatch = () => {
+		const photo = this.selectedPhoto;
+		if (!photo || photo.edit.profile.cameraMatch.status !== 'applied') return false;
+		const neutral = defaultDevelopSettings();
+		const adjustments = cloneDevelopSettings(photo.edit.adjustments);
+		adjustments.light = neutral.light;
+		adjustments.color = neutral.color;
+		adjustments.curve = neutral.curve;
+		return this.editor.dispatch({ type: 'profile.cameraMatch.dismiss', adjustments });
+	};
 
 	pushCameraLook = (amount: number) => {
 		void this.workerClient

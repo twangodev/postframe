@@ -6,6 +6,7 @@ import {
 	editMaskSchema,
 	editProfileSchema,
 	editSnapshotSchema,
+	FULL_CAMERA_LOOK,
 	maskComponentSchema,
 	normalizedCropSchema,
 	type EditDocument,
@@ -32,6 +33,11 @@ import {
 	type MaskAdjustmentTarget
 } from './develop-settings.ts';
 import { maskEdgeSettingsSchema, type MaskEdgeControlName } from './mask-edge-settings.ts';
+import {
+	cameraMatchResultSchema,
+	type CameraMatchResult,
+	type CameraMatchTarget
+} from './camera-match.ts';
 
 export type EditorInvalidation = 'render' | 'geometry' | 'overlay';
 
@@ -63,6 +69,15 @@ export type EditorCommand =
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
 	| { type: 'mask.delete'; maskId: string }
 	| { type: 'profile.cameraLook'; amount: number }
+	| { type: 'profile.cameraLookEnabled'; enabled: boolean }
+	| {
+			type: 'profile.cameraMatch';
+			adjustments: DevelopSettings;
+			result: CameraMatchResult;
+			target: CameraMatchTarget;
+			label?: string;
+	  }
+	| { type: 'profile.cameraMatch.dismiss'; adjustments: DevelopSettings }
 	| { type: 'snapshot.create'; snapshot: EditSnapshot }
 	| { type: 'snapshot.apply'; snapshotId: string }
 	| { type: 'snapshot.delete'; snapshotId: string }
@@ -84,6 +99,14 @@ export function cloneEditorCommand(command: EditorCommand): EditorCommand {
 				? { ...command, value: curvePointsSchema.parse(command.value) }
 				: { ...command };
 		case 'adjustment.replace':
+			return { ...command, adjustments: developSettingsSchema.parse(command.adjustments) };
+		case 'profile.cameraMatch':
+			return {
+				...command,
+				adjustments: developSettingsSchema.parse(command.adjustments),
+				result: cameraMatchResultSchema.parse(command.result)
+			};
+		case 'profile.cameraMatch.dismiss':
 			return { ...command, adjustments: developSettingsSchema.parse(command.adjustments) };
 		case 'mask.adjustment.set':
 			return { ...command, target: { ...command.target } };
@@ -187,7 +210,10 @@ export function applyEditorCommand(
 			return transition(command, `deleted ${mask.name} mask`, 'render', next);
 		}
 		case 'profile.cameraLook': {
-			const amount = editProfileSchema.parse({ cameraLook: command.amount }).cameraLook;
+			const amount = editProfileSchema.parse({
+				...next.profile,
+				cameraLook: command.amount
+			}).cameraLook;
 			if (next.profile.cameraLook === amount) return null;
 			next.profile = { ...next.profile, cameraLook: amount };
 			return transition(
@@ -196,6 +222,52 @@ export function applyEditorCommand(
 				'render',
 				next
 			);
+		}
+		case 'profile.cameraLookEnabled': {
+			if (next.profile.cameraLookEnabled === command.enabled) return null;
+			next.profile = { ...next.profile, cameraLookEnabled: command.enabled };
+			return transition(
+				command,
+				`${command.enabled ? 'showed' : 'hid'} camera look`,
+				'render',
+				next
+			);
+		}
+		case 'profile.cameraMatch': {
+			const adjustments = developSettingsSchema.parse(command.adjustments);
+			const result = cameraMatchResultSchema.parse(command.result);
+			const profile = editProfileSchema.parse({
+				cameraLook: result.cameraLook,
+				cameraLookEnabled: true,
+				cameraMatch: { status: 'applied', target: command.target, result }
+			});
+			if (
+				sameDevelopSettings(next.adjustments, adjustments) &&
+				JSON.stringify(next.profile) === JSON.stringify(profile)
+			) {
+				return null;
+			}
+			next.adjustments = adjustments;
+			next.profile = profile;
+			const target = command.target === 'camera-jpeg' ? 'camera JPEG' : 'embedded preview';
+			return transition(command, command.label ?? `matched to ${target}`, 'render', next);
+		}
+		case 'profile.cameraMatch.dismiss': {
+			const adjustments = developSettingsSchema.parse(command.adjustments);
+			const profile = editProfileSchema.parse({
+				cameraLook: FULL_CAMERA_LOOK,
+				cameraLookEnabled: true,
+				cameraMatch: { status: 'dismissed' }
+			});
+			if (
+				sameDevelopSettings(next.adjustments, adjustments) &&
+				JSON.stringify(next.profile) === JSON.stringify(profile)
+			) {
+				return null;
+			}
+			next.adjustments = adjustments;
+			next.profile = profile;
+			return transition(command, 'discarded camera match', 'render', next);
 		}
 		case 'snapshot.create': {
 			const snapshot = editSnapshotSchema.parse(command.snapshot);

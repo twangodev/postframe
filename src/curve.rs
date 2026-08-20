@@ -2,7 +2,7 @@ use crate::error::within;
 use crate::{Error, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize, serde::Serialize))]
 pub struct CurvePoint {
     pub x: f32,
     pub y: f32,
@@ -10,7 +10,7 @@ pub struct CurvePoint {
 
 /// Control points of a single tone curve, in ascending `x` order.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize, serde::Serialize))]
 pub struct CurvePoints(pub Vec<CurvePoint>);
 
 impl CurvePoints {
@@ -46,7 +46,7 @@ impl CurvePoints {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize, serde::Serialize))]
 pub struct CurveSettings {
     pub luminance: CurvePoints,
     pub red: CurvePoints,
