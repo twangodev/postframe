@@ -567,7 +567,11 @@ test('a document saved before snapshots existed still opens', () => {
 
 test('dials the camera look and keeps it out of the develop settings', () => {
 	const before = defaultEditDocument('photo-one');
-	assert.equal(before.profile.cameraLook, 100, 'a photograph starts at the camera look it was fitted to');
+	assert.equal(
+		before.profile.cameraLook,
+		100,
+		'a photograph starts at the camera look it was fitted to'
+	);
 
 	const faded = applyEditorCommand(before, { type: 'profile.cameraLook', amount: 40 })!;
 	assert.equal(faded.label, 'camera look 40');
