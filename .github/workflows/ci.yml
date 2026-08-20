@@ -161,8 +161,6 @@ jobs:
     name: Desktop (${{ matrix.name }})
     needs: [desktop-core, desktop-deny, web]
     runs-on: ${{ matrix.runner }}
-    env:
-      RUSTUP_TOOLCHAIN: stable
     strategy:
       fail-fast: false
       matrix:
@@ -185,9 +183,11 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: ${{ matrix.rust-targets || matrix.target }}
+          target: ${{ matrix.rust-targets || matrix.target }}
+          rustflags: ""
+          cache: false
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
