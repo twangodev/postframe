@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -186,6 +186,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-targets || matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop -> target
