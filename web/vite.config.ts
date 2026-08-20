@@ -1,4 +1,5 @@
 import adapter from '@sveltejs/adapter-cloudflare';
+import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
@@ -10,6 +11,8 @@ const isolationHeaders = {
 	'Origin-Agent-Cluster': '?1'
 };
 
+const desktop = process.env.POSTFRAME_TARGET === 'desktop';
+
 export default defineConfig({
 	server: { headers: isolationHeaders },
 	preview: { headers: isolationHeaders },
@@ -17,7 +20,7 @@ export default defineConfig({
 		postframeWasm(),
 		tailwindcss(),
 		sveltekit({
-			adapter: adapter()
+			adapter: desktop ? staticAdapter({ fallback: 'index.html' }) : adapter()
 		})
 	]
 });
