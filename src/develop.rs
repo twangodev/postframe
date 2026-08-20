@@ -184,7 +184,7 @@ impl DevelopTransform {
             return Err(Error::Unsupported("RGBA buffer size mismatch"));
         }
         let mut adjusted = Vec::with_capacity(rgba.len());
-        for pixel in rgba.chunks_exact(4) {
+        for pixel in rgba.as_chunks::<4>().0 {
             adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
             adjusted.push(pixel[3]);
         }
@@ -204,7 +204,7 @@ impl DevelopTransform {
         }
         let mut adjusted = rgba.to_vec();
         parallel::fill_rows(&mut adjusted, tile.0 * 4, |output_y, row| {
-            for (output_x, pixel) in row.chunks_exact_mut(4).enumerate() {
+            for (output_x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let developed = self.apply_display_pixel_at(
                     [pixel[0], pixel[1], pixel[2]],
                     region.pixel_context((output_x, output_y), tile),
@@ -234,12 +234,12 @@ impl DevelopTransform {
         let prepared = detail::prepare(&linear, region, tile, bin, &self.settings.detail);
         let mut adjusted = rgba.to_vec();
         if let Some(cleaned) = &prepared.cleaned {
-            for (pixel, cleaned) in adjusted.chunks_exact_mut(4).zip(cleaned) {
+            for (pixel, cleaned) in adjusted.as_chunks_mut::<4>().0.iter_mut().zip(cleaned) {
                 pixel[..3].copy_from_slice(&cleaned.map(linear_to_srgb));
             }
         }
         parallel::fill_rows(&mut adjusted, tile.0 * 4, |output_y, row| {
-            for (output_x, pixel) in row.chunks_exact_mut(4).enumerate() {
+            for (output_x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let developed = self.apply_display_pixel_prepared(
                     [pixel[0], pixel[1], pixel[2]],
                     region.pixel_context((output_x, output_y), tile),
@@ -902,7 +902,9 @@ mod tests {
     }
 
     fn display_linear(rgba: &[u8]) -> Vec<[f32; 3]> {
-        rgba.chunks_exact(4)
+        rgba.as_chunks::<4>()
+            .0
+            .iter()
             .map(|pixel| [pixel[0], pixel[1], pixel[2]].map(srgb_to_linear))
             .collect()
     }
@@ -960,8 +962,10 @@ mod tests {
             .apply_display_rgba8_prepared(&tile, size, region, 2)
             .unwrap();
         for (index, (developed, source)) in developed
-            .chunks_exact(4)
-            .zip(tile.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(tile.as_chunks::<4>().0)
             .enumerate()
         {
             let at = region.pixel_context((index % size.0, index / size.0), size);
@@ -1055,7 +1059,12 @@ mod tests {
             .apply_display_rgba8_prepared(&textured, size, region, 2)
             .unwrap();
         assert_ne!(developed, textured);
-        for (developed, source) in developed.chunks_exact(4).zip(textured.chunks_exact(4)) {
+        for (developed, source) in developed
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(textured.as_chunks::<4>().0)
+        {
             assert_eq!(developed[3], source[3]);
         }
         let flat: Vec<u8> = [128, 128, 128, 255].repeat(size.0 * size.1);

@@ -576,7 +576,7 @@ impl Session {
             .ok_or(JsError::new("missing develop transform"))?;
         let rendered = lut.render_prepared_adjusted(merged, prepared, develop, tone);
         let mut rgba = Vec::with_capacity(rendered.width * rendered.height * 4);
-        for pixel in rendered.rgb8.chunks_exact(3) {
+        for pixel in rendered.rgb8.as_chunks::<3>().0 {
             rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], u8::MAX]);
         }
         Ok(RenderedTile {

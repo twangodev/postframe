@@ -465,7 +465,7 @@ impl Preview {
         let white = (merged.report.radiance_max * gain).max(1.0);
         let mut rgb8 = vec![0u8; rgb.len() * 3];
         parallel::fill_rows(&mut rgb8, tile.0 * 3, |output_y, row| {
-            for (output_x, coded) in row.chunks_exact_mut(3).enumerate() {
+            for (output_x, coded) in row.as_chunks_mut::<3>().0.iter_mut().enumerate() {
                 let pixel = rgb[output_y * tile.0 + output_x];
                 let at = placement.pixel_context((output_x, output_y), tile);
                 coded.copy_from_slice(&self.render_pixel(pixel, gain, white, tone, chain, at));
