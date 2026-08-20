@@ -152,6 +152,12 @@ export const editMaskSchema = z.object({
 	adjustments: maskAdjustmentsSchema
 });
 
+export const FULL_CAMERA_LOOK = 100;
+
+export const editProfileSchema = z.object({
+	cameraLook: z.number().finite().min(0).max(FULL_CAMERA_LOOK).default(FULL_CAMERA_LOOK)
+});
+
 export const editSnapshotSchema = z.object({
 	id: z.string().min(1),
 	name: z.string().trim().min(1).max(60),
@@ -163,6 +169,7 @@ export const editDocumentSchema = z
 		version: z.literal(EDIT_DOCUMENT_VERSION),
 		photoId: z.string().min(1),
 		adjustments: developSettingsSchema,
+		profile: editProfileSchema.default({ cameraLook: FULL_CAMERA_LOOK }),
 		snapshots: z.array(editSnapshotSchema).default([]),
 		geometry: z.object({
 			rotation: z.number().finite().min(-180).max(180),
@@ -186,6 +193,7 @@ export const editDocumentSchema = z
 		}
 	});
 
+export type EditProfile = z.infer<typeof editProfileSchema>;
 export type EditSnapshot = z.infer<typeof editSnapshotSchema>;
 export type MaskKind = z.infer<typeof maskKindSchema>;
 export type MaskOperation = z.infer<typeof maskOperationSchema>;
@@ -216,6 +224,7 @@ export function defaultEditDocument(
 			crop: null
 		},
 		masks: [],
+		profile: { cameraLook: FULL_CAMERA_LOOK },
 		snapshots: []
 	};
 }

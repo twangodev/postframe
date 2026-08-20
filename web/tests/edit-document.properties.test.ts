@@ -296,6 +296,7 @@ const documentArbitrary = fc
 			crop: fc.option(regionArbitrary)
 		}),
 		masks: fc.uniqueArray(maskArbitrary, { selector: (mask) => mask.id, maxLength: 3 }),
+		profile: fc.record({ cameraLook: bounded(0, 100) }),
 		snapshots: fc.uniqueArray(snapshotArbitrary, {
 			selector: (snapshot) => snapshot.id,
 			maxLength: 3

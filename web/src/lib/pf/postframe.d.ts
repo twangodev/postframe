@@ -133,7 +133,14 @@ export class Session {
     render_tile(x: number, y: number, width: number, height: number, bin: number, settings: any, crop: any, tone: boolean): RenderedTile;
     render_tile_linear(x: number, y: number, width: number, height: number, bin: number, settings: any): LinearTile;
     restore_cache(cache: Uint8Array, preview_dimension: number): void;
+    /**
+     * How much of the camera's own rendering the photograph keeps, from zero
+     * for a plain sRGB one to `FULL_CAMERA_LOOK` for the fit as measured. The
+     * merged radiance and its cache never carry it, so it stays reversible.
+     */
+    set_camera_look(camera_look: number): void;
     width(): number;
+    readonly camera_look: number;
 }
 
 /**
@@ -174,25 +181,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
-    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
-    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
-    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
-    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
-    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
-    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any, g: number) => [number, number, number, number];
-    readonly displaytransform_channel_luts: (a: number) => [number, number];
-    readonly displaytransform_detail_apron: (a: number, b: number, c: number, d: number) => number;
-    readonly displaytransform_grading_scalars: (a: number) => [number, number];
-    readonly displaytransform_luminance_lut: (a: number) => [number, number];
-    readonly displaytransform_mixer_luts: (a: number) => [number, number];
-    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
-    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly __wbg_rawinspection_free: (a: number, b: number) => void;
-    readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly inspect_raw: (a: number, b: number, c: number) => [number, number, number];
-    readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly rawinspection_camera_make: (a: number) => [number, number];
     readonly rawinspection_camera_model: (a: number) => [number, number];
     readonly rawinspection_captured_at: (a: number) => [number, number];
@@ -213,11 +203,16 @@ export interface InitOutput {
     readonly __wbg_renderprofile_free: (a: number, b: number) => void;
     readonly __wbg_scopeframe_free: (a: number, b: number) => void;
     readonly __wbg_session_free: (a: number, b: number) => void;
+    readonly auto_tone: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly auto_white_balance: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly color_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
     readonly encode_export_jpeg: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly lineartile_detail: (a: number) => [number, number];
     readonly lineartile_height: (a: number) => number;
     readonly lineartile_rgba: (a: number) => [number, number];
     readonly lineartile_width: (a: number) => number;
+    readonly luminance_range_mask: (a: number, b: number, c: number, d: number, e: any) => [number, number, number, number];
+    readonly neutralizing_balance: (a: number, b: number, c: number) => [number, number];
     readonly previewframe_histogram: (a: number) => [number, number];
     readonly previewframe_jpeg: (a: number) => [number, number];
     readonly previewframe_sample_count: (a: number) => number;
@@ -236,6 +231,7 @@ export interface InitOutput {
     readonly session_add_frame: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly session_boost_stops: (a: number) => number;
     readonly session_cache_bytes: (a: number) => [number, number, number, number];
+    readonly session_camera_look: (a: number) => number;
     readonly session_export_ultra: (a: number) => [number, number, number, number];
     readonly session_frame_count: (a: number) => number;
     readonly session_height: (a: number) => [number, number, number];
@@ -249,12 +245,25 @@ export interface InitOutput {
     readonly session_render_tile: (a: number, b: number, c: number, d: number, e: number, f: number, g: any, h: any, i: number) => [number, number, number];
     readonly session_render_tile_linear: (a: number, b: number, c: number, d: number, e: number, f: number, g: any) => [number, number, number];
     readonly session_restore_cache: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly session_set_camera_look: (a: number, b: number) => [number, number];
     readonly session_width: (a: number) => [number, number, number];
     readonly renderprofile_lookup_low_bits: (a: number) => number;
     readonly renderprofile_transfer_lut_length: (a: number) => number;
     readonly scopeframe_sample_count: (a: number) => number;
     readonly scopeframe_waveform_height: (a: number) => number;
     readonly scopeframe_waveform_width: (a: number) => number;
+    readonly __wbg_developedtilecompositor_free: (a: number, b: number) => void;
+    readonly __wbg_displaytransform_free: (a: number, b: number) => void;
+    readonly developedtilecompositor_composite_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number, number];
+    readonly developedtilecompositor_new: (a: number, b: number, c: number, d: number, e: any) => [number, number, number];
+    readonly displaytransform_apply_rgba: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly displaytransform_apply_tile_rgba: (a: number, b: number, c: number, d: number, e: number, f: any, g: number) => [number, number, number, number];
+    readonly displaytransform_channel_luts: (a: number) => [number, number];
+    readonly displaytransform_detail_apron: (a: number, b: number, c: number, d: number) => number;
+    readonly displaytransform_grading_scalars: (a: number) => [number, number];
+    readonly displaytransform_luminance_lut: (a: number) => [number, number];
+    readonly displaytransform_mixer_luts: (a: number) => [number, number];
+    readonly displaytransform_new: (a: any, b: any) => [number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Pipette, SlidersHorizontal } from '@lucide/svelte';
+	import AdjustmentSlider from './ui/AdjustmentSlider.svelte';
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import Panel from './ui/Panel.svelte';
 	import { COLOR_SLIDERS } from '$lib/develop-sliders';
@@ -48,6 +49,22 @@
 		onPreview={(control, value) => workspace.previewAdjustment('color', control, value)}
 		onCommit={(control, value) => workspace.commitAdjustment('color', control, value)}
 	/>
+	{#if workspace.hasCameraLook}
+		<div class="mt-3 border-t border-subtle pt-3">
+			<AdjustmentSlider
+				label="camera look"
+				value={workspace.cameraLook}
+				min={0}
+				max={100}
+				step={1}
+				defaultValue={100}
+				signed={false}
+				suffix="%"
+				disabled={!workspace.canAdjustLight}
+				onValueCommit={(value) => workspace.setCameraLook(value)}
+			/>
+		</div>
+	{/if}
 	<button
 		type="button"
 		aria-label="open color mixer"

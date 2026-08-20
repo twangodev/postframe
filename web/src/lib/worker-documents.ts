@@ -228,6 +228,19 @@ function scheduleRawCacheWrite(session: WasmSession, cache: FileSystemFileHandle
 	queueRawCacheWrite();
 }
 
+export function applyCameraLook(amount: number) {
+	const active = document;
+	if (active?.kind !== 'raw') return;
+	active.session.set_camera_look(amount);
+	if (!active.renderer) return;
+	const profile = active.session.render_profile();
+	try {
+		active.renderer.setTransfer(profile.transfer_lut, profile.mix);
+	} finally {
+		freeQuietly('render profile', profile);
+	}
+}
+
 export function deferRawCacheWrite(active: ActiveDocument) {
 	if (active.kind !== 'raw' || !pendingCacheWrite || pendingCacheWrite.session !== active.session) {
 		return;

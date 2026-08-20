@@ -76,3 +76,24 @@ test('the before toggle and the hold key both render the photograph without its 
 	await expect.poll(centreRed, { timeout: 20_000 }).toBeGreaterThan(original + 20);
 	await expect(exposure).toHaveValue('+2.00 EV');
 });
+
+test('a photograph that is already a camera rendering offers no camera look', async ({ page }) => {
+	test.setTimeout(60_000);
+	await page.goto('/');
+	const dataUrl = await midGreyJpeg(page);
+	await page
+		.locator('main input[type="file"]')
+		.first()
+		.setInputFiles({
+			name: 'grey.jpg',
+			mimeType: 'image/jpeg',
+			buffer: Buffer.from(dataUrl.split(',')[1]!, 'base64')
+		});
+	await page.getByRole('tab', { name: 'edit', exact: true }).click();
+	await expect(page.getByRole('textbox', { name: 'Exposure value' })).toBeEnabled({
+		timeout: 20_000
+	});
+
+	await expect(page.getByRole('textbox', { name: 'Temperature value' })).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'camera look value' })).toHaveCount(0);
+});

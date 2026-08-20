@@ -6,6 +6,7 @@ import { measure, measureAsync, setPerformanceEnabled } from './worker-performan
 import {
 	activeDocument,
 	activeRawDocument,
+	applyCameraLook,
 	closeDocument,
 	deferRawCacheWrite,
 	openDisplayDocument,
@@ -91,6 +92,10 @@ self.onmessage = async (event: MessageEvent<Request>) => {
 			case 'set-masks':
 				setMaskCompositors(message.masks);
 				post({ id: message.id, type: 'masks-set' });
+				break;
+			case 'camera-look':
+				applyCameraLook(message.amount);
+				post({ id: message.id, type: 'camera-look-set' });
 				break;
 			case 'preview': {
 				const preview = await renderPreviewImage(

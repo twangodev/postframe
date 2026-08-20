@@ -34,6 +34,7 @@ export interface EditorSessionHost extends AdjustmentMirror {
 	history: string[];
 	canUndo: boolean;
 	canRedo: boolean;
+	pushCameraLook(amount: number): void;
 }
 
 export class EditorSession {
@@ -82,6 +83,7 @@ export class EditorSession {
 		this.host.imageScope = null;
 		this.editorHistory.reset();
 		const adjustments = document?.adjustments ?? defaultDevelopSettings();
+		if (document) this.host.pushCameraLook(document.profile.cameraLook);
 		this.host.masks = document?.masks.map(cloneEditMask) ?? [];
 		this.host.selectedMaskId = null;
 		this.host.selectedMaskRaster = null;
@@ -102,6 +104,8 @@ export class EditorSession {
 			this.host.selectedPhoto.edit.adjustments,
 			next.adjustments
 		);
+		const cameraLookChanged =
+			this.host.selectedPhoto.edit.profile.cameraLook !== next.profile.cameraLook;
 		this.host.selectedPhoto.edit = next;
 		this.host.masks = next.masks.map(cloneEditMask);
 		if (
@@ -113,6 +117,7 @@ export class EditorSession {
 		mirrorAdjustments(this.host, next.adjustments);
 
 		if (invalidation === 'render') {
+			if (cameraLookChanged) this.host.pushCameraLook(next.profile.cameraLook);
 			if (globalAdjustmentsChanged) {
 				this.develop.request(next.adjustments, next.geometry.crop, 'refining');
 			}

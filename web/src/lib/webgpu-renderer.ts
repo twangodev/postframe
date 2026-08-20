@@ -98,8 +98,12 @@ export class RawWebGpuRenderer {
 		private readonly pipeline: GPURenderPipeline,
 		private readonly profile: RawRenderProfile
 	) {
-		this.transferBuffer = floatBuffer(device, profile.transferLut, BUFFER_STORAGE);
-		this.mixBuffer = floatBuffer(device, profile.mix, BUFFER_STORAGE);
+		this.transferBuffer = floatBuffer(
+			device,
+			profile.transferLut,
+			BUFFER_STORAGE | BUFFER_COPY_DST
+		);
+		this.mixBuffer = floatBuffer(device, profile.mix, BUFFER_STORAGE | BUFFER_COPY_DST);
 		this.lightBuffer = device.createBuffer({
 			size: LIGHT_LUT_LENGTH * Float32Array.BYTES_PER_ELEMENT,
 			usage: BUFFER_STORAGE | BUFFER_COPY_DST
@@ -151,6 +155,12 @@ export class RawWebGpuRenderer {
 			throw validationError;
 		}
 		return new RawWebGpuRenderer(device, format, pipeline, profile);
+	}
+
+	setTransfer(transferLut: Float32Array, mix: Float32Array) {
+		if (this.lost) return;
+		this.device.queue.writeBuffer(this.transferBuffer, 0, transferLut);
+		this.device.queue.writeBuffer(this.mixBuffer, 0, mix);
 	}
 
 	hasSource(key: string) {

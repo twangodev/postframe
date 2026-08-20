@@ -32,6 +32,7 @@ import { globalDevelopBinding, maskDevelopBinding, type DevelopBinding } from '.
 import {
 	cloneEditDocument,
 	createEditMask,
+	FULL_CAMERA_LOOK,
 	type EditDocument,
 	type EditMask,
 	type MaskKind,
@@ -276,6 +277,7 @@ export class WorkspaceState {
 				'developPreview',
 				'renderSettings',
 				'comparingOriginal',
+				'cameraLook',
 				'history',
 				'canUndo',
 				'canRedo',
@@ -298,6 +300,7 @@ export class WorkspaceState {
 				dispatchEditorCommand: (command: EditorCommand) => this.editor.dispatch(command),
 				selectMask: (maskId: string | null) => this.selectMask(maskId),
 				markRefining: (revision: number) => this.develop.markRefining(revision),
+				pushCameraLook: (amount: number) => this.pushCameraLook(amount),
 				failSmartMask: (error: unknown) => this.smartMasks.fail(error),
 				cancelDocument: () => this.cancelDocument(),
 				openDocument: (photoId: string) => {
@@ -524,6 +527,18 @@ export class WorkspaceState {
 	deletePreset = (presetId: string) => {
 		this.presets = this.presets.filter(({ id }) => id !== presetId);
 		void this.persistence.queue((store) => store.deletePreset(presetId));
+	};
+
+	cameraLook = $derived(this.selectedPhoto?.edit.profile.cameraLook ?? FULL_CAMERA_LOOK);
+	hasCameraLook = $derived(this.selectedPhoto?.kind !== 'display');
+
+	setCameraLook = (amount: number) => this.editor.dispatch({ type: 'profile.cameraLook', amount });
+
+	pushCameraLook = (amount: number) => {
+		void this.workerClient
+			?.setCameraLook(amount)
+			.then(() => this.rerequestAllTiles())
+			.catch(() => {});
 	};
 
 	snapshots = $derived(this.selectedPhoto?.edit.snapshots ?? []);

@@ -129,6 +129,7 @@ export type Request =
 	| ({ id: number; type: 'tile' } & RenderTileRequest)
 	| ({ id: number; type: 'adjust-mask' } & MaskEdgeInput)
 	| { id: number; type: 'set-masks'; masks: DevelopedMaskInput[] }
+	| { id: number; type: 'camera-look'; amount: number }
 	| {
 			id: number;
 			type: 'preview';
@@ -185,6 +186,7 @@ export type Response =
 	  }
 	| { id: number; type: 'tile'; bitmap: ImageBitmap }
 	| { id: number; type: 'masks-set' }
+	| { id: number; type: 'camera-look-set' }
 	| {
 			id: number;
 			type: 'preview';

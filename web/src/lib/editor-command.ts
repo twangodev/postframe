@@ -4,6 +4,7 @@ import {
 	cloneEditDocument,
 	editDocumentSchema,
 	editMaskSchema,
+	editProfileSchema,
 	editSnapshotSchema,
 	maskComponentSchema,
 	normalizedCropSchema,
@@ -61,6 +62,7 @@ export type EditorCommand =
 	| { type: 'mask.component.set'; maskId: string; component: MaskComponent }
 	| { type: 'mask.visibility'; maskId: string; visible: boolean }
 	| { type: 'mask.delete'; maskId: string }
+	| { type: 'profile.cameraLook'; amount: number }
 	| { type: 'snapshot.create'; snapshot: EditSnapshot }
 	| { type: 'snapshot.apply'; snapshotId: string }
 	| { type: 'snapshot.delete'; snapshotId: string }
@@ -183,6 +185,17 @@ export function applyEditorCommand(
 			if (!mask) return null;
 			next.masks = next.masks.filter(({ id }) => id !== command.maskId);
 			return transition(command, `deleted ${mask.name} mask`, 'render', next);
+		}
+		case 'profile.cameraLook': {
+			const amount = editProfileSchema.parse({ cameraLook: command.amount }).cameraLook;
+			if (next.profile.cameraLook === amount) return null;
+			next.profile = { ...next.profile, cameraLook: amount };
+			return transition(
+				command,
+				`camera look ${formatAdjustment(amount, { signed: false })}`,
+				'render',
+				next
+			);
 		}
 		case 'snapshot.create': {
 			const snapshot = editSnapshotSchema.parse(command.snapshot);

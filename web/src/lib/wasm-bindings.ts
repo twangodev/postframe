@@ -70,7 +70,9 @@ export const WASM_BINDINGS = {
 	boost_stops: { rust: 'Session::boost_stops', worker: 'open-raw' },
 	width: { rust: 'Session::width', worker: ['open-raw', 'export'] },
 	height: { rust: 'Session::height', worker: ['open-raw', 'export'] },
-	render_profile: { rust: 'Session::render_profile', worker: 'open-raw' },
+	render_profile: { rust: 'Session::render_profile', worker: ['open-raw', 'camera-look'] },
+	set_camera_look: { rust: 'Session::set_camera_look', worker: 'camera-look' },
+	camera_look: { rust: 'Session::camera_look', worker: null },
 	preview_jpeg: { rust: 'Session::preview_jpeg', worker: 'preview' },
 	preview_frame: { rust: 'Session::preview_frame', worker: 'open-raw' },
 	preview_scope: { rust: 'Session::preview_scope', worker: 'scope' },
@@ -157,7 +159,15 @@ export const WASM_TODOS = {
 	},
 	colorManagement: {
 		scope: 'Manage working spaces, embedded profiles, proofing, and display transforms.',
-		bindings: ['preview_jpeg', 'preview_frame', 'preview_scope', 'preview_ultra', 'export_ultra'],
+		bindings: [
+			'preview_jpeg',
+			'preview_frame',
+			'preview_scope',
+			'preview_ultra',
+			'export_ultra',
+			'set_camera_look',
+			'camera_look'
+		],
 		planned: ['Session::set_working_space', 'Session::convert_profile', 'Session::proof_preview']
 	},
 	adjustments: {

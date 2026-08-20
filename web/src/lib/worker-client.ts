@@ -186,6 +186,10 @@ export class PostframeWorkerClient {
 		);
 	}
 
+	async setCameraLook(amount: number) {
+		await this.send((id) => ({ id, type: 'camera-look', amount }), 'camera-look-set');
+	}
+
 	async adjustMask(mask: MaskEdgeInput) {
 		const alpha = mask.alpha.slice(0);
 		const response = await this.send(

@@ -564,3 +564,32 @@ test('a document saved before snapshots existed still opens', () => {
 		['start']
 	);
 });
+
+test('dials the camera look and keeps it out of the develop settings', () => {
+	const before = defaultEditDocument('photo-one');
+	assert.equal(before.profile.cameraLook, 100, 'a photograph starts at the camera look it was fitted to');
+
+	const faded = applyEditorCommand(before, { type: 'profile.cameraLook', amount: 40 })!;
+	assert.equal(faded.label, 'camera look 40');
+	assert.equal(faded.invalidation, 'render');
+	assert.equal(faded.document.profile.cameraLook, 40);
+	assert.deepEqual(
+		faded.document.adjustments,
+		before.adjustments,
+		'the camera look sits upstream of the develop settings'
+	);
+	assert.equal(before.profile.cameraLook, 100, 'the source document must not change');
+
+	assert.equal(
+		applyEditorCommand(faded.document, { type: 'profile.cameraLook', amount: 40 }),
+		null,
+		'setting the amount already in place is not a history entry'
+	);
+});
+
+test('a document saved before the camera look existed opens at the full look', () => {
+	const legacy = { ...defaultEditDocument('photo-one') } as Record<string, unknown>;
+	delete legacy.profile;
+	const result = applyEditorCommand(legacy as never, { type: 'profile.cameraLook', amount: 0 })!;
+	assert.equal(result.document.profile.cameraLook, 0);
+});
