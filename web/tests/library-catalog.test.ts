@@ -14,6 +14,7 @@ function manifest(): LibraryManifest {
 		version: 1,
 		createdAt: 1,
 		updatedAt: 2,
+		cameraMatchPreference: 'ask',
 		photos: [
 			{
 				id: 'photo-one',
@@ -72,6 +73,19 @@ test('round-trips a normalized library catalog', async () => {
 		assert.deepEqual(await catalog.loadLibrary(), expected);
 		assert.equal(await catalog.database.assets.count(), 1);
 		assert.equal(await catalog.database.collectionPhotos.count(), 1);
+	} finally {
+		await catalog.clear();
+	}
+});
+
+test('persists the camera-match preference independently of photo edits', async () => {
+	const catalog = new LibraryCatalog(`postframe-test-${crypto.randomUUID()}`);
+	try {
+		await catalog.saveLibrary(manifest());
+		await catalog.saveCameraMatchPreference('never');
+
+		assert.equal((await catalog.loadLibrary())?.cameraMatchPreference, 'never');
+		assert.equal((await catalog.database.photos.get('photo-one'))?.id, 'photo-one');
 	} finally {
 		await catalog.clear();
 	}

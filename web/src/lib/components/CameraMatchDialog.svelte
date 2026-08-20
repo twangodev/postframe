@@ -121,7 +121,7 @@
 		{/if}
 
 		<DialogFooter cancel class="mt-5">
-			<button type="button" onclick={discard} class={destructiveButtonClass}>discard match</button>
+			<button type="button" onclick={discard} class={destructiveButtonClass}>start neutral</button>
 			<button type="submit" class={primaryButtonClass}>apply choices</button>
 		</DialogFooter>
 	</form>

@@ -9,6 +9,7 @@ import {
 import { editDocumentStorageName } from './edit-document.ts';
 import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
+import { cameraMatchPreferenceSchema, type CameraMatchPreference } from './camera-match.ts';
 
 const DATABASE_NAME = 'postframe-catalog';
 const LIBRARY_ID = 'library';
@@ -17,6 +18,7 @@ interface LibraryRecord {
 	id: typeof LIBRARY_ID;
 	createdAt: number;
 	updatedAt: number;
+	cameraMatchPreference?: CameraMatchPreference;
 }
 
 interface CatalogFrame {
@@ -165,6 +167,7 @@ export class LibraryCatalog {
 			version: 1,
 			createdAt: library.createdAt,
 			updatedAt: library.updatedAt,
+			cameraMatchPreference: library.cameraMatchPreference,
 			photos: photos.map((photo) => hydratePhoto(photo, assetsById)),
 			collections: collections.map(({ normalizedName: _, ...collection }) => ({
 				...collection,
@@ -206,7 +209,8 @@ export class LibraryCatalog {
 				await this.database.library.put({
 					id: LIBRARY_ID,
 					createdAt: library.createdAt,
-					updatedAt: library.updatedAt
+					updatedAt: library.updatedAt,
+					cameraMatchPreference: library.cameraMatchPreference
 				});
 				await bulkPut(this.database.photos, records.photos);
 				await bulkPut(this.database.assets, records.assets);
@@ -268,7 +272,8 @@ export class LibraryCatalog {
 				await this.database.library.put({
 					id: LIBRARY_ID,
 					createdAt: library?.createdAt ?? libraryCreatedAt,
-					updatedAt: now
+					updatedAt: now,
+					cameraMatchPreference: library?.cameraMatchPreference ?? 'ask'
 				});
 				await bulkAdd(this.database.photos, photoRecords);
 				await bulkAdd(this.database.assets, assets);
@@ -278,6 +283,15 @@ export class LibraryCatalog {
 				}
 			}
 		);
+	}
+
+	async saveCameraMatchPreference(preference: CameraMatchPreference) {
+		const value = cameraMatchPreferenceSchema.parse(preference);
+		const updated = await this.database.library.update(LIBRARY_ID, {
+			cameraMatchPreference: value,
+			updatedAt: Date.now()
+		});
+		if (updated === 0) throw new Error('The library is unavailable');
 	}
 
 	async updatePhotoState(photo: StoredPhoto) {

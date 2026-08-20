@@ -648,17 +648,17 @@ test('applies camera-match settings and residual as one render transition', () =
 		type: 'profile.cameraMatch.dismiss',
 		adjustments: dismissedSettings
 	})!;
-	assert.equal(dismissed.label, 'discarded camera match');
+	assert.equal(dismissed.label, 'started from neutral RAW');
 	assert.deepEqual(dismissed.document.adjustments, dismissedSettings);
 	assert.deepEqual(dismissed.document.profile, {
-		cameraLook: 100,
-		cameraLookEnabled: true,
+		cameraLook: 0,
+		cameraLookEnabled: false,
 		cameraMatch: { status: 'dismissed' }
 	});
 });
 
 test('camera look visibility is persistent without changing its amount', () => {
-	const before = defaultEditDocument('photo-one');
+	const before = defaultEditDocument('photo-one', undefined, { status: 'legacy' });
 	const hidden = applyEditorCommand(before, {
 		type: 'profile.cameraLookEnabled',
 		enabled: false

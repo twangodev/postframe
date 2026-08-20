@@ -9,7 +9,12 @@ import { primaryStoredFrame, type Photo } from './photo-record';
 import type { SmartMasking, SmartMaskStatus, SubjectChoices } from './smart-masking';
 import type { PostframeWorkerClient } from './worker-client';
 import type { WorkspacePersistence } from './workspace-persistence';
-import type { CameraMatchResult, CameraMatchTarget } from './camera-match.ts';
+import {
+	cameraMatchOpening,
+	type CameraMatchPreference,
+	type CameraMatchResult,
+	type CameraMatchTarget
+} from './camera-match.ts';
 
 export type DocumentStatus =
 	| { kind: 'idle' }
@@ -30,6 +35,7 @@ export type DocumentStatus =
 export interface DocumentSessionHost {
 	readonly mode: 'welcome' | 'organize' | 'edit';
 	readonly photos: Photo[];
+	readonly cameraMatchPreference: CameraMatchPreference;
 	documentStatus: DocumentStatus;
 	editPreview: { src: string; width: number; height: number } | null;
 	imageScope: ImageScopeData | null;
@@ -38,6 +44,8 @@ export interface DocumentSessionHost {
 	smartMaskStatus: SmartMaskStatus;
 	resetEditState(document: EditDocument): void;
 	applyCameraMatch(result: CameraMatchResult, target: CameraMatchTarget): boolean;
+	presentCameraMatch(result: CameraMatchResult, target: CameraMatchTarget): boolean;
+	startCameraNeutral(): boolean;
 }
 
 export class DocumentSession {
@@ -101,6 +109,10 @@ export class DocumentSession {
 			const frames = await this.frames(photo);
 			const cache = await this.service!.renderCacheHandle(photo.id);
 			if (revision !== this.revision) return;
+			const cameraMatch = cameraMatchOpening(
+				photo.edit.profile.cameraMatch.status,
+				this.host.cameraMatchPreference
+			);
 			const result = await this.workerClient.openRawDocument(
 				frames,
 				cache,
@@ -108,15 +120,20 @@ export class DocumentSession {
 				photo.edit.adjustments,
 				photo.edit.geometry.crop,
 				photo.edit.profile.cameraLookEnabled ? photo.edit.profile.cameraLook : 0,
-				photo.edit.profile.cameraMatch.status === 'pending'
+				cameraMatch === 'prompt' || cameraMatch === 'apply'
 			);
 			if (revision !== this.revision) return;
-			if (result.cameraMatch) {
+			if (result.cameraMatch && cameraMatch === 'apply') {
 				this.host.applyCameraMatch(result.cameraMatch, cameraMatchTarget(photo));
 			}
 			await this.pipeline.installMaskCompositors(photo.edit, () => revision === this.revision);
 			if (revision !== this.revision) return;
 			this.install(photoId, result);
+			if (result.cameraMatch && cameraMatch === 'prompt') {
+				this.host.presentCameraMatch(result.cameraMatch, cameraMatchTarget(photo));
+			} else if (cameraMatch === 'neutral') {
+				this.host.startCameraNeutral();
+			}
 		} catch (error) {
 			if (revision !== this.revision) return;
 			this.host.documentStatus = {

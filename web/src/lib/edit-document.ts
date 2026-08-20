@@ -246,7 +246,7 @@ export function defaultEditDocument(
 		masks: [],
 		profile: {
 			cameraLook: FULL_CAMERA_LOOK,
-			cameraLookEnabled: true,
+			cameraLookEnabled: cameraMatch.status !== 'pending',
 			cameraMatch: cameraMatchSchema.parse(cameraMatch)
 		},
 		snapshots: []

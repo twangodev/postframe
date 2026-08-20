@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cameraMatchPreferenceSchema } from './camera-match.ts';
 
 const LIBRARY_VERSION = 1;
 
@@ -114,6 +115,7 @@ export const libraryManifestSchema = z
 		version: z.literal(LIBRARY_VERSION),
 		createdAt: z.number().int().nonnegative(),
 		updatedAt: z.number().int().nonnegative(),
+		cameraMatchPreference: cameraMatchPreferenceSchema.default('ask'),
 		photos: z.array(storedPhotoSchema),
 		collections: z.array(photoCollectionSchema),
 		stacks: z.array(stackSchema)

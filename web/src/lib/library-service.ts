@@ -23,6 +23,7 @@ import {
 } from './edit-document.ts';
 import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
+import type { CameraMatchPreference } from './camera-match.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
 
@@ -210,6 +211,10 @@ export class LibraryService {
 
 	deletePreset(presetId: string) {
 		return this.catalog.deletePreset(presetId);
+	}
+
+	saveCameraMatchPreference(preference: CameraMatchPreference) {
+		return this.catalog.saveCameraMatchPreference(preference);
 	}
 
 	async deletePhoto(photoId: string): Promise<CleanupResult> {

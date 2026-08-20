@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import AdjustPanel from './AdjustPanel.svelte';
+	import CameraMatchOnboarding from './CameraMatchOnboarding.svelte';
 	import EditViewport from './EditViewport.svelte';
 	import Filmstrip from './Filmstrip.svelte';
 	import LayersPanel from './LayersPanel.svelte';
@@ -192,3 +193,5 @@
 
 	<Filmstrip {workspace} />
 </div>
+
+<CameraMatchOnboarding {workspace} />

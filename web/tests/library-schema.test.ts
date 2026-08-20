@@ -59,7 +59,9 @@ function library() {
 }
 
 test('stores collection membership as photo references', () => {
-	assert.deepEqual(libraryManifestSchema.parse(library()).collections[0]?.photoIds, [photo.id]);
+	const parsed = libraryManifestSchema.parse(library());
+	assert.deepEqual(parsed.collections[0]?.photoIds, [photo.id]);
+	assert.equal(parsed.cameraMatchPreference, 'ask');
 });
 
 test('rejects collection members outside the library', () => {

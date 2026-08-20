@@ -6,7 +6,6 @@ import {
 	editMaskSchema,
 	editProfileSchema,
 	editSnapshotSchema,
-	FULL_CAMERA_LOOK,
 	maskComponentSchema,
 	normalizedCropSchema,
 	type EditDocument,
@@ -255,8 +254,8 @@ export function applyEditorCommand(
 		case 'profile.cameraMatch.dismiss': {
 			const adjustments = developSettingsSchema.parse(command.adjustments);
 			const profile = editProfileSchema.parse({
-				cameraLook: FULL_CAMERA_LOOK,
-				cameraLookEnabled: true,
+				cameraLook: 0,
+				cameraLookEnabled: false,
 				cameraMatch: { status: 'dismissed' }
 			});
 			if (
@@ -267,7 +266,7 @@ export function applyEditorCommand(
 			}
 			next.adjustments = adjustments;
 			next.profile = profile;
-			return transition(command, 'discarded camera match', 'render', next);
+			return transition(command, 'started from neutral RAW', 'render', next);
 		}
 		case 'snapshot.create': {
 			const snapshot = editSnapshotSchema.parse(command.snapshot);
