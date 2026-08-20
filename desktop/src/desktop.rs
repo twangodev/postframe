@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "shell"), allow(dead_code))]
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -24,7 +24,7 @@ const CONFIG_FILE: &str = "desktop-library.json";
 const LIBRARY_DIRECTORIES: [&str; 4] = ["originals", "thumbnails", "edits", "masks"];
 
 #[cfg(feature = "shell")]
-type CommandResult<T> = Result<T, String>;
+type CommandResult<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Error)]
 pub enum DesktopError {
@@ -65,7 +65,7 @@ pub struct ImportResolution {
     photo_ids: HashMap<String, String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingDelete {
     kind: String,
