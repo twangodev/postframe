@@ -4,10 +4,10 @@ import { cloneCrop, type NormalizedCrop } from './edit-document.ts';
 import type { WasmDisplayTransform, WasmSession } from './wasm-runtime';
 import { exportMetadataSource } from './export.ts';
 import { RawWebGpuRenderer, type DevelopLuts, type RawRenderProfile } from './webgpu-renderer.ts';
-import { post, type DevelopPhase, type Request } from './worker-protocol.ts';
+import { post, type DevelopPhase, type FileSource, type Request } from './worker-protocol.ts';
 import { wasm } from './worker-wasm.ts';
 import { measure, measureAsync } from './worker-performance.ts';
-import { fileSize, readFile, writeFileHandle } from './worker-files.ts';
+import { fileName, fileSize, readFile, sourceFile, writeFileHandle } from './worker-files.ts';
 import { displayPreview, renderDisplayPreview, renderRawPreview } from './worker-render.ts';
 import { clearMaskCompositors } from './worker-masks.ts';
 import { applyCameraMatchSettings, cameraMatchResultSchema } from './camera-match.ts';
@@ -23,13 +23,13 @@ export interface RawDocument {
 	session: WasmSession;
 	renderer: RawWebGpuRenderer | null;
 	developLuts: (DevelopLuts & { key: string }) | null;
-	metadataSource: FileSystemFileHandle | null;
+	metadataSource: FileSource | null;
 	sourceImage: SourceImageMemo | null;
 }
 
 export interface DisplayDocument {
 	kind: 'display';
-	source: FileSystemFileHandle;
+	source: FileSource;
 	bitmap: ImageBitmap;
 	preview: ImageData;
 	adjustments: DevelopSettings;
@@ -119,7 +119,7 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 						bytesRead = frameStart + completed;
 						progress('reading', activeFrame);
 					}),
-				frame.raw.name
+				fileName(frame.raw)
 			);
 			const jpegStart = bytesRead;
 			const jpeg = frame.jpeg
@@ -130,14 +130,14 @@ export async function openRawDocument(message: Extract<Request, { type: 'open-ra
 								bytesRead = jpegStart + completed;
 								progress('reading', activeFrame);
 							}),
-						frame.jpeg.name
+						fileName(frame.jpeg)
 					)
 				: undefined;
 			progress('decoding', activeFrame);
 			measure(
 				'raw-decode',
 				() => session.add_frame(new Uint8Array(raw), jpeg ? new Uint8Array(jpeg) : undefined),
-				frame.raw.name
+				fileName(frame.raw)
 			);
 			framesDecoded = activeFrame;
 			progress('decoding', activeFrame);
@@ -280,7 +280,7 @@ function flushRawCacheWrite() {
 
 export async function openDisplayDocument(message: Extract<Request, { type: 'open-display' }>) {
 	closeDocument();
-	const source = await message.source.getFile();
+	const source = await sourceFile(message.source);
 	postDisplayProgress(message, 'reading', 0, source.size);
 	const bitmap = await measureAsync(
 		'display-decode',

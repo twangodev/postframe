@@ -15,7 +15,7 @@
 		name="description"
 		content="Postframe is a focused workspace for organizing, developing, and finishing photographs."
 	/>
-	{#if !dev}
+	{#if !dev && !__POSTFRAME_DESKTOP__}
 		<script
 			src="https://rybbit.twango.dev/api/script.js"
 			data-site-id="b45b9596157c"

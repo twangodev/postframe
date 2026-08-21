@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -12,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -66,6 +68,38 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  desktop-core:
+    name: Desktop core
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
+
+      - run: cargo fmt --manifest-path desktop/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path desktop/Cargo.toml --no-default-features --all-targets
+      - run: cargo test --manifest-path desktop/Cargo.toml --no-default-features
+
+  desktop-deny:
+    name: Desktop dependencies
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: desktop/Cargo.toml
+          command: check
+          arguments: --all-features --config desktop/deny.toml
 
   web-quality:
     name: Web ${{ matrix.name }}
@@ -125,9 +159,64 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: [desktop-core, desktop-deny, web]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle-path: desktop/target/x86_64-pc-windows-msvc/release/bundle
+          - name: macOS universal
+            runner: macos-14
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            bundle-path: desktop/target/universal-apple-darwin/release/bundle
+          - name: Linux x64 preview
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundle-path: desktop/target/x86_64-unknown-linux-gnu/release/bundle
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.rust-targets || matrix.target }}
+          rustflags: ""
+          cache: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Linux desktop libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev
+
+      - run: bun install --frozen-lockfile
+      - run: bun run desktop:build --target ${{ matrix.target }} --no-sign
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: postframe-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ matrix.bundle-path }}
+          if-no-files-found: error
+          retention-days: 14
+
   release-please:
     name: Release Please
-    needs: web
+    needs: [web, desktop]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

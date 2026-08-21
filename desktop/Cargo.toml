@@ -1,0 +1,43 @@
+[package]
+name = "postframe-desktop"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[features]
+default = ["shell"]
+shell = [
+    "dep:libdbus-sys",
+    "dep:mime_guess",
+    "dep:tauri",
+    "dep:tauri-plugin-dialog",
+]
+
+[lib]
+name = "postframe_desktop"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "postframe-desktop"
+path = "src/main.rs"
+
+[dependencies]
+mime_guess = { version = "2.0.5", optional = true }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.10.9"
+tauri = { version = "2.11.1", features = ["wry"], optional = true }
+tauri-plugin-dialog = { version = "2.7.2", optional = true }
+thiserror = "2.0.19"
+uuid = { version = "1.24.0", features = ["v4", "serde"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libdbus-sys = { version = "0.2.7", features = ["vendored"], optional = true }
+
+[build-dependencies]
+tauri-build = "2.5.6"
+
+[dev-dependencies]
+tempfile = "3.23.0"

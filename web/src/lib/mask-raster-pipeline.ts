@@ -12,7 +12,7 @@ import {
 	type MaskComponent,
 	type NormalizedCrop
 } from './edit-document';
-import type { LibraryService } from './library-service';
+import type { EditDocumentStore } from './library-backend.ts';
 import { isNeutralMaskEdge } from './mask-edge-settings';
 import {
 	composeMaskRasters,
@@ -46,7 +46,7 @@ export class MaskRasterPipeline {
 	private readonly adjustedRasterCache = new Map<string, { key: string; raster: MaskRasterData }>();
 
 	constructor(
-		private readonly service: LibraryService | null,
+		private readonly service: EditDocumentStore | null,
 		private readonly workerClient: PostframeWorkerClient | null,
 		private readonly host: MaskRasterPipelineHost
 	) {}

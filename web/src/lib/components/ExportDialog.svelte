@@ -53,7 +53,10 @@
 				};
 			});
 			if (revision !== exportRevision) return;
-			download(result.jpeg, result.fileName);
+			if (!(await workspace.saveExport(result.jpeg, result.fileName))) {
+				status = { kind: 'idle' };
+				return;
+			}
 			status = { kind: 'completed', fileName: result.fileName };
 			setTimeout(() => {
 				if (revision === exportRevision) open = false;
@@ -65,15 +68,6 @@
 				message: error instanceof Error ? error.message : 'Unable to export the photograph'
 			};
 		}
-	}
-
-	function download(jpeg: ArrayBuffer, fileName: string) {
-		const url = URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' }));
-		const anchor = document.createElement('a');
-		anchor.href = url;
-		anchor.download = fileName;
-		anchor.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
 </script>
 

@@ -1,4 +1,4 @@
-import type { LibraryService } from './library-service';
+import type { LibraryPersistence, LocalLibraryReset } from './library-backend.ts';
 import type { PhotoCollection } from './library-schema';
 import { restoredPhoto, storedPhoto, type Photo, type PhotoStack } from './photo-record';
 import type { PhotoImport } from './photo-ingest';
@@ -31,7 +31,8 @@ export class WorkspacePersistence {
 	private libraryCreatedAt = 0;
 
 	constructor(
-		private readonly service: LibraryService | null,
+		private readonly service: LibraryPersistence | null,
+		private readonly localLibraryReset: LocalLibraryReset | null,
 		private readonly objectUrls: ObjectUrlRegistry,
 		private readonly host: WorkspacePersistenceHost
 	) {}
@@ -97,13 +98,13 @@ export class WorkspacePersistence {
 	async clearAll(onCleared: () => void) {
 		this.loadRevision += 1;
 		await this.persistence;
-		await this.service?.clearAll();
+		await this.localLibraryReset?.clearAll();
 		onCleared();
 		this.revision += 1;
 		this.libraryCreatedAt = Date.now();
 	}
 
-	async queue(operation: (store: LibraryService) => Promise<unknown>): Promise<boolean> {
+	async queue(operation: (store: LibraryPersistence) => Promise<unknown>): Promise<boolean> {
 		const store = this.service;
 		if (!store) {
 			this.host.storageStatus = 'memory';

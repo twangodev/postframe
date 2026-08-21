@@ -187,6 +187,24 @@ export class AssetStore {
 		}
 	}
 
+	async clearCaches() {
+		const root = await this.root();
+		let app: FileSystemDirectoryHandle;
+		try {
+			app = await root.getDirectoryHandle(APP_DIRECTORY);
+		} catch (error) {
+			if (isNotFoundError(error)) return;
+			throw error;
+		}
+		for (const folder of [DERIVED_DIRECTORY, MODELS_DIRECTORY]) {
+			try {
+				await app.removeEntry(folder, { recursive: true });
+			} catch (error) {
+				if (!isNotFoundError(error)) throw error;
+			}
+		}
+	}
+
 	private async writeFiles(
 		folder: string,
 		writes: readonly { storageName: string; contents: FileSystemWriteChunkType }[]

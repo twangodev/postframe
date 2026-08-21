@@ -23,24 +23,17 @@ import {
 } from './edit-document.ts';
 import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
+import type {
+	CleanupResult,
+	ImportResult,
+	LibraryBackend,
+	LocalLibraryReset
+} from './library-backend.ts';
 import type { CameraMatchPreference } from './camera-match.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
 
-export interface ImportResult {
-	photos: StoredPhoto[];
-	photoIds: string[];
-	collection: PhotoCollection | null;
-	duplicateCount: number;
-}
-
-export interface CleanupResult {
-	deletedFiles: number;
-	failedFiles: number;
-	reclaimedBytes: number;
-}
-
-export class LibraryService {
+export class LibraryService implements LibraryBackend, LocalLibraryReset {
 	readonly catalog: LibraryCatalog;
 	readonly assets: AssetStore;
 	private staleRenderCacheReclaim: Promise<CleanupResult> | null = null;
@@ -70,6 +63,10 @@ export class LibraryService {
 
 	originalHandle(storageName: string) {
 		return this.assets.originalHandle(storageName);
+	}
+
+	async originalSource(storageName: string) {
+		return { kind: 'handle' as const, handle: await this.originalHandle(storageName) };
 	}
 
 	renderCacheHandle(photoId: string) {

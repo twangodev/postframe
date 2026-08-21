@@ -4,7 +4,7 @@ import {
 	type BrowserStorageStatus
 } from './browser-storage';
 import { storageBreakdown, type StorageBreakdown } from './storage-breakdown';
-import type { LibraryService } from './library-service';
+import type { StorageMaintenance } from './library-backend.ts';
 
 export interface StorageOverviewHost {
 	browserStorageStatus: BrowserStorageStatus | null;
@@ -16,7 +16,7 @@ export class StorageOverview {
 	private readonly browserStorage = new BrowserStorageService();
 
 	constructor(
-		private readonly service: LibraryService | null,
+		private readonly service: StorageMaintenance | null,
 		private readonly host: StorageOverviewHost
 	) {}
 
