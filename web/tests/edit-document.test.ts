@@ -37,6 +37,7 @@ test('creates an independent versioned non-destructive document', () => {
 	assert.notEqual(first.adjustments.light, second.adjustments.light);
 	assert.equal(editDocumentStorageName('photo-one'), 'photo-one.json');
 	assert.deepEqual(first.profile.cameraMatch, { status: 'pending' });
+	assert.equal(first.profile.cameraLookEnabled, false);
 });
 
 test('defaults camera-match fields safely for documents saved before decomposition', () => {

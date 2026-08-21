@@ -4,6 +4,7 @@
 	import CameraMatchDialog from './CameraMatchDialog.svelte';
 	import Panel from './ui/Panel.svelte';
 	import { COLOR_SLIDERS } from '$lib/develop-sliders';
+	import type { CameraMatchPreference } from '$lib/camera-match';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -89,6 +90,20 @@
 			>
 				{matchLabel}
 			</button>
+			<label class="mt-2 flex items-center justify-between gap-3 text-[10px] text-muted">
+				<span>new RAWs</span>
+				<select
+					aria-label="Automatic camera matching"
+					value={workspace.cameraMatchPreference}
+					onchange={(event) =>
+						workspace.setCameraMatchPreference(event.currentTarget.value as CameraMatchPreference)}
+					class="min-w-0 cursor-pointer rounded border border-subtle bg-bg px-1.5 py-1 text-[10px] text-text outline-none focus:border-control-edge"
+				>
+					<option value="ask">ask first</option>
+					<option value="always">match automatically</option>
+					<option value="never">start neutral</option>
+				</select>
+			</label>
 		</div>
 	{/if}
 	<button

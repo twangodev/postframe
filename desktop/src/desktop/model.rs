@@ -59,9 +59,45 @@ pub struct LibraryManifest {
     pub(super) version: u64,
     pub(super) created_at: u64,
     pub(super) updated_at: u64,
+    #[serde(default)]
+    pub(super) camera_match_preference: CameraMatchPreference,
     pub(super) photos: Vec<Photo>,
     pub(super) collections: Vec<Collection>,
     pub(super) stacks: Vec<Stack>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CameraMatchPreference {
+    #[default]
+    Ask,
+    Always,
+    Never,
+}
+
+impl CameraMatchPreference {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Always => "always",
+            Self::Never => "never",
+        }
+    }
+}
+
+impl std::str::FromStr for CameraMatchPreference {
+    type Err = DesktopError;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "ask" => Ok(Self::Ask),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            _ => Err(DesktopError::Invalid(format!(
+                "Unknown camera match preference {value}"
+            ))),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

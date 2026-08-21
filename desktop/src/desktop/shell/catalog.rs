@@ -1,6 +1,6 @@
 use super::super::model::{
-    Collection, ImportResolution, LibraryManifest, PendingDelete, Photo, Preset, Stack,
-    StorageReferences,
+    CameraMatchPreference, Collection, ImportResolution, LibraryManifest, PendingDelete, Photo,
+    Preset, Stack, StorageReferences,
 };
 use super::super::{DesktopState, command_error, with_library, with_library_mut};
 use std::collections::HashMap;
@@ -94,6 +94,17 @@ pub fn catalog_delete_preset(
     state: State<'_, DesktopState>,
 ) -> CommandResult<()> {
     with_library(&state, |library| library.delete_preset(&preset_id)).map_err(command_error)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn catalog_save_camera_match_preference(
+    preference: CameraMatchPreference,
+    state: State<'_, DesktopState>,
+) -> CommandResult<()> {
+    with_library(&state, |library| {
+        library.save_camera_match_preference(preference)
+    })
+    .map_err(command_error)
 }
 
 #[tauri::command(rename_all = "camelCase")]

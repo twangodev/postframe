@@ -6,7 +6,9 @@ pub(in crate::desktop) fn initialize_schema(connection: &Connection) -> Result<(
         "CREATE TABLE IF NOT EXISTS library (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            camera_match_preference TEXT NOT NULL DEFAULT 'ask'
+                CHECK (camera_match_preference IN ('ask', 'always', 'never'))
         );
         CREATE TABLE IF NOT EXISTS photos (
             id TEXT PRIMARY KEY,
@@ -64,7 +66,24 @@ pub(in crate::desktop) fn initialize_schema(connection: &Connection) -> Result<(
             queued_at INTEGER NOT NULL,
             PRIMARY KEY(kind, storage_name)
         );
-        PRAGMA user_version = 1;",
+        PRAGMA user_version = 2;",
+    )?;
+    ensure_camera_match_preference(connection)?;
+    Ok(())
+}
+
+fn ensure_camera_match_preference(connection: &Connection) -> Result<()> {
+    let mut statement = connection.prepare("PRAGMA table_info(library)")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    for column in columns {
+        if column? == "camera_match_preference" {
+            return Ok(());
+        }
+    }
+    connection.execute(
+        "ALTER TABLE library ADD COLUMN camera_match_preference TEXT NOT NULL DEFAULT 'ask'
+         CHECK (camera_match_preference IN ('ask', 'always', 'never'))",
+        [],
     )?;
     Ok(())
 }

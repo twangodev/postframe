@@ -9,6 +9,7 @@ import {
 	type StoredPhoto
 } from '../library-schema.ts';
 import { presetSchema, type Preset } from '../preset.ts';
+import type { CameraMatchPreference } from '../camera-match.ts';
 
 export interface PendingDelete {
 	kind: 'original' | 'thumbnail' | 'edit' | 'derived';
@@ -93,6 +94,10 @@ export function createDesktopCatalog() {
 
 		deletePreset(presetId: string) {
 			return invoke<void>('catalog_delete_preset', { presetId });
+		},
+
+		saveCameraMatchPreference(preference: CameraMatchPreference) {
+			return invoke<void>('catalog_save_camera_match_preference', { preference });
 		},
 
 		deletePhoto(photoId: string, renderCacheName: string) {

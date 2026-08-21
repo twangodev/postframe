@@ -1,4 +1,4 @@
-use super::super::model::{Collection, LibraryManifest, Photo, Stack};
+use super::super::model::{CameraMatchPreference, Collection, LibraryManifest, Photo, Stack};
 use super::super::{DesktopError, Library, Result};
 use super::collections::{replace_stacks, upsert_collection};
 use super::photos::insert_photo;
@@ -11,12 +11,18 @@ impl Library {
         let library = self
             .connection
             .query_row(
-                "SELECT created_at, updated_at FROM library WHERE id = 1",
+                "SELECT created_at, updated_at, camera_match_preference FROM library WHERE id = 1",
                 [],
-                |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, u64>(0)?,
+                        row.get::<_, u64>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
             )
             .optional()?;
-        let Some((created_at, updated_at)) = library else {
+        let Some((created_at, updated_at, camera_match_preference)) = library else {
             return Ok(None);
         };
         let photos = rows::<Photo>(
@@ -46,6 +52,7 @@ impl Library {
             version: 1,
             created_at,
             updated_at,
+            camera_match_preference: camera_match_preference.parse()?,
             photos,
             collections,
             stacks,
@@ -69,9 +76,17 @@ impl Library {
              DELETE FROM stacks;",
         )?;
         transaction.execute(
-            "INSERT INTO library (id, created_at, updated_at) VALUES (1, ?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET created_at = excluded.created_at, updated_at = excluded.updated_at",
-            params![manifest.created_at, manifest.updated_at],
+            "INSERT INTO library (id, created_at, updated_at, camera_match_preference)
+             VALUES (1, ?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET
+               created_at = excluded.created_at,
+               updated_at = excluded.updated_at,
+               camera_match_preference = excluded.camera_match_preference",
+            params![
+                manifest.created_at,
+                manifest.updated_at,
+                manifest.camera_match_preference.as_str()
+            ],
         )?;
         for photo in &manifest.photos {
             insert_photo(&transaction, photo)?;
@@ -81,6 +96,20 @@ impl Library {
         }
         replace_stacks(&transaction, &manifest.stacks, &HashMap::new())?;
         transaction.commit()?;
+        Ok(())
+    }
+
+    pub(in crate::desktop) fn save_camera_match_preference(
+        &self,
+        preference: CameraMatchPreference,
+    ) -> Result<()> {
+        let updated = self.connection.execute(
+            "UPDATE library SET camera_match_preference = ?1, updated_at = ?2 WHERE id = 1",
+            params![preference.as_str(), now_millis()],
+        )?;
+        if updated == 0 {
+            return Err(DesktopError::Invalid("The library is unavailable".into()));
+        }
         Ok(())
     }
 

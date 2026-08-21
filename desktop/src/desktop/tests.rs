@@ -1,4 +1,5 @@
-use super::model::{AssetKind, LibraryManifest};
+use super::catalog::initialize_schema;
+use super::model::{AssetKind, CameraMatchPreference, LibraryManifest};
 use super::{
     DATABASE_FILE, DesktopState, Library, MARKER_FILE, parse_range, validate_storage_name,
 };
@@ -52,6 +53,47 @@ fn round_trips_the_normalized_catalog() {
     assert_eq!(loaded["photos"], manifest["photos"]);
     assert_eq!(loaded["collections"], manifest["collections"]);
     assert_eq!(loaded["stacks"], manifest["stacks"]);
+    assert_eq!(loaded["cameraMatchPreference"], "ask");
+}
+
+#[test]
+fn persists_the_camera_match_preference() {
+    let parent = tempfile::tempdir().unwrap();
+    let mut library = Library::create(parent.path()).unwrap();
+    library.save_library(&sample_manifest()).unwrap();
+
+    library
+        .save_camera_match_preference(CameraMatchPreference::Never)
+        .unwrap();
+
+    let loaded = serde_json::to_value(library.load_library().unwrap().unwrap()).unwrap();
+    assert_eq!(loaded["cameraMatchPreference"], "never");
+}
+
+#[test]
+fn adds_camera_match_preference_to_existing_catalogs() {
+    let connection = rusqlite::Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE library (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            INSERT INTO library (id, created_at, updated_at) VALUES (1, 1, 1);",
+        )
+        .unwrap();
+
+    initialize_schema(&connection).unwrap();
+
+    let preference = connection
+        .query_row(
+            "SELECT camera_match_preference FROM library WHERE id = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap();
+    assert_eq!(preference, "ask");
 }
 
 #[test]

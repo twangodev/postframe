@@ -4,6 +4,7 @@ import { restoredPhoto, storedPhoto, type Photo, type PhotoStack } from './photo
 import type { PhotoImport } from './photo-ingest';
 import type { ObjectUrlRegistry } from './object-url-registry';
 import type { Preset } from './preset';
+import type { CameraMatchPreference } from './camera-match.ts';
 
 export type StorageStatus = 'memory' | 'saving' | 'saved' | 'error';
 
@@ -12,6 +13,7 @@ export interface WorkspacePersistenceHost {
 	collections: PhotoCollection[];
 	stacks: PhotoStack[];
 	presets: Preset[];
+	cameraMatchPreference: CameraMatchPreference;
 	selectedIds: string[];
 	activePhotoId: string | null;
 	storageStatus: StorageStatus;
@@ -57,6 +59,7 @@ export class WorkspacePersistence {
 			this.host.presets = presets;
 			if (!library) {
 				this.libraryCreatedAt = Date.now();
+				this.host.cameraMatchPreference = 'ask';
 				return;
 			}
 
@@ -68,6 +71,7 @@ export class WorkspacePersistence {
 			);
 			if (revision !== this.loadRevision) return;
 			this.libraryCreatedAt = library.createdAt;
+			this.host.cameraMatchPreference = library.cameraMatchPreference;
 			this.host.photos = photos;
 			this.host.collections = library.collections.map((collection) => ({
 				...collection,

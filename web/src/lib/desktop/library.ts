@@ -88,6 +88,7 @@ export function createDesktopLibraryBackend(cache: AssetStore): LibraryBackend {
 		listPresets: catalog.listPresets,
 		savePreset: catalog.savePreset,
 		deletePreset: catalog.deletePreset,
+		saveCameraMatchPreference: catalog.saveCameraMatchPreference,
 		deletePhoto: maintenance.deletePhoto,
 		cleanup: maintenance.cleanup,
 		storageUsage: maintenance.storageUsage,

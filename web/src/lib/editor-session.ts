@@ -56,7 +56,11 @@ export class EditorSession {
 			command.type === 'profile.cameraMatch' && before.profile.cameraMatch.status === 'pending'
 				? cloneEditDocument({
 						...before,
-						profile: { ...before.profile, cameraMatch: { status: 'dismissed' } }
+						profile: {
+							cameraLook: 0,
+							cameraLookEnabled: false,
+							cameraMatch: { status: 'dismissed' }
+						}
 					})
 				: before;
 		this.editorHistory.commit(historyBefore, transition);
@@ -125,7 +129,7 @@ export class EditorSession {
 
 		if (invalidation === 'render') {
 			if (cameraLookChanged) this.host.pushCameraLook(effectiveCameraLook(next));
-			if (globalAdjustmentsChanged) {
+			if (globalAdjustmentsChanged || cameraLookChanged) {
 				this.develop.request(next.adjustments, next.geometry.crop, 'refining');
 			}
 			this.pipeline.renderEditDocument(next);

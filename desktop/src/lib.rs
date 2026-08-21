@@ -46,6 +46,7 @@ pub fn run() {
             shell::catalog_list_presets,
             shell::catalog_save_preset,
             shell::catalog_delete_preset,
+            shell::catalog_save_camera_match_preference,
             shell::catalog_delete_photo,
             shell::catalog_pending_deletions,
             shell::catalog_complete_deletions,

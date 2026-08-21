@@ -73,6 +73,10 @@ import { StorageOverview } from './storage-overview';
 import { ThumbnailLoader } from './thumbnail-loader';
 import {
 	applyCameraMatchSettings,
+	cameraMatchPreferenceSchema,
+	cameraMatchResultSchema,
+	type CameraMatchCandidate,
+	type CameraMatchPreference,
 	type CameraMatchResult,
 	type CameraMatchTarget
 } from './camera-match.ts';
@@ -119,6 +123,7 @@ export class WorkspaceState {
 	private readonly editor: EditorSession;
 	private readonly session: DocumentSession;
 	private readonly organizer: PhotoOrganizer;
+	private cameraMatchCandidateId = 0;
 
 	mode = $state<WorkspaceMode>('welcome');
 	photos = $state<Photo[]>([]);
@@ -185,6 +190,9 @@ export class WorkspaceState {
 	history = $state<string[]>(['imported']);
 	canUndo = $state(false);
 	canRedo = $state(false);
+	cameraMatchPreference = $state<CameraMatchPreference>('ask');
+	cameraMatchCandidate = $state<CameraMatchCandidate | null>(null);
+	cameraMatchPromptOpen = $state(false);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	editedGroups = $derived(
@@ -297,6 +305,7 @@ export class WorkspaceState {
 				'history',
 				'canUndo',
 				'canRedo',
+				'cameraMatchPreference',
 				'storageStatus',
 				'storageError',
 				'libraryReady',
@@ -312,13 +321,19 @@ export class WorkspaceState {
 				},
 				clearFiles: () => this.clearFiles(),
 				storageWritten: () => this.storageObserver.wrote(),
-				resetEditState: (document: EditDocument) => this.editor.resetEditState(document),
+				resetEditState: (document: EditDocument) => {
+					this.clearCameraMatchCandidate();
+					this.editor.resetEditState(document);
+				},
 				dispatchEditorCommand: (command: EditorCommand) => this.editor.dispatch(command),
 				selectMask: (maskId: string | null) => this.selectMask(maskId),
 				markRefining: (revision: number) => this.develop.markRefining(revision),
 				pushCameraLook: (amount: number) => this.pushCameraLook(amount),
 				applyCameraMatch: (result: CameraMatchResult, target: CameraMatchTarget) =>
 					this.applyCameraMatch(result, target),
+				presentCameraMatch: (result: CameraMatchResult, target: CameraMatchTarget) =>
+					this.presentCameraMatch(result, target, true),
+				startCameraNeutral: () => this.startNeutralCameraMatch(false),
 				failSmartMask: (error: unknown) => this.smartMasks.fail(error),
 				cancelDocument: () => this.cancelDocument(),
 				openDocument: (photoId: string) => {
@@ -419,6 +434,8 @@ export class WorkspaceState {
 			this.storageStatus = 'saved';
 			this.storageError = null;
 			this.storageCleanupResult = null;
+			this.cameraMatchPreference = 'ask';
+			this.clearCameraMatchCandidate();
 			this.editor.resetEditState();
 			await this.refreshBrowserStorage();
 		} catch (error) {
@@ -586,15 +603,103 @@ export class WorkspaceState {
 		});
 	};
 
+	presentCameraMatch = (
+		result: CameraMatchResult,
+		target: CameraMatchTarget,
+		alreadyRendered = false
+	) => {
+		const photo = this.selectedPhoto;
+		if (!photo || photo.kind === 'display') return false;
+		const automatic = cameraMatchResultSchema.parse(result);
+		this.cameraMatchCandidate = {
+			id: ++this.cameraMatchCandidateId,
+			photoId: photo.id,
+			target,
+			automatic,
+			draft: automatic
+		};
+		this.cameraMatchPromptOpen = true;
+		this.renderCameraMatchPreview(automatic, !alreadyRendered);
+		return true;
+	};
+
+	previewCameraMatch = (result: CameraMatchResult) => {
+		const candidate = this.cameraMatchCandidate;
+		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return;
+		const draft = cameraMatchResultSchema.parse(result);
+		this.cameraMatchCandidate = { ...candidate, draft };
+		this.renderCameraMatchPreview(draft, true);
+	};
+
+	previewNeutralCameraMatch = (neutral: boolean) => {
+		const candidate = this.cameraMatchCandidate;
+		const photo = this.selectedPhoto;
+		if (!candidate || !photo || candidate.photoId !== photo.id) return;
+		if (!neutral) {
+			this.renderCameraMatchPreview(candidate.draft, true);
+			return;
+		}
+		const document = cloneEditDocument(photo.edit);
+		document.profile = {
+			cameraLook: 0,
+			cameraLookEnabled: false,
+			cameraMatch: document.profile.cameraMatch
+		};
+		this.renderCameraMatchDocument(document, true);
+	};
+
+	applyCameraMatchCandidate = (remember: boolean) => {
+		const candidate = this.cameraMatchCandidate;
+		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return false;
+		if (remember) this.setCameraMatchPreference('always');
+		this.clearCameraMatchCandidate();
+		return this.applyCameraMatch(candidate.draft, candidate.target);
+	};
+
+	startNeutralCameraMatch = (remember: boolean) => {
+		const photo = this.selectedPhoto;
+		if (!photo || photo.kind === 'display') return false;
+		if (remember) this.setCameraMatchPreference('never');
+		this.clearCameraMatchCandidate();
+		const changed = this.editor.dispatch({
+			type: 'profile.cameraMatch.dismiss',
+			adjustments: cloneDevelopSettings(photo.edit.adjustments)
+		});
+		this.restoreCameraMatchPreview();
+		return changed;
+	};
+
+	cancelCameraMatchCandidate = () => {
+		const photo = this.selectedPhoto;
+		if (!this.cameraMatchCandidate || !photo) return;
+		const pending = photo.edit.profile.cameraMatch.status === 'pending';
+		this.clearCameraMatchCandidate();
+		if (pending) {
+			this.editor.dispatch({
+				type: 'profile.cameraMatch.dismiss',
+				adjustments: cloneDevelopSettings(photo.edit.adjustments)
+			});
+		}
+		this.restoreCameraMatchPreview();
+	};
+
+	setCameraMatchPreference = (preference: CameraMatchPreference) => {
+		const value = cameraMatchPreferenceSchema.parse(preference);
+		if (this.cameraMatchPreference === value) return;
+		this.cameraMatchPreference = value;
+		void this.persistence.queue((store) => store.saveCameraMatchPreference(value));
+	};
+
 	matchCamera = async () => {
 		const photo = this.selectedPhoto;
 		if (!photo || photo.kind === 'display' || !this.workerClient || !this.canAdjustLight) return;
 		try {
 			const result = await this.workerClient.cameraMatch();
 			if (this.selectedPhoto?.id !== photo.id) return;
-			this.applyCameraMatch(
+			this.presentCameraMatch(
 				result,
-				photo.frames.some(({ display }) => display !== null) ? 'camera-jpeg' : 'embedded-preview'
+				photo.frames.some(({ display }) => display !== null) ? 'camera-jpeg' : 'embedded-preview',
+				false
 			);
 		} catch (error) {
 			this.ingestError =
@@ -630,6 +735,38 @@ export class WorkspaceState {
 		adjustments.curve = neutral.curve;
 		return this.editor.dispatch({ type: 'profile.cameraMatch.dismiss', adjustments });
 	};
+
+	private renderCameraMatchPreview(result: CameraMatchResult, requestPreview: boolean) {
+		const photo = this.selectedPhoto;
+		if (!photo) return;
+		const document = cloneEditDocument(photo.edit);
+		document.adjustments = applyCameraMatchSettings(document.adjustments, result);
+		document.profile = {
+			cameraLook: result.cameraLook,
+			cameraLookEnabled: true,
+			cameraMatch: document.profile.cameraMatch
+		};
+		this.renderCameraMatchDocument(document, requestPreview);
+	}
+
+	private renderCameraMatchDocument(document: EditDocument, requestPreview: boolean) {
+		this.pushCameraLook(document.profile.cameraLookEnabled ? document.profile.cameraLook : 0);
+		this.pipeline.renderEditDocument(document);
+		if (requestPreview) {
+			this.develop.request(document.adjustments, document.geometry.crop, 'refining');
+		}
+	}
+
+	private restoreCameraMatchPreview() {
+		const photo = this.selectedPhoto;
+		if (!photo) return;
+		this.renderCameraMatchDocument(photo.edit, true);
+	}
+
+	private clearCameraMatchCandidate() {
+		this.cameraMatchPromptOpen = false;
+		this.cameraMatchCandidate = null;
+	}
 
 	pushCameraLook = (amount: number) => {
 		void this.workerClient

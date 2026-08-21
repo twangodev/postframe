@@ -4,6 +4,7 @@ import type { EditDocument } from './edit-document.ts';
 import type { FileSource } from './worker.ts';
 import type { LibraryManifest, PhotoCollection, StoredPhoto } from './library-schema.ts';
 import type { Preset } from './preset.ts';
+import type { CameraMatchPreference } from './camera-match.ts';
 
 export interface ImportResult {
 	photos: StoredPhoto[];
@@ -60,6 +61,7 @@ export interface LibraryCatalogStore {
 	listPresets(): Promise<Preset[]>;
 	savePreset(preset: Preset): Promise<void>;
 	deletePreset(presetId: string): Promise<void>;
+	saveCameraMatchPreference(preference: CameraMatchPreference): Promise<void>;
 }
 
 export interface StorageMaintenance {
