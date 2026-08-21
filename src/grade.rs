@@ -65,7 +65,7 @@ impl ColorTransform {
             return Err(Error::Unsupported("RGBA buffer size mismatch"));
         }
         let mut adjusted = Vec::with_capacity(rgba8.len());
-        for pixel in rgba8.chunks_exact(4) {
+        for pixel in rgba8.as_chunks::<4>().0 {
             adjusted.extend(self.apply_display_pixel([pixel[0], pixel[1], pixel[2]]));
             adjusted.push(pixel[3]);
         }

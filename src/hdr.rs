@@ -29,7 +29,7 @@ pub fn encode(merged: &Merged, transfer: &Transfer) -> Result<UltraHdr> {
         .radiance
         .rgb
         .iter()
-        .zip(base.rgb8.chunks_exact(3))
+        .zip(base.rgb8.as_chunks::<3>().0)
         .map(|(radiance, coded)| {
             let luma = luma_709([
                 srgb_to_linear(coded[0]),

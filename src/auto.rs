@@ -193,7 +193,9 @@ fn bisect(low: f32, high: f32, miss: &impl Fn(f32) -> Result<f32>) -> Result<Can
 fn percentile_luma(samples: &[u8], settings: LightSettings, percentile: f32) -> Result<f32> {
     let developed = LightTransform::new(settings)?.apply_display_rgb8(samples)?;
     let mut lumas: Vec<f32> = developed
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|pixel| encoded_luma([pixel[0], pixel[1], pixel[2]]))
         .collect();
     let index = ((lumas.len() - 1) as f32 * percentile).round() as usize;
@@ -266,7 +268,9 @@ mod tests {
     fn developed_lumas(rgba8: &[u8], light: LightSettings) -> Vec<f32> {
         let transform = LightTransform::new(light).unwrap();
         let mut lumas: Vec<f32> = rgba8
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|pixel| {
                 encoded_luma(transform.apply_display_pixel([pixel[0], pixel[1], pixel[2]]))
             })
@@ -366,7 +370,7 @@ mod tests {
     #[test]
     fn auto_white_balance_reads_only_the_near_neutrals_when_there_are_enough() {
         let mut rgba = field([255, 20, 20], 100, 100);
-        for pixel in rgba.chunks_exact_mut(4).take(500) {
+        for pixel in rgba.as_chunks_mut::<4>().0.iter_mut().take(500) {
             pixel.copy_from_slice(&[128, 128, 128, 255]);
         }
         let (temperature, tint) = auto_white_balance(&rgba, 100, 100).unwrap();
@@ -398,7 +402,7 @@ mod tests {
     #[test]
     fn auto_tone_leaves_the_endpoints_alone_when_they_would_barely_help() {
         let mut rgba = field([70; 3], 40, 30);
-        for pixel in rgba.chunks_exact_mut(4).skip(600) {
+        for pixel in rgba.as_chunks_mut::<4>().0.iter_mut().skip(600) {
             pixel.copy_from_slice(&[115, 115, 115, 255]);
         }
         let light = auto_tone(&rgba, 40, 30).unwrap();
@@ -447,7 +451,7 @@ mod tests {
     #[test]
     fn auto_tone_ignores_transparent_pixels() {
         let mut rgba = field([72; 3], 20, 20);
-        for pixel in rgba.chunks_exact_mut(4).skip(200) {
+        for pixel in rgba.as_chunks_mut::<4>().0.iter_mut().skip(200) {
             pixel.copy_from_slice(&[0, 0, 0, 0]);
         }
         let light = auto_tone(&rgba, 20, 20).unwrap();

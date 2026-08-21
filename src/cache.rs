@@ -245,7 +245,9 @@ impl<'a> Reader<'a> {
         return Ok(bytemuck::pod_collect_to_vec(bytes));
         #[cfg(target_endian = "big")]
         bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|chunk| {
                 Ok(f32::from_le_bytes(
                     chunk.try_into().map_err(|_| Error::Cache("f32"))?,
@@ -268,7 +270,9 @@ impl<'a> Reader<'a> {
         return Ok(bytemuck::pod_collect_to_vec(bytes));
         #[cfg(target_endian = "big")]
         bytes
-            .chunks_exact(12)
+            .as_chunks::<12>()
+            .0
+            .iter()
             .map(|pixel| {
                 Ok([
                     f32::from_le_bytes(pixel[0..4].try_into().unwrap()),
