@@ -1,5 +1,5 @@
 import { acceptedPhotoTypes, normalizedRawExtensions } from './photo-source';
-import type { CleanupResult } from './library-service';
+import type { CleanupResult } from './library-backend';
 import type { PhotoCollection } from './library-schema';
 import { PostframeWorkerClient } from './worker-client';
 import {
@@ -96,7 +96,7 @@ export type Mask = EditMask;
 export class WorkspaceState {
 	private readonly platform = createPlatformServices();
 	private readonly libraryService = this.platform.library;
-	private readonly desktopLibrary = this.platform.desktopLibrary;
+	private readonly managedLibrary = this.platform.managedLibrary;
 	private readonly workerClient =
 		typeof Worker === 'undefined' ? null : new PostframeWorkerClient();
 	private readonly rawExtensions = new Set<string>();
@@ -137,7 +137,7 @@ export class WorkspaceState {
 	libraryError = $state<string | null>(null);
 	collectionDialogOpen = $state(false);
 	startupReady = $state(false);
-	desktop = this.platform.desktop;
+	desktop = this.platform.kind === 'desktop';
 	desktopLibraryRequired = $state(false);
 	desktopLibraryPath = $state<string | null>(null);
 	localStorageAvailable = this.libraryService !== null;
@@ -227,7 +227,12 @@ export class WorkspaceState {
 	constructor() {
 		const host = this.collaboratorHost();
 		this.ingest = new PhotoIngest(this.workerClient, this.rawExtensions, this.objectUrls, host);
-		this.persistence = new WorkspacePersistence(this.libraryService, this.objectUrls, host);
+		this.persistence = new WorkspacePersistence(
+			this.libraryService,
+			this.platform.localLibraryReset,
+			this.objectUrls,
+			host
+		);
 		this.storage = new StorageOverview(this.libraryService, host);
 		this.storageObserver = new StorageObserver(() => this.storage.refresh());
 		this.stopStorageObserving = this.observeStorageWrites();
@@ -447,20 +452,20 @@ export class WorkspaceState {
 	};
 
 	clearDesktopCaches = async () => {
-		if (!this.desktopLibrary) return;
+		if (!this.managedLibrary) return;
 		await this.persistence.whenIdle();
-		await this.desktopLibrary.clearCaches();
+		await this.managedLibrary.clearCaches();
 		this.storageCleanupResult = null;
 		await this.refreshBrowserStorage();
 	};
 
 	requestPersistentStorage = () => this.storage.requestPersistence();
 
-	createDesktopLibrary = () => this.activateDesktopLibrary(() => this.desktopLibrary?.create());
+	createDesktopLibrary = () => this.activateDesktopLibrary(() => this.managedLibrary?.create());
 
-	openDesktopLibrary = () => this.activateDesktopLibrary(() => this.desktopLibrary?.open());
+	openDesktopLibrary = () => this.activateDesktopLibrary(() => this.managedLibrary?.open());
 
-	revealDesktopLibrary = () => this.desktopLibrary?.reveal();
+	revealDesktopLibrary = () => this.managedLibrary?.reveal();
 
 	setMode(mode: Exclude<WorkspaceMode, 'welcome'>) {
 		if (mode === 'edit' && this.photos.length === 0) return;
@@ -940,8 +945,8 @@ export class WorkspaceState {
 
 	private async initialize() {
 		await this.ensureCapabilities();
-		if (this.desktopLibrary) {
-			const status = await this.desktopLibrary.status();
+		if (this.managedLibrary) {
+			const status = await this.managedLibrary.status();
 			if (status.kind !== 'ready') {
 				this.desktopLibraryRequired = true;
 				this.libraryReady = true;
@@ -961,7 +966,7 @@ export class WorkspaceState {
 	}
 
 	private async activateDesktopLibrary(action: () => Promise<string | null> | undefined) {
-		if (!this.desktopLibrary) return;
+		if (!this.managedLibrary) return;
 		await this.persistence.whenIdle();
 		const path = await action();
 		if (!path) return;

@@ -1,4 +1,4 @@
-import type { LibraryBackend } from './library-backend.ts';
+import type { PhotoAssetStore } from './library-backend.ts';
 import type { ObjectUrlRegistry } from './object-url-registry';
 import { primaryStoredFrame, type Photo } from './photo-record';
 import type { StorageStatus, WorkspacePersistence } from './workspace-persistence';
@@ -13,7 +13,7 @@ export class ThumbnailLoader {
 	private readonly loads = new Map<string, Promise<void>>();
 
 	constructor(
-		private readonly service: LibraryBackend | null,
+		private readonly service: PhotoAssetStore | null,
 		private readonly persistence: WorkspacePersistence,
 		private readonly objectUrls: ObjectUrlRegistry,
 		private readonly host: ThumbnailLoaderHost

@@ -23,23 +23,16 @@ import {
 } from './edit-document.ts';
 import { presetSchema, type Preset } from './preset.ts';
 import { renderCacheStorageName } from './render-cache.ts';
+import type {
+	CleanupResult,
+	ImportResult,
+	LibraryBackend,
+	LocalLibraryReset
+} from './library-backend.ts';
 
 export type { EditWrite, OriginalWrite, ThumbnailWrite } from './asset-store.ts';
 
-export interface ImportResult {
-	photos: StoredPhoto[];
-	photoIds: string[];
-	collection: PhotoCollection | null;
-	duplicateCount: number;
-}
-
-export interface CleanupResult {
-	deletedFiles: number;
-	failedFiles: number;
-	reclaimedBytes: number;
-}
-
-export class LibraryService {
+export class LibraryService implements LibraryBackend, LocalLibraryReset {
 	readonly catalog: LibraryCatalog;
 	readonly assets: AssetStore;
 	private staleRenderCacheReclaim: Promise<CleanupResult> | null = null;

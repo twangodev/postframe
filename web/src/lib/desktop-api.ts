@@ -3,6 +3,8 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 
 const WRITE_CHUNK_SIZE = 512 * 1024;
 
+export type DesktopAssetKind = 'originals' | 'thumbnails' | 'edits' | 'masks';
+
 export type DesktopStatus =
 	| { kind: 'ready'; path: string }
 	| { kind: 'needsLibrary' }
@@ -42,14 +44,14 @@ export async function openDesktopLibrary() {
 
 export const revealDesktopLibrary = () => invoke<void>('reveal_library');
 
-export const desktopAssetSource = (kind: string, storageName: string) =>
+export const desktopAssetSource = (kind: DesktopAssetKind, storageName: string) =>
 	invoke<DesktopAssetSource>('asset_source', { kind, storageName });
 
-export const desktopAssetExists = (kind: string, storageName: string) =>
+export const desktopAssetExists = (kind: DesktopAssetKind, storageName: string) =>
 	invoke<boolean>('asset_exists', { kind, storageName });
 
 export async function writeDesktopAsset(
-	kind: string,
+	kind: DesktopAssetKind,
 	storageName: string,
 	contents: Blob | Uint8Array,
 	expectedHash: string | null = null

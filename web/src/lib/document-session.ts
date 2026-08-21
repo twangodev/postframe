@@ -1,7 +1,7 @@
 import type { DevelopPhase, DevelopProgress, RawFrameHandleInput } from './worker';
 import type { EditDocument } from './edit-document';
 import type { ImageScopeData } from './image-scope';
-import type { LibraryBackend } from './library-backend.ts';
+import type { PhotoAssetStore, RenderCacheStore } from './library-backend.ts';
 import type { DevelopPreviewController } from './develop-preview';
 import type { MaskRasterPipeline, SelectedMaskRaster } from './mask-raster-pipeline';
 import type { ObjectUrlRegistry } from './object-url-registry';
@@ -45,7 +45,7 @@ export class DocumentSession {
 	private removeProgressListener: (() => void) | null = null;
 
 	constructor(
-		private readonly service: LibraryBackend | null,
+		private readonly service: (PhotoAssetStore & RenderCacheStore) | null,
 		private readonly workerClient: PostframeWorkerClient | null,
 		private readonly persistence: WorkspacePersistence,
 		private readonly objectUrls: ObjectUrlRegistry,

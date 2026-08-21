@@ -1,33 +1,51 @@
-import { DesktopLibraryService } from './desktop-library-service.ts';
+import { AssetStore } from './asset-store.ts';
+import { createDesktopLibraryBackend } from './desktop/library.ts';
+import { createManagedDesktopLibrary, type ManagedLibrary } from './desktop/managed-library.ts';
 import { isTauri, writeDesktopExport } from './desktop-api.ts';
-import type { LibraryBackend } from './library-backend.ts';
+import type { LibraryBackend, LocalLibraryReset } from './library-backend.ts';
 import { LibraryService } from './library-service.ts';
 
 export interface ExportSink {
 	save(jpeg: ArrayBuffer, fileName: string): Promise<boolean>;
 }
 
-export interface PlatformServices {
-	desktop: boolean;
+interface SharedPlatformServices {
 	library: LibraryBackend | null;
-	desktopLibrary: DesktopLibraryService | null;
+	localLibraryReset: LocalLibraryReset | null;
 	exportSink: ExportSink;
 }
 
+interface DesktopPlatformServices extends SharedPlatformServices {
+	kind: 'desktop';
+	library: LibraryBackend;
+	localLibraryReset: null;
+	managedLibrary: ManagedLibrary;
+}
+
+interface BrowserPlatformServices extends SharedPlatformServices {
+	kind: 'browser';
+	managedLibrary: null;
+}
+
+export type PlatformServices = DesktopPlatformServices | BrowserPlatformServices;
+
 export function createPlatformServices(): PlatformServices {
 	if (isTauri()) {
-		const library = new DesktopLibraryService();
+		const cache = new AssetStore();
 		return {
-			desktop: true,
-			library,
-			desktopLibrary: library,
+			kind: 'desktop',
+			library: createDesktopLibraryBackend(cache),
+			localLibraryReset: null,
+			managedLibrary: createManagedDesktopLibrary(cache),
 			exportSink: { save: writeDesktopExport }
 		};
 	}
+	const library = LibraryService.supported() ? new LibraryService() : null;
 	return {
-		desktop: false,
-		library: LibraryService.supported() ? new LibraryService() : null,
-		desktopLibrary: null,
+		kind: 'browser',
+		library,
+		localLibraryReset: library,
+		managedLibrary: null,
 		exportSink: new BrowserExportSink()
 	};
 }
