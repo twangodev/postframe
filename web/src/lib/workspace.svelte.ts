@@ -186,7 +186,6 @@ export class WorkspaceState {
 	canRedo = $state(false);
 	cameraMatchPreference = $state<CameraMatchPreference>('ask');
 	cameraMatchCandidate = $state<CameraMatchCandidate | null>(null);
-	cameraMatchPromptOpen = $state(false);
 
 	selectedPhoto = $derived(this.photos.find((photo) => photo.id === this.activePhotoId) ?? null);
 	editedGroups = $derived(
@@ -593,7 +592,6 @@ export class WorkspaceState {
 			automatic,
 			draft: automatic
 		};
-		this.cameraMatchPromptOpen = true;
 		this.renderCameraMatchPreview(automatic, !alreadyRendered);
 		return true;
 	};
@@ -642,20 +640,6 @@ export class WorkspaceState {
 		});
 		this.restoreCameraMatchPreview();
 		return changed;
-	};
-
-	cancelCameraMatchCandidate = () => {
-		const photo = this.selectedPhoto;
-		if (!this.cameraMatchCandidate || !photo) return;
-		const pending = photo.edit.profile.cameraMatch.status === 'pending';
-		this.clearCameraMatchCandidate();
-		if (pending) {
-			this.editor.dispatch({
-				type: 'profile.cameraMatch.dismiss',
-				adjustments: cloneDevelopSettings(photo.edit.adjustments)
-			});
-		}
-		this.restoreCameraMatchPreview();
 	};
 
 	setCameraMatchPreference = (preference: CameraMatchPreference) => {
@@ -739,7 +723,6 @@ export class WorkspaceState {
 	}
 
 	private clearCameraMatchCandidate() {
-		this.cameraMatchPromptOpen = false;
 		this.cameraMatchCandidate = null;
 	}
 

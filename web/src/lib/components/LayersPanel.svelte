@@ -15,7 +15,7 @@
 
 <Tabs.Content value="layers" class="motion-tab">
 	<div class="space-y-1 p-2">
-		{#if workspace.hasCameraLook}
+		{#if workspace.hasCameraLook && workspace.cameraMatch.status === 'legacy'}
 			<div class="rounded border border-accent bg-surface px-2 py-2">
 				<div class="flex items-center gap-2">
 					<button
@@ -47,6 +47,21 @@
 					onchange={(event) => workspace.setCameraLook(event.currentTarget.valueAsNumber)}
 					class="mt-1 h-3 w-full cursor-pointer accent-accent disabled:cursor-default disabled:opacity-40"
 				/>
+			</div>
+		{:else if workspace.cameraMatch.status === 'applied'}
+			<div class="rounded border border-accent bg-surface px-2 py-2">
+				<div class="flex items-center gap-2">
+					<div
+						class="flex size-7 shrink-0 items-center justify-center rounded-sm bg-elevated text-muted"
+					>
+						<SlidersHorizontal size={12} />
+					</div>
+					<span class="min-w-0 flex-1 truncate text-[11px]">camera match</span>
+					<span class="font-mono text-[9px] text-muted">fitted</span>
+				</div>
+				<p class="mt-1.5 text-[9px] leading-relaxed text-muted">
+					paired with the editable light, color, and curve settings
+				</p>
 			</div>
 		{/if}
 

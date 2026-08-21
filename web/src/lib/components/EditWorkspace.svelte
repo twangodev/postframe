@@ -182,6 +182,8 @@
 					{/each}
 				</Tabs.List>
 
+				<CameraMatchOnboarding {workspace} />
+
 				<AdjustPanel {workspace} activeTool={session.tool} onPickTool={session.choose} />
 
 				<MaskPanel {workspace} tools={session} />
@@ -193,5 +195,3 @@
 
 	<Filmstrip {workspace} />
 </div>
-
-<CameraMatchOnboarding {workspace} />

@@ -166,11 +166,21 @@ export const cameraMatchSchema = z.discriminatedUnion('status', [
 	})
 ]);
 
-export const editProfileSchema = z.object({
-	cameraLook: z.number().finite().min(0).max(FULL_CAMERA_LOOK).default(FULL_CAMERA_LOOK),
-	cameraLookEnabled: z.boolean().default(true),
-	cameraMatch: cameraMatchSchema.default({ status: 'legacy' })
-});
+export const editProfileSchema = z
+	.object({
+		cameraLook: z.number().finite().min(0).max(FULL_CAMERA_LOOK).default(FULL_CAMERA_LOOK),
+		cameraLookEnabled: z.boolean().default(true),
+		cameraMatch: cameraMatchSchema.default({ status: 'legacy' })
+	})
+	.transform((profile) =>
+		profile.cameraMatch.status === 'applied'
+			? {
+					...profile,
+					cameraLook: profile.cameraMatch.result.cameraLook,
+					cameraLookEnabled: true
+				}
+			: profile
+	);
 
 export const editSnapshotSchema = z.object({
 	id: z.string().min(1),
@@ -244,11 +254,11 @@ export function defaultEditDocument(
 			crop: null
 		},
 		masks: [],
-		profile: {
+		profile: editProfileSchema.parse({
 			cameraLook: FULL_CAMERA_LOOK,
 			cameraLookEnabled: cameraMatch.status !== 'pending',
 			cameraMatch: cameraMatchSchema.parse(cameraMatch)
-		},
+		}),
 		snapshots: []
 	};
 }

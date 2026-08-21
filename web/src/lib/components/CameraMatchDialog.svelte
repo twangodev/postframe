@@ -112,11 +112,8 @@
 			</div>
 
 			<p class="mt-4 text-[11px] leading-relaxed text-muted">
-				These settings reproduce the camera rendering to within
+				These settings and their fitted camera transform reproduce the camera rendering to within
 				<span class="font-mono text-text">{match.result.meanError.toFixed(2)}/255</span> on average.
-				The remaining
-				<span class="font-mono text-text">{Math.round(match.result.cameraLook)}%</span> stays as the camera
-				look layer.
 			</p>
 		{/if}
 

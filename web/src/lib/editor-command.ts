@@ -209,6 +209,7 @@ export function applyEditorCommand(
 			return transition(command, `deleted ${mask.name} mask`, 'render', next);
 		}
 		case 'profile.cameraLook': {
+			if (next.profile.cameraMatch.status === 'applied') return null;
 			const amount = editProfileSchema.parse({
 				...next.profile,
 				cameraLook: command.amount
@@ -223,6 +224,7 @@ export function applyEditorCommand(
 			);
 		}
 		case 'profile.cameraLookEnabled': {
+			if (next.profile.cameraMatch.status === 'applied') return null;
 			if (next.profile.cameraLookEnabled === command.enabled) return null;
 			next.profile = { ...next.profile, cameraLookEnabled: command.enabled };
 			return transition(

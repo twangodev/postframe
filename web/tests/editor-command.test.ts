@@ -633,6 +633,19 @@ test('applies camera-match settings and residual as one render transition', () =
 	});
 	assert.equal(before.profile.cameraMatch.status, 'pending');
 	assert.equal(
+		applyEditorCommand(matched.document, { type: 'profile.cameraLook', amount: 100 }),
+		null,
+		'the fitted residual cannot be changed independently of its extracted settings'
+	);
+	assert.equal(
+		applyEditorCommand(matched.document, {
+			type: 'profile.cameraLookEnabled',
+			enabled: false
+		}),
+		null,
+		'the fitted residual cannot be hidden independently of its extracted settings'
+	);
+	assert.equal(
 		applyEditorCommand(matched.document, {
 			type: 'profile.cameraMatch',
 			adjustments,

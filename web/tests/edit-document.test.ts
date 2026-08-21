@@ -52,6 +52,34 @@ test('defaults camera-match fields safely for documents saved before decompositi
 	assert.deepEqual(parsed.profile.cameraMatch, { status: 'legacy' });
 });
 
+test('keeps an applied camera match paired with its fitted residual', () => {
+	const document = defaultEditDocument('photo-one');
+	const { light, color, curve } = document.adjustments;
+	document.profile = {
+		cameraLook: 100,
+		cameraLookEnabled: false,
+		cameraMatch: {
+			status: 'applied',
+			target: 'embedded-preview',
+			result: {
+				light,
+				color,
+				curve,
+				cameraLook: 31,
+				meanError: 2,
+				p99Error: 8,
+				settingsOnlyError: 3,
+				fitError: 2
+			}
+		}
+	};
+
+	for (const repaired of [parseEditDocument(document, 'photo-one'), cloneEditDocument(document)]) {
+		assert.equal(repaired.profile.cameraLook, 31);
+		assert.equal(repaired.profile.cameraLookEnabled, true);
+	}
+});
+
 test('rejects mismatched photos, duplicate masks, and invalid normalized crops', () => {
 	const document = defaultEditDocument('photo-one');
 	assert.throws(() => parseEditDocument({ ...document, photoId: 'photo-two' }, 'photo-one'));

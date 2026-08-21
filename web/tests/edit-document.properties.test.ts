@@ -328,14 +328,21 @@ const documentArbitrary = fc
 			maxLength: 3
 		})
 	})
-	.map((document) => structuredClone(document));
+	.map((document) => {
+		const cloned = structuredClone(document);
+		if (cloned.profile.cameraMatch.status === 'applied') {
+			cloned.profile.cameraLook = cloned.profile.cameraMatch.result.cameraLook;
+			cloned.profile.cameraLookEnabled = true;
+		}
+		return cloned;
+	});
 
 test('the component arbitrary covers every schema variant', () => {
 	const variants = maskComponentSchema.options.map((option) => option.shape.type.value);
 	assert.deepEqual(Object.keys(componentArbitraries).sort(), [...variants].sort());
 });
 
-test('parsing a valid v10 document returns it unchanged (seed 3301)', () => {
+test('parsing a valid current document returns it unchanged (seed 3301)', () => {
 	fc.assert(
 		fc.property(documentArbitrary, (document) => {
 			const parsed = parseEditDocument(structuredClone(document), document.photoId);
