@@ -1,4 +1,6 @@
-use super::super::*;
+use super::super::{AssetKind, DesktopError, DesktopState, Result, parse_range};
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 
 pub fn protocol_response(
     request: &tauri::http::Request<Vec<u8>>,
@@ -27,18 +29,7 @@ fn read_protocol_asset(
     if segments.len() != 2 {
         return Err(DesktopError::Invalid("Invalid asset URL".into()));
     }
-    validate_kind(segments[0])?;
-    validate_storage_name(segments[1])?;
-    let path = {
-        let inner = state.inner.lock().expect("desktop state poisoned");
-        inner
-            .library
-            .as_ref()
-            .ok_or(DesktopError::NoLibrary)?
-            .root
-            .join(segments[0])
-            .join(segments[1])
-    };
+    let path = state.asset_path(segments[0].parse::<AssetKind>()?, segments[1])?;
     let mut file = File::open(&path)?;
     let size = file.metadata()?.len();
     let range = request

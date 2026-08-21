@@ -1,19 +1,12 @@
-use super::super::*;
+use super::super::{DesktopState, DesktopStatus, command_error};
+use std::path::Path;
+use tauri::State;
+
+type CommandResult<T> = std::result::Result<T, String>;
 
 #[tauri::command]
 pub fn desktop_status(state: State<'_, DesktopState>) -> DesktopStatus {
-    let inner = state.inner.lock().expect("desktop state poisoned");
-    if let Some(library) = &inner.library {
-        DesktopStatus::Ready {
-            path: display_path(&library.root),
-        }
-    } else if let Some(message) = &inner.startup_error {
-        DesktopStatus::Error {
-            message: message.clone(),
-        }
-    } else {
-        DesktopStatus::NeedsLibrary
-    }
+    state.status()
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -21,34 +14,22 @@ pub fn create_library(
     parent_path: String,
     state: State<'_, DesktopState>,
 ) -> CommandResult<String> {
-    Library::create(Path::new(&parent_path))
-        .and_then(|library| state.switch(library))
+    state
+        .create_library(Path::new(&parent_path))
         .map_err(command_error)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn open_library(path: String, state: State<'_, DesktopState>) -> CommandResult<String> {
-    Library::open(Path::new(&path))
-        .and_then(|library| state.switch(library))
-        .map_err(command_error)
+    state.open_library(Path::new(&path)).map_err(command_error)
 }
 
 #[tauri::command]
-pub fn close_library(state: State<'_, DesktopState>) -> CommandResult<()> {
-    let mut inner = state.inner.lock().expect("desktop state poisoned");
-    discard_writes(&mut inner.writes);
-    inner.library = None;
-    Ok(())
+pub fn close_library(state: State<'_, DesktopState>) {
+    state.close_library();
 }
 
 #[tauri::command]
 pub fn reveal_library(state: State<'_, DesktopState>) -> CommandResult<()> {
-    let inner = state.inner.lock().expect("desktop state poisoned");
-    let path = &inner
-        .library
-        .as_ref()
-        .ok_or(DesktopError::NoLibrary)
-        .map_err(command_error)?
-        .root;
-    reveal_path(path).map_err(command_error)
+    state.reveal_library().map_err(command_error)
 }

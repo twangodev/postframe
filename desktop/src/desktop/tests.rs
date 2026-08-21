@@ -1,4 +1,10 @@
-use super::*;
+use super::model::{AssetKind, LibraryManifest};
+use super::{
+    DATABASE_FILE, DesktopState, Library, MARKER_FILE, parse_range, validate_storage_name,
+};
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::fs;
 
 #[test]
 fn creates_and_reopens_a_managed_library() {
@@ -41,7 +47,8 @@ fn round_trips_the_normalized_catalog() {
     let mut library = Library::create(parent.path()).unwrap();
     let manifest = sample_manifest();
     library.save_library(&manifest).unwrap();
-    let loaded = library.load_library().unwrap().unwrap();
+    let loaded = serde_json::to_value(library.load_library().unwrap().unwrap()).unwrap();
+    let manifest = serde_json::to_value(manifest).unwrap();
     assert_eq!(loaded["photos"], manifest["photos"]);
     assert_eq!(loaded["collections"], manifest["collections"]);
     assert_eq!(loaded["stacks"], manifest["stacks"]);
@@ -53,17 +60,74 @@ fn resolves_duplicate_imports_by_content_identity() {
     let mut library = Library::create(parent.path()).unwrap();
     let manifest = sample_manifest();
     library.save_library(&manifest).unwrap();
-    let mut duplicate = manifest["photos"][0].clone();
-    duplicate["id"] = Value::String("photo-copy".into());
-    duplicate["frames"][0]["display"]["id"] = Value::String("asset-copy".into());
-    duplicate["frames"][0]["display"]["storageName"] = Value::String("asset-copy.jpg".into());
+    let mut duplicate = manifest.photos[0].clone();
+    duplicate.id = "photo-copy".into();
+    let display = duplicate.frames[0].display.as_mut().unwrap();
+    display.id = "asset-copy".into();
+    display.storage_name = "asset-copy.jpg".into();
     let resolution = library.resolve_imports(&[duplicate]).unwrap();
     assert!(resolution.additions.is_empty());
     assert_eq!(resolution.photo_ids["photo-copy"], "photo-one");
 }
 
-fn sample_manifest() -> Value {
-    json!({
+#[test]
+fn fingerprints_match_the_browser_catalog() {
+    let mut manifest = sample_manifest();
+    manifest.photos[0].frames[0].filename_exposure_hint = Some(1.0);
+    assert_eq!(
+        manifest.photos[0].fingerprint(),
+        "display|:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1"
+    );
+}
+
+#[test]
+fn commits_verified_asset_writes() {
+    let parent = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let state = DesktopState::new(config.path().to_owned());
+    let root = state.create_library(parent.path()).unwrap();
+    let bytes = b"postframe";
+    let hash = format!("{:x}", Sha256::digest(bytes));
+    let token = state
+        .begin_asset_write(
+            AssetKind::Originals,
+            "asset-one.jpg",
+            bytes.len() as u64,
+            Some(hash),
+        )
+        .unwrap();
+
+    state.append_write(&token, 0, bytes).unwrap();
+    state.commit_write(&token).unwrap();
+
+    assert_eq!(
+        fs::read(std::path::Path::new(&root).join("originals/asset-one.jpg")).unwrap(),
+        bytes
+    );
+}
+
+#[test]
+fn rejects_incomplete_asset_writes() {
+    let parent = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let state = DesktopState::new(config.path().to_owned());
+    let root = state.create_library(parent.path()).unwrap();
+    let token = state
+        .begin_asset_write(AssetKind::Originals, "asset-one.jpg", 4, None)
+        .unwrap();
+
+    state.append_write(&token, 0, b"no").unwrap();
+
+    assert!(state.commit_write(&token).is_err());
+    assert!(
+        !std::path::Path::new(&root)
+            .join("originals/asset-one.jpg")
+            .exists()
+    );
+}
+
+fn sample_manifest() -> LibraryManifest {
+    serde_json::from_value(json!({
         "version": 1,
         "createdAt": 10,
         "updatedAt": 20,
@@ -113,5 +177,6 @@ fn sample_manifest() -> Value {
             "photoIds": ["photo-one"],
             "collapsed": true
         }]
-    })
+    }))
+    .unwrap()
 }

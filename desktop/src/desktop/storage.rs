@@ -1,4 +1,10 @@
-use super::*;
+use super::{AssetKind, CONFIG_FILE, DesktopError, PendingWrite, RememberedLibrary, Result};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 pub(super) fn begin_write(
     writes: &mut HashMap<Uuid, PendingWrite>,
@@ -56,14 +62,6 @@ pub(super) fn discard_writes(writes: &mut HashMap<Uuid, PendingWrite>) {
     for (_, write) in writes.drain() {
         drop(write.file);
         let _ = fs::remove_file(write.temporary);
-    }
-}
-
-pub(super) fn validate_kind(kind: &str) -> Result<()> {
-    if LIBRARY_DIRECTORIES.contains(&kind) {
-        Ok(())
-    } else {
-        Err(DesktopError::Invalid(format!("Unknown asset kind {kind}")))
     }
 }
 
@@ -178,11 +176,12 @@ pub(super) fn parse_range(header: &str, size: u64) -> Option<(u64, u64)> {
     (start <= end && end < size).then_some((start, end))
 }
 
-pub(super) fn protocol_url(kind: &str, name: &str) -> String {
+pub(super) fn protocol_url(kind: AssetKind, name: &str) -> String {
+    let directory = kind.directory();
     if cfg!(target_os = "windows") {
-        format!("http://postframe-asset.localhost/{kind}/{name}")
+        format!("http://postframe-asset.localhost/{directory}/{name}")
     } else {
-        format!("postframe-asset://localhost/{kind}/{name}")
+        format!("postframe-asset://localhost/{directory}/{name}")
     }
 }
 
