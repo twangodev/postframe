@@ -198,22 +198,19 @@
 				{#if revealedChannels.includes(channel)}
 					<circle
 						aria-hidden="true"
+						data-curve-reveal-halo
+						data-phase={revealPhase}
+						class="curve-reveal-halo"
 						cx={point.x * 100}
 						cy={(1 - point.y) * 100}
-						r="5"
+						r="3"
 						fill="none"
 						stroke="var(--color-accent)"
 						stroke-width="0.8"
-						opacity={revealPhase === 'settled' ? 0.32 : 0.72}
 						vector-effect="non-scaling-stroke"
 					/>
 				{/if}
-				<circle
-					cx={point.x * 100}
-					cy={(1 - point.y) * 100}
-					r="2.5"
-					fill={CHANNEL_STROKE[channel]}
-				/>
+				<circle cx={point.x * 100} cy={(1 - point.y) * 100} r="2" fill={CHANNEL_STROKE[channel]} />
 			{/each}
 		</svg>
 
@@ -222,3 +219,35 @@
 		</p>
 	</div>
 </Panel>
+
+<style>
+	.curve-reveal-halo {
+		transform-box: fill-box;
+		transform-origin: center;
+	}
+
+	.curve-reveal-halo[data-phase='targeting'] {
+		animation: target-curve-control 250ms var(--ease-out) both;
+	}
+
+	.curve-reveal-halo[data-phase='moving'] {
+		opacity: 0.65;
+		scale: 0.95;
+	}
+
+	.curve-reveal-halo[data-phase='settled'] {
+		opacity: 0.32;
+		scale: 0.9;
+	}
+
+	@keyframes target-curve-control {
+		from {
+			opacity: 0;
+			scale: 1.75;
+		}
+		to {
+			opacity: 0.85;
+			scale: 1;
+		}
+	}
+</style>

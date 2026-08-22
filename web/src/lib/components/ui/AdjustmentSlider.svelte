@@ -188,8 +188,9 @@
 					{#if revealed}
 						<span
 							aria-hidden="true"
+							data-adjustment-reveal-halo
 							data-phase={revealPhase}
-							class="adjustment-reveal-halo pointer-events-none absolute inset-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent"
+							class="adjustment-reveal-halo pointer-events-none absolute top-1/2 left-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent"
 						></span>
 					{/if}
 				</Slider.Thumb>
@@ -220,22 +221,22 @@
 
 	.adjustment-reveal-halo[data-phase='moving'] {
 		opacity: 0.65;
-		transform: translate(-50%, -50%) scale(0.72);
+		scale: 0.72;
 	}
 
 	.adjustment-reveal-halo[data-phase='settled'] {
 		opacity: 0.32;
-		transform: translate(-50%, -50%) scale(0.62);
+		scale: 0.62;
 	}
 
 	@keyframes target-control {
 		from {
 			opacity: 0;
-			transform: translate(-50%, -50%) scale(1.9);
+			scale: 1.9;
 		}
 		to {
 			opacity: 0.85;
-			transform: translate(-50%, -50%) scale(0.78);
+			scale: 0.78;
 		}
 	}
 </style>
