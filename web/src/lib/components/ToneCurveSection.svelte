@@ -13,13 +13,25 @@
 	import { histogramProfile, type HistogramChannel, type ImageScopeData } from '$lib/image-scope';
 	import { pointerFraction } from '$lib/pointer-fraction';
 	import { addCurvePoint, curveSamples, draggedCurve, nearestCurvePoint } from '$lib/tone-curve';
+	import type { ControlRevealPhase } from '$lib/adjustment-reveal';
 
 	interface Props {
 		binding: DevelopBinding;
 		scope?: ImageScopeData | null;
+		open?: boolean;
+		revealedChannels?: readonly CurveChannelName[];
+		revealPhase?: ControlRevealPhase;
+		onRevealInteraction?: (channel: CurveChannelName) => void;
 	}
 
-	let { binding, scope = null }: Props = $props();
+	let {
+		binding,
+		scope = null,
+		open = $bindable(false),
+		revealedChannels = [],
+		revealPhase = 'idle',
+		onRevealInteraction = () => {}
+	}: Props = $props();
 
 	const GRAB_RADIUS = 0.06;
 	const PLOT_SAMPLES = 97;
@@ -48,6 +60,8 @@
 	let drag = $state<{ index: number; from: CurvePoints } | null>(null);
 
 	const points = $derived(binding.curve[channel]);
+	const revealCount = $derived(revealedChannels.length);
+	const revealing = $derived(revealPhase === 'targeting' || revealPhase === 'moving');
 	const disabled = $derived(binding.disabled);
 	const shaped = $derived(
 		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(binding.curve[name]))
@@ -85,6 +99,7 @@
 
 	function grab(event: PlotEvent) {
 		if (disabled || event.button !== 0 || event.detail > 1) return;
+		if (revealing) onRevealInteraction(channel);
 		const position = positionOf(event);
 		const next =
 			nearestCurvePoint(points, position, GRAB_RADIUS) === null
@@ -111,9 +126,14 @@
 
 	function reset() {
 		if (disabled) return;
+		if (revealing) onRevealInteraction(channel);
 		drag = null;
 		binding.commitCurve(channel, identityCurve());
 	}
+
+	$effect(() => {
+		if (revealedChannels.length > 0 && revealPhase !== 'idle') channel = revealedChannels[0];
+	});
 </script>
 
 {#snippet channelChip(name: CurveChannelName)}
@@ -122,8 +142,9 @@
 
 <Panel
 	title="Curve"
-	open={false}
+	bind:open
 	meta={shaped.length ? shaped.map((n) => CHANNEL_LABEL[n]).join('') : 'linear'}
+	{revealCount}
 >
 	<div class="space-y-2">
 		<SegmentedControl
@@ -134,7 +155,7 @@
 			itemLabel={(name) => `${name} curve`}
 			itemClass="border-transparent text-[11px] hover:border-subtle disabled:cursor-default data-[state=on]:border-subtle data-[state=on]:bg-surface"
 			itemStyle={(name) =>
-				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}`}
+				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}; ${revealedChannels.includes(name) ? 'box-shadow: inset 0 0 0 1px var(--color-accent)' : ''}`}
 			item={channelChip}
 		/>
 
@@ -172,6 +193,19 @@
 				/>
 			{/each}
 			{#each points as point, index (index)}
+				{#if revealedChannels.includes(channel)}
+					<circle
+						aria-hidden="true"
+						cx={point.x * 100}
+						cy={(1 - point.y) * 100}
+						r="5"
+						fill="none"
+						stroke="var(--color-accent)"
+						stroke-width="0.8"
+						opacity={revealPhase === 'settled' ? 0.32 : 0.72}
+						vector-effect="non-scaling-stroke"
+					/>
+				{/if}
 				<circle
 					cx={point.x * 100}
 					cy={(1 - point.y) * 100}

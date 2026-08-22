@@ -9,10 +9,11 @@
 		title: string;
 		open?: boolean;
 		meta?: string;
+		revealCount?: number;
 		children: Snippet;
 	}
 
-	let { title, open = $bindable(true), meta, children }: Props = $props();
+	let { title, open = $bindable(true), meta, revealCount = 0, children }: Props = $props();
 </script>
 
 <Collapsible.Root bind:open class="border-b border-subtle">
@@ -22,6 +23,11 @@
 		<span class="text-[11px] tracking-[0.03em] text-text/85 lowercase">{title}</span>
 		<span class="flex items-center gap-2">
 			{#if meta}<span class="text-[11px] text-muted">{meta}</span>{/if}
+			{#if revealCount > 0}
+				<span class="rounded-full bg-accent/12 px-1.5 py-0.5 text-[9px] text-accent">
+					{revealCount} changed
+				</span>
+			{/if}
 			<ChevronDown
 				size={13}
 				strokeWidth={1.5}

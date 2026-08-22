@@ -3,6 +3,8 @@
 	import AdjustmentSliders from './ui/AdjustmentSliders.svelte';
 	import CameraMatchDialog from './CameraMatchDialog.svelte';
 	import Panel from './ui/Panel.svelte';
+	import type { ControlRevealPhase } from '$lib/adjustment-reveal';
+	import type { ColorControlName } from '$lib/develop-settings';
 	import { COLOR_SLIDERS } from '$lib/develop-sliders';
 	import type { CameraMatchPreference } from '$lib/camera-match';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
@@ -12,11 +14,23 @@
 		activeTool: string;
 		onPickTool: (tool: string) => void;
 		onOpenMixer: () => void;
+		open?: boolean;
+		reveals?: Partial<Record<ColorControlName, ControlRevealPhase>>;
+		onRevealInteraction?: (control: ColorControlName) => void;
 	}
 
-	let { workspace, activeTool, onPickTool, onOpenMixer }: Props = $props();
+	let {
+		workspace,
+		activeTool,
+		onPickTool,
+		onOpenMixer,
+		open = $bindable(true),
+		reveals = {},
+		onRevealInteraction = () => {}
+	}: Props = $props();
 
 	const eyedropperActive = $derived(activeTool === 'eyedropper');
+	const revealCount = $derived(Object.values(reveals).filter((phase) => phase !== 'idle').length);
 	let reviewOpen = $state(false);
 	let matching = $state(false);
 	const matchTarget = $derived(
@@ -47,7 +61,7 @@
 	}
 </script>
 
-<Panel title="Color">
+<Panel title="Color" bind:open {revealCount}>
 	<div class="mb-3 flex gap-1">
 		<button
 			type="button"
@@ -75,6 +89,8 @@
 		sliders={COLOR_SLIDERS}
 		values={workspace.adjustments}
 		disabled={!workspace.canAdjustLight}
+		{reveals}
+		{onRevealInteraction}
 		onPreview={(control, value) => workspace.previewAdjustment('color', control, value)}
 		onCommit={(control, value) => workspace.commitAdjustment('color', control, value)}
 	/>
