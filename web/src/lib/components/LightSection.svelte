@@ -11,31 +11,38 @@
 		open?: boolean;
 		reveals?: Partial<Record<LightControlName, ControlRevealPhase>>;
 		onRevealInteraction?: (control: LightControlName) => void;
+		disabled?: boolean;
+		focused?: boolean;
 	}
 
 	let {
 		workspace,
 		open = $bindable(true),
 		reveals = {},
-		onRevealInteraction = () => {}
+		onRevealInteraction = () => {},
+		disabled = false,
+		focused = false
 	}: Props = $props();
 	const revealCount = $derived(Object.values(reveals).filter((phase) => phase !== 'idle').length);
+	const controlsDisabled = $derived(disabled || !workspace.canAdjustLight);
 </script>
 
 <Panel title="Light" bind:open {revealCount}>
-	<button
-		type="button"
-		aria-label="Auto tone"
-		disabled={!workspace.canAdjustLight}
-		onclick={() => void workspace.autoTone()}
-		class="mb-3 flex h-6 w-full cursor-pointer items-center justify-center rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
-	>
-		auto
-	</button>
+	{#if !focused}
+		<button
+			type="button"
+			aria-label="Auto tone"
+			disabled={controlsDisabled}
+			onclick={() => void workspace.autoTone()}
+			class="mb-3 flex h-6 w-full cursor-pointer items-center justify-center rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
+		>
+			auto
+		</button>
+	{/if}
 	<AdjustmentSliders
 		sliders={LIGHT_SLIDERS}
 		values={workspace.adjustments}
-		disabled={!workspace.canAdjustLight}
+		disabled={controlsDisabled}
 		{reveals}
 		{onRevealInteraction}
 		onPreview={(control, value) => workspace.previewAdjustment('light', control, value)}

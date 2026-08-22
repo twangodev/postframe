@@ -9,7 +9,7 @@ import type {
 import type { ImageScopeTransfer } from './image-scope';
 import type { MaskEdgeSettings } from './mask-edge-settings.ts';
 import type { ExportGeometry, ExportProgress } from './export.ts';
-import type { CameraMatchResult } from './camera-match.ts';
+import type { CameraMatchMode, CameraMatchResult } from './camera-match.ts';
 
 export type FileSource =
 	| { kind: 'handle'; handle: FileSystemFileHandle }
@@ -123,7 +123,7 @@ export type Request =
 			adjustments: DevelopSettings;
 			crop: NormalizedCrop | null;
 			cameraLook: number;
-			matchCamera: boolean;
+			cameraMatch: CameraMatchMode;
 	  }
 	| {
 			id: number;

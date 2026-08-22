@@ -13,24 +13,29 @@
 		workspace: WorkspaceState;
 		activeTool: string;
 		onPickTool: (tool: string) => void;
-		onOpenMixer: () => void;
+		onOpenMixer?: () => void;
 		open?: boolean;
 		reveals?: Partial<Record<ColorControlName, ControlRevealPhase>>;
 		onRevealInteraction?: (control: ColorControlName) => void;
+		disabled?: boolean;
+		focused?: boolean;
 	}
 
 	let {
 		workspace,
 		activeTool,
 		onPickTool,
-		onOpenMixer,
+		onOpenMixer = () => {},
 		open = $bindable(true),
 		reveals = {},
-		onRevealInteraction = () => {}
+		onRevealInteraction = () => {},
+		disabled = false,
+		focused = false
 	}: Props = $props();
 
 	const eyedropperActive = $derived(activeTool === 'eyedropper');
 	const revealCount = $derived(Object.values(reveals).filter((phase) => phase !== 'idle').length);
+	const controlsDisabled = $derived(disabled || !workspace.canAdjustLight);
 	let reviewOpen = $state(false);
 	let matching = $state(false);
 	const matchTarget = $derived(
@@ -62,39 +67,41 @@
 </script>
 
 <Panel title="Color" bind:open {revealCount}>
-	<div class="mb-3 flex gap-1">
-		<button
-			type="button"
-			aria-label="Auto white balance"
-			disabled={!workspace.canAdjustLight}
-			onclick={() => void workspace.autoWhiteBalance()}
-			class="h-6 flex-1 cursor-pointer rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
-		>
-			auto
-		</button>
-		<button
-			type="button"
-			aria-label="White balance eyedropper"
-			aria-pressed={eyedropperActive}
-			disabled={!workspace.canAdjustLight}
-			onclick={() => onPickTool('eyedropper')}
-			class="flex h-6 flex-1 cursor-pointer items-center justify-center rounded border transition-colors disabled:cursor-default disabled:opacity-40 {eyedropperActive
-				? 'border-control-edge bg-surface text-text'
-				: 'border-subtle text-muted hover:text-text'}"
-		>
-			<Pipette size={12} strokeWidth={1.6} />
-		</button>
-	</div>
+	{#if !focused}
+		<div class="mb-3 flex gap-1">
+			<button
+				type="button"
+				aria-label="Auto white balance"
+				disabled={controlsDisabled}
+				onclick={() => void workspace.autoWhiteBalance()}
+				class="h-6 flex-1 cursor-pointer rounded border border-subtle text-[11px] text-muted lowercase transition-colors hover:text-text disabled:cursor-default disabled:opacity-40"
+			>
+				auto
+			</button>
+			<button
+				type="button"
+				aria-label="White balance eyedropper"
+				aria-pressed={eyedropperActive}
+				disabled={controlsDisabled}
+				onclick={() => onPickTool('eyedropper')}
+				class="flex h-6 flex-1 cursor-pointer items-center justify-center rounded border transition-colors disabled:cursor-default disabled:opacity-40 {eyedropperActive
+					? 'border-control-edge bg-surface text-text'
+					: 'border-subtle text-muted hover:text-text'}"
+			>
+				<Pipette size={12} strokeWidth={1.6} />
+			</button>
+		</div>
+	{/if}
 	<AdjustmentSliders
 		sliders={COLOR_SLIDERS}
 		values={workspace.adjustments}
-		disabled={!workspace.canAdjustLight}
+		disabled={controlsDisabled}
 		{reveals}
 		{onRevealInteraction}
 		onPreview={(control, value) => workspace.previewAdjustment('color', control, value)}
 		onCommit={(control, value) => workspace.commitAdjustment('color', control, value)}
 	/>
-	{#if workspace.hasCameraLook}
+	{#if !focused && workspace.hasCameraLook}
 		<div class="mt-3 border-t border-subtle pt-3">
 			<button
 				type="button"
@@ -122,14 +129,16 @@
 			</label>
 		</div>
 	{/if}
-	<button
-		type="button"
-		aria-label="open color mixer"
-		onclick={onOpenMixer}
-		class="mt-2 flex w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 py-2 text-[11px] text-muted hover:text-text"
-	>
-		color mixer <SlidersHorizontal size={12} />
-	</button>
+	{#if !focused}
+		<button
+			type="button"
+			aria-label="open color mixer"
+			onclick={onOpenMixer}
+			class="mt-2 flex w-full cursor-pointer items-center justify-between rounded border border-subtle px-2 py-2 text-[11px] text-muted hover:text-text"
+		>
+			color mixer <SlidersHorizontal size={12} />
+		</button>
+	{/if}
 </Panel>
 
 <CameraMatchDialog bind:open={reviewOpen} {workspace} />

@@ -11,6 +11,7 @@ import type { PostframeWorkerClient } from './worker-client';
 import type { WorkspacePersistence } from './workspace-persistence';
 import {
 	cameraMatchOpening,
+	cameraMatchMode,
 	type CameraMatchPreference,
 	type CameraMatchResult,
 	type CameraMatchTarget
@@ -120,7 +121,7 @@ export class DocumentSession {
 				photo.edit.adjustments,
 				photo.edit.geometry.crop,
 				photo.edit.profile.cameraLookEnabled ? photo.edit.profile.cameraLook : 0,
-				cameraMatch === 'prompt' || cameraMatch === 'apply'
+				cameraMatchMode(cameraMatch)
 			);
 			if (revision !== this.revision) return;
 			if (result.cameraMatch && cameraMatch === 'apply') {

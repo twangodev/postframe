@@ -13,10 +13,14 @@ import type { BrowserStorageStatus } from './browser-storage';
 import type { StorageBreakdown } from './storage-breakdown';
 import {
 	cloneDevelopSettings,
+	COLOR_CONTROL_NAMES,
+	CURVE_CHANNEL_NAMES,
 	defaultCurveSettings,
 	defaultDevelopSettings,
 	defaultGradingSettings,
 	defaultMixerSettings,
+	LIGHT_CONTROL_NAMES,
+	mirrorAdjustments,
 	sameDevelopSettings,
 	scalarAdjustments,
 	type AdjustmentTarget,
@@ -73,13 +77,16 @@ import { StorageOverview } from './storage-overview';
 import { ThumbnailLoader } from './thumbnail-loader';
 import {
 	applyCameraMatchSettings,
+	cameraMatchChanges,
 	cameraMatchPreferenceSchema,
 	cameraMatchResultSchema,
+	interpolateCameraMatchSettings,
 	type CameraMatchCandidate,
 	type CameraMatchPreference,
 	type CameraMatchResult,
 	type CameraMatchTarget
 } from './camera-match.ts';
+import { ControlReveal, type ControlRevealFrame } from './adjustment-reveal.ts';
 import { createPlatformServices } from './platform-services.ts';
 import { WorkspacePersistence, type StorageStatus } from './workspace-persistence';
 
@@ -124,6 +131,13 @@ export class WorkspaceState {
 	private readonly session: DocumentSession;
 	private readonly organizer: PhotoOrganizer;
 	private cameraMatchCandidateId = 0;
+	private readonly cameraMatchReveal = new ControlReveal((frame) =>
+		this.presentCameraMatchFrame(frame)
+	);
+	private cameraMatchAnimationFrom: DevelopSettings | null = null;
+	private cameraMatchAnimationTo: DevelopSettings | null = null;
+	private cameraMatchRenderTimer: ReturnType<typeof setTimeout> | null = null;
+	private cameraMatchDestinationReady = false;
 
 	mode = $state<WorkspaceMode>('welcome');
 	photos = $state<Photo[]>([]);
@@ -519,19 +533,49 @@ export class WorkspaceState {
 		group: Group,
 		control: ScalarControlName<Group>,
 		value: number
-	) => this.controls.previewAdjustment(group, control, value);
+	) => {
+		if (this.cameraMatchCandidate && (group === 'light' || group === 'color')) {
+			this.previewCameraMatchAdjustment(
+				group,
+				control as ScalarControlName<'light' | 'color'>,
+				value
+			);
+			return;
+		}
+		this.controls.previewAdjustment(group, control, value);
+	};
 
 	commitAdjustment = <Group extends ScalarGroupName>(
 		group: Group,
 		control: ScalarControlName<Group>,
 		value: number
-	) => this.controls.commitAdjustment(group, control, value);
+	) => {
+		if (this.cameraMatchCandidate && (group === 'light' || group === 'color')) {
+			this.commitCameraMatchAdjustment(
+				group,
+				control as ScalarControlName<'light' | 'color'>,
+				value
+			);
+			return;
+		}
+		this.controls.commitAdjustment(group, control, value);
+	};
 
-	previewCurve = (channel: CurveChannelName, points: CurvePoints) =>
+	previewCurve = (channel: CurveChannelName, points: CurvePoints) => {
+		if (this.cameraMatchCandidate) {
+			this.previewCameraMatchCurve(channel, points);
+			return;
+		}
 		this.controls.previewCurve(channel, points);
+	};
 
-	commitCurve = (channel: CurveChannelName, points: CurvePoints) =>
+	commitCurve = (channel: CurveChannelName, points: CurvePoints) => {
+		if (this.cameraMatchCandidate) {
+			this.commitCameraMatchCurve(channel, points);
+			return;
+		}
 		this.controls.commitCurve(channel, points);
+	};
 
 	previewAdjustmentAt = (target: AdjustmentTarget, value: number) =>
 		this.controls.previewAdjustmentAt(target, value);
@@ -602,56 +646,81 @@ export class WorkspaceState {
 		});
 	};
 
-	presentCameraMatch = (
-		result: CameraMatchResult,
-		target: CameraMatchTarget,
-		alreadyRendered = false
-	) => {
+	presentCameraMatch = (result: CameraMatchResult, target: CameraMatchTarget, firstRun = false) => {
 		const photo = this.selectedPhoto;
 		if (!photo || photo.kind === 'display') return false;
 		const automatic = cameraMatchResultSchema.parse(result);
+		const baseline = cloneDevelopSettings(photo.edit.adjustments);
+		const affected = cameraMatchChanges(baseline, automatic);
+		this.cameraMatchReveal.stop();
+		this.cancelCameraMatchRender();
+		this.cameraMatchDestinationReady = false;
 		this.cameraMatchCandidate = {
 			id: ++this.cameraMatchCandidateId,
 			photoId: photo.id,
 			target,
+			firstRun,
+			baseline,
 			automatic,
-			draft: automatic
+			draft: automatic,
+			affected,
+			changes: affected,
+			view: 'baseline',
+			phase: 'idle'
 		};
-		this.renderCameraMatchPreview(automatic, !alreadyRendered);
+		this.cameraMatchAnimationFrom = null;
+		this.cameraMatchAnimationTo = null;
+		mirrorAdjustments(this, baseline);
 		return true;
 	};
 
-	previewCameraMatch = (result: CameraMatchResult) => {
+	revealCameraMatch = () => {
 		const candidate = this.cameraMatchCandidate;
 		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return;
-		const draft = cameraMatchResultSchema.parse(result);
-		this.cameraMatchCandidate = { ...candidate, draft };
-		this.renderCameraMatchPreview(draft, true);
+		if (candidate.view === 'match' && candidate.phase !== 'idle') return;
+		this.beginCameraMatchReveal(
+			{ ...candidate, view: 'match' },
+			applyCameraMatchSettings(candidate.baseline, candidate.draft),
+			true
+		);
 	};
 
-	previewNeutralCameraMatch = (neutral: boolean) => {
+	showCameraMatchBaseline = () => {
 		const candidate = this.cameraMatchCandidate;
-		const photo = this.selectedPhoto;
-		if (!candidate || !photo || candidate.photoId !== photo.id) return;
-		if (!neutral) {
-			this.renderCameraMatchPreview(candidate.draft, true);
-			return;
-		}
-		const document = cloneEditDocument(photo.edit);
-		document.profile = {
-			cameraLook: 0,
-			cameraLookEnabled: false,
-			cameraMatch: document.profile.cameraMatch
-		};
-		this.renderCameraMatchDocument(document, true);
+		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return;
+		if (candidate.view === 'baseline' && candidate.phase !== 'moving') return;
+		this.beginCameraMatchReveal({ ...candidate, view: 'baseline' }, candidate.baseline, false);
+	};
+
+	interruptCameraMatchReveal = () => {
+		const phase = this.cameraMatchCandidate?.phase;
+		if (phase === 'targeting' || phase === 'moving') this.cameraMatchReveal.settle();
 	};
 
 	applyCameraMatchCandidate = (remember: boolean) => {
 		const candidate = this.cameraMatchCandidate;
-		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return false;
-		if (remember) this.setCameraMatchPreference('always');
+		if (!candidate || candidate.photoId !== this.selectedPhoto?.id || candidate.view !== 'match')
+			return false;
+		if (candidate.phase === 'targeting' || candidate.phase === 'moving') {
+			this.cameraMatchReveal.settle();
+		}
+		if (candidate.firstRun && remember) this.setCameraMatchPreference('always');
 		this.clearCameraMatchCandidate();
 		return this.applyCameraMatch(candidate.draft, candidate.target);
+	};
+
+	dismissCameraMatchCandidate = (remember: boolean) => {
+		const candidate = this.cameraMatchCandidate;
+		const photo = this.selectedPhoto;
+		if (!candidate || !photo || candidate.photoId !== photo.id) return false;
+		if (candidate.firstRun) {
+			if (remember) this.setCameraMatchPreference('never');
+			return this.startNeutralCameraMatch(false);
+		}
+		this.clearCameraMatchCandidate();
+		mirrorAdjustments(this, candidate.baseline);
+		this.restoreCameraMatchPreview();
+		return true;
 	};
 
 	startNeutralCameraMatch = (remember: boolean) => {
@@ -690,6 +759,98 @@ export class WorkspaceState {
 				error instanceof Error ? error.message : 'Unable to match camera rendering';
 		}
 	};
+
+	private previewCameraMatchAdjustment(
+		group: 'light' | 'color',
+		control: ScalarControlName<'light' | 'color'>,
+		value: number
+	) {
+		this.updateCameraMatchAdjustment(group, control, value, false);
+	}
+
+	private commitCameraMatchAdjustment(
+		group: 'light' | 'color',
+		control: ScalarControlName<'light' | 'color'>,
+		value: number
+	) {
+		this.updateCameraMatchAdjustment(group, control, value, true);
+	}
+
+	private updateCameraMatchAdjustment(
+		group: 'light' | 'color',
+		control: ScalarControlName<'light' | 'color'>,
+		value: number,
+		committed: boolean
+	) {
+		const candidate = this.cameraMatchCandidate;
+		if (candidate?.phase === 'targeting' || candidate?.phase === 'moving') return;
+		this.interruptCameraMatchReveal();
+		if (!candidate || candidate.view !== 'match') return;
+		const draft = cameraMatchResultSchema.parse(
+			group === 'light'
+				? {
+						...candidate.draft,
+						light: { ...candidate.draft.light, [control]: value }
+					}
+				: {
+						...candidate.draft,
+						color: { ...candidate.draft.color, [control]: value }
+					}
+		);
+		this.updateCameraMatchDraft(candidate, draft, committed);
+	}
+
+	private previewCameraMatchCurve(channel: CurveChannelName, points: CurvePoints) {
+		this.updateCameraMatchCurve(channel, points, false);
+	}
+
+	private commitCameraMatchCurve(channel: CurveChannelName, points: CurvePoints) {
+		this.updateCameraMatchCurve(channel, points, true);
+	}
+
+	private updateCameraMatchCurve(
+		channel: CurveChannelName,
+		points: CurvePoints,
+		committed: boolean
+	) {
+		this.interruptCameraMatchReveal();
+		const candidate = this.cameraMatchCandidate;
+		if (!candidate || candidate.view !== 'match') return;
+		const draft = cameraMatchResultSchema.parse({
+			...candidate.draft,
+			curve: { ...candidate.draft.curve, [channel]: points }
+		});
+		this.updateCameraMatchDraft(candidate, draft, committed);
+	}
+
+	private updateCameraMatchDraft(
+		candidate: CameraMatchCandidate,
+		draft: CameraMatchResult,
+		committed: boolean
+	) {
+		const next = {
+			...candidate,
+			draft,
+			changes: cameraMatchChanges(candidate.baseline, draft),
+			phase: 'settled' as const
+		};
+		this.cameraMatchCandidate = next;
+		const destinationWasReady = this.cameraMatchDestinationReady;
+		this.cancelCameraMatchRender();
+		this.cameraMatchDestinationReady = true;
+		const settings = applyCameraMatchSettings(next.baseline, draft);
+		mirrorAdjustments(this, settings);
+		const photo = this.selectedPhoto;
+		if (!photo) return;
+		if (!destinationWasReady) this.pushCameraLook(draft.cameraLook);
+		if (committed) {
+			const document = this.cameraMatchDocument(next);
+			this.pipeline.renderEditDocument(document);
+			this.develop.request(settings, document.geometry.crop, 'refining');
+		} else {
+			this.develop.schedule(settings, photo.edit.geometry.crop);
+		}
+	}
 
 	reviewCameraMatch = (groups: readonly ('light' | 'color' | 'curve')[]) => {
 		const photo = this.selectedPhoto;
@@ -733,6 +894,89 @@ export class WorkspaceState {
 		this.renderCameraMatchDocument(document, requestPreview);
 	}
 
+	private beginCameraMatchReveal(
+		candidate: CameraMatchCandidate,
+		destination: DevelopSettings,
+		targetFirst: boolean
+	) {
+		this.cameraMatchAnimationFrom = this.cameraMatchDisplaySettings(candidate);
+		this.cameraMatchAnimationTo = cloneDevelopSettings(destination);
+		this.cameraMatchCandidate = candidate;
+		this.cancelCameraMatchRender();
+		this.cameraMatchDestinationReady = false;
+		this.cameraMatchReveal.start(targetFirst);
+	}
+
+	private presentCameraMatchFrame(frame: ControlRevealFrame) {
+		const candidate = this.cameraMatchCandidate;
+		const from = this.cameraMatchAnimationFrom;
+		const to = this.cameraMatchAnimationTo;
+		if (!candidate || !from || !to || candidate.photoId !== this.selectedPhoto?.id) return;
+		if (frame.phase !== 'targeting') {
+			mirrorAdjustments(this, interpolateCameraMatchSettings(from, to, frame.progress));
+		}
+		this.cameraMatchCandidate = { ...candidate, phase: frame.phase };
+		if (frame.phase === 'settled') this.scheduleCameraMatchDestination();
+	}
+
+	private renderCameraMatchDestination(candidate: CameraMatchCandidate) {
+		if (candidate.view === 'match') {
+			this.renderCameraMatchPreview(candidate.draft, true);
+			return;
+		}
+		this.renderCameraMatchDocument(this.cameraMatchDocument(candidate, true), true);
+	}
+
+	private ensureCameraMatchDestination = () => {
+		if (this.cameraMatchDestinationReady) return;
+		this.cancelCameraMatchRender();
+		const candidate = this.cameraMatchCandidate;
+		if (!candidate || candidate.photoId !== this.selectedPhoto?.id) return;
+		this.cameraMatchDestinationReady = true;
+		this.renderCameraMatchDestination(candidate);
+	};
+
+	private scheduleCameraMatchDestination() {
+		this.cancelCameraMatchRender();
+		this.cameraMatchRenderTimer = setTimeout(this.ensureCameraMatchDestination);
+	}
+
+	private cancelCameraMatchRender() {
+		if (this.cameraMatchRenderTimer !== null) clearTimeout(this.cameraMatchRenderTimer);
+		this.cameraMatchRenderTimer = null;
+	}
+
+	private cameraMatchDocument(candidate: CameraMatchCandidate, baseline = false) {
+		const photo = this.selectedPhoto;
+		if (!photo) throw new Error('Camera match document is unavailable');
+		const document = cloneEditDocument(photo.edit);
+		document.adjustments = baseline
+			? cloneDevelopSettings(candidate.baseline)
+			: applyCameraMatchSettings(candidate.baseline, candidate.draft);
+		if (!baseline) {
+			document.profile = {
+				cameraLook: candidate.draft.cameraLook,
+				cameraLookEnabled: true,
+				cameraMatch: document.profile.cameraMatch
+			};
+		}
+		return document;
+	}
+
+	private cameraMatchDisplaySettings(candidate: CameraMatchCandidate) {
+		const settings = cloneDevelopSettings(candidate.baseline);
+		for (const control of LIGHT_CONTROL_NAMES) {
+			settings.light[control] = this.adjustments[control];
+		}
+		for (const control of COLOR_CONTROL_NAMES) {
+			settings.color[control] = this.adjustments[control];
+		}
+		for (const channel of CURVE_CHANNEL_NAMES) {
+			settings.curve[channel] = this.curve[channel].map(({ x, y }) => ({ x, y }));
+		}
+		return settings;
+	}
+
 	private renderCameraMatchDocument(document: EditDocument, requestPreview: boolean) {
 		this.pushCameraLook(document.profile.cameraLookEnabled ? document.profile.cameraLook : 0);
 		this.pipeline.renderEditDocument(document);
@@ -748,6 +992,11 @@ export class WorkspaceState {
 	}
 
 	private clearCameraMatchCandidate() {
+		this.cameraMatchReveal.stop();
+		this.cancelCameraMatchRender();
+		this.cameraMatchAnimationFrom = null;
+		this.cameraMatchAnimationTo = null;
+		this.cameraMatchDestinationReady = false;
 		this.cameraMatchCandidate = null;
 	}
 
@@ -1030,12 +1279,14 @@ export class WorkspaceState {
 	}
 
 	reset = () => {
+		this.clearCameraMatchCandidate();
 		this.session.close();
 		this.mode = 'welcome';
 		this.collectionDialogOpen = false;
 	};
 
 	destroy = () => {
+		this.clearCameraMatchCandidate();
 		this.stopStorageObserving();
 		this.storageObserver.stop();
 		this.session.invalidate();

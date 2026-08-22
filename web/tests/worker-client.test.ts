@@ -70,7 +70,7 @@ test('reports document progress before resolving the developed preview', async (
 
 	const adjustments = adjusted('light', 'exposure', 1.25);
 	const cache = { name: 'render-v1-photo-one.pfc' } as FileSystemFileHandle;
-	const opened = client.openRawDocument([], cache, 2048, adjustments, null, 31, true);
+	const opened = client.openRawDocument([], cache, 2048, adjustments, null, 31, 'derive');
 	assert.deepEqual(workers[0]?.messages, [
 		{
 			id: 1,
@@ -81,7 +81,7 @@ test('reports document progress before resolving the developed preview', async (
 			adjustments,
 			crop: null,
 			cameraLook: 31,
-			matchCamera: true
+			cameraMatch: 'derive'
 		}
 	]);
 

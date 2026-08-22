@@ -168,6 +168,8 @@
 		{onValueChange}
 		{onValueCommit}
 		onpointerdown={interruptReveal}
+		onfocusin={interruptReveal}
+		onkeydown={interruptReveal}
 		ondblclick={reset}
 		title={`double-click to reset ${label.toLowerCase()} to ${format(normalize(defaultValue))}`}
 		class="relative flex h-4 w-full touch-none items-center"

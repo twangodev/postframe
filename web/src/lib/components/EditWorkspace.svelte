@@ -3,7 +3,6 @@
 	import { onMount } from 'svelte';
 	import { tinykeys } from 'tinykeys';
 	import AdjustPanel from './AdjustPanel.svelte';
-	import CameraMatchOnboarding from './CameraMatchOnboarding.svelte';
 	import EditViewport from './EditViewport.svelte';
 	import Filmstrip from './Filmstrip.svelte';
 	import LayersPanel from './LayersPanel.svelte';
@@ -59,6 +58,10 @@
 			return workspace;
 		},
 		onToolChange: () => (viewport.brushPoint = null)
+	});
+
+	$effect(() => {
+		if (workspace.cameraMatchCandidate) session.inspectorTab = 'adjust';
 	});
 
 	const viewport = new ViewportInteraction({
@@ -181,8 +184,6 @@
 						</Tabs.Trigger>
 					{/each}
 				</Tabs.List>
-
-				<CameraMatchOnboarding {workspace} />
 
 				<AdjustPanel {workspace} activeTool={session.tool} onPickTool={session.choose} />
 

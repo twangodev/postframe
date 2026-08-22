@@ -198,13 +198,16 @@ async function publishRawDocument(
 	session: WasmSession
 ) {
 	session.set_camera_look(message.cameraLook);
-	const cameraMatch = message.matchCamera
-		? cameraMatchResultSchema.parse(session.camera_match())
-		: undefined;
-	if (cameraMatch) session.set_camera_look(cameraMatch.cameraLook);
-	const adjustments = cameraMatch
-		? applyCameraMatchSettings(message.adjustments, cameraMatch)
-		: message.adjustments;
+	const cameraMatch =
+		message.cameraMatch !== 'none'
+			? cameraMatchResultSchema.parse(session.camera_match())
+			: undefined;
+	if (cameraMatch && message.cameraMatch === 'apply')
+		session.set_camera_look(cameraMatch.cameraLook);
+	const adjustments =
+		cameraMatch && message.cameraMatch === 'apply'
+			? applyCameraMatchSettings(message.adjustments, cameraMatch)
+			: message.adjustments;
 	document = {
 		kind: 'raw',
 		image: { width: session.width(), height: session.height() },

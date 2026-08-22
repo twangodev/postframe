@@ -22,6 +22,7 @@
 		revealedChannels?: readonly CurveChannelName[];
 		revealPhase?: ControlRevealPhase;
 		onRevealInteraction?: (channel: CurveChannelName) => void;
+		disabled?: boolean;
 	}
 
 	let {
@@ -30,7 +31,8 @@
 		open = $bindable(false),
 		revealedChannels = [],
 		revealPhase = 'idle',
-		onRevealInteraction = () => {}
+		onRevealInteraction = () => {},
+		disabled: disabledByPresentation = false
 	}: Props = $props();
 
 	const GRAB_RADIUS = 0.06;
@@ -62,7 +64,7 @@
 	const points = $derived(binding.curve[channel]);
 	const revealCount = $derived(revealedChannels.length);
 	const revealing = $derived(revealPhase === 'targeting' || revealPhase === 'moving');
-	const disabled = $derived(binding.disabled);
+	const disabled = $derived(binding.disabled || disabledByPresentation);
 	const shaped = $derived(
 		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(binding.curve[name]))
 	);

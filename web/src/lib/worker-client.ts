@@ -25,6 +25,7 @@ import {
 	type RenderRuntimeSummary
 } from './render-performance.ts';
 import { cameraMatchResultSchema } from './camera-match.ts';
+import type { CameraMatchMode } from './camera-match.ts';
 
 type ProgressResponse = Extract<Response, { type: 'progress' }>;
 type ExportProgressResponse = Extract<Response, { type: 'export-progress' }>;
@@ -128,7 +129,7 @@ export class PostframeWorkerClient {
 		adjustments: DevelopSettings,
 		crop: NormalizedCrop | null,
 		cameraLook: number,
-		matchCamera: boolean
+		cameraMatch: CameraMatchMode
 	) {
 		const response = await this.send(
 			(id) => ({
@@ -140,7 +141,7 @@ export class PostframeWorkerClient {
 				adjustments: cloneDevelopSettings(adjustments),
 				crop: cloneCrop(crop),
 				cameraLook,
-				matchCamera
+				cameraMatch
 			}),
 			'opened'
 		);
