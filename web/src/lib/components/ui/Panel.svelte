@@ -13,7 +13,7 @@
 		children: Snippet;
 	}
 
-	let { title, open = $bindable(true), meta, revealCount = 0, children }: Props = $props();
+	let { title, open = $bindable(true), meta, revealCount, children }: Props = $props();
 </script>
 
 <Collapsible.Root bind:open class="border-b border-subtle">
@@ -21,10 +21,15 @@
 		class="group flex h-10 w-full cursor-pointer items-center justify-between px-3 text-left"
 	>
 		<span class="text-[11px] tracking-[0.03em] text-text/85 lowercase">{title}</span>
-		<span class="flex items-center gap-2">
-			{#if meta}<span class="text-[11px] text-muted">{meta}</span>{/if}
-			{#if revealCount > 0}
-				<span class="rounded-full bg-accent/12 px-1.5 py-0.5 text-[9px] text-accent">
+		<span class="flex shrink-0 items-center gap-2">
+			{#if meta}<span class="min-w-10 text-right text-[11px] text-muted">{meta}</span>{/if}
+			{#if revealCount !== undefined}
+				<span
+					aria-hidden={revealCount === 0}
+					data-panel-reveal-count
+					class="inline-flex w-15 shrink-0 items-center justify-center rounded-full bg-accent/12 px-1.5 py-0.5 text-[9px] text-accent transition-opacity"
+					class:opacity-0={revealCount === 0}
+				>
 					{revealCount} changed
 				</span>
 			{/if}

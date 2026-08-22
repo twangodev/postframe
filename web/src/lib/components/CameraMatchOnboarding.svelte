@@ -14,6 +14,13 @@
 	);
 	const baselineLabel = $derived(candidate?.firstRun ? 'neutral RAW' : 'current edit');
 	const moving = $derived(candidate?.phase === 'targeting' || candidate?.phase === 'moving');
+	const motionStatus = $derived(
+		candidate?.phase === 'targeting'
+			? 'locating changed controls…'
+			: candidate?.phase === 'moving'
+				? 'moving controls…'
+				: '\u00a0'
+	);
 	let remember = $state(true);
 	let candidateId = $state(0);
 
@@ -69,11 +76,15 @@
 			<span>average fit error</span>
 			<span class="font-mono text-text">{candidate.automatic.meanError.toFixed(2)}/255</span>
 		</div>
-		{#if moving}
-			<p aria-live="polite" class="mt-2 text-[9px] text-accent">
-				{candidate.phase === 'targeting' ? 'locating changed controls…' : 'moving controls…'}
-			</p>
-		{/if}
+		<p
+			aria-live="polite"
+			aria-hidden={!moving}
+			data-camera-match-motion-status
+			class="mt-2 h-3.5 text-[9px] text-accent transition-opacity"
+			class:opacity-0={!moving}
+		>
+			{motionStatus}
+		</p>
 
 		{#if candidate.firstRun}
 			<label class="mt-3 flex cursor-pointer items-center gap-2 text-[9px] text-muted">
