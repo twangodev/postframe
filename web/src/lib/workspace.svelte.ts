@@ -226,7 +226,12 @@ export class WorkspaceState {
 		viewportTask(this.developPreview, this.selectedPhoto?.id ?? null)
 	);
 	backgroundTasks: BackgroundTask[] = $derived(
-		composeBackgroundTasks(this.documentStatus, this.smartMaskStatus, this.modelPreloadStatus)
+		composeBackgroundTasks(
+			this.documentStatus,
+			this.smartMaskStatus,
+			this.modelPreloadStatus,
+			this.cameraMatchCandidate?.phase ?? 'idle'
+		)
 	);
 	activeDocument = $derived(
 		this.selectedPhoto &&

@@ -49,6 +49,15 @@ export interface CameraMatchChanges {
 	curve: CurveChannelName[];
 }
 
+export function cameraMatchControlCount(changes: CameraMatchChanges) {
+	return changes.light.length + changes.color.length + changes.curve.length;
+}
+
+export function cameraMatchReviewSummary(changes: CameraMatchChanges) {
+	const count = cameraMatchControlCount(changes);
+	return `fitted camera profile + ${count} editable control${count === 1 ? '' : 's'}`;
+}
+
 export interface CameraMatchCandidate {
 	id: number;
 	photoId: string;

@@ -3,7 +3,7 @@
 	import Panel from './ui/Panel.svelte';
 	import type { ControlRevealPhase } from '$lib/adjustment-reveal';
 	import type { LightControlName } from '$lib/develop-settings';
-	import { LIGHT_SLIDERS } from '$lib/develop-sliders';
+	import { LIGHT_SLIDERS, slidersForControls } from '$lib/develop-sliders';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -13,6 +13,7 @@
 		onRevealInteraction?: (control: LightControlName) => void;
 		disabled?: boolean;
 		focused?: boolean;
+		controls?: readonly LightControlName[];
 	}
 
 	let {
@@ -21,13 +22,14 @@
 		reveals = {},
 		onRevealInteraction = () => {},
 		disabled = false,
-		focused = false
+		focused = false,
+		controls
 	}: Props = $props();
-	const revealCount = $derived(Object.values(reveals).filter((phase) => phase !== 'idle').length);
+	const sliders = $derived(slidersForControls(LIGHT_SLIDERS, controls));
 	const controlsDisabled = $derived(disabled || !workspace.canAdjustLight);
 </script>
 
-<Panel title="Light" bind:open {revealCount}>
+<Panel title="Light" bind:open>
 	{#if !focused}
 		<button
 			type="button"
@@ -40,7 +42,7 @@
 		</button>
 	{/if}
 	<AdjustmentSliders
-		sliders={LIGHT_SLIDERS}
+		{sliders}
 		values={workspace.adjustments}
 		disabled={controlsDisabled}
 		{reveals}

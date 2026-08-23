@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	backgroundTaskSummary,
 	backgroundTasks,
+	cameraMatchRevealTask,
 	progressKind,
 	smartMaskTask,
 	viewportTask
@@ -183,6 +185,48 @@ test('backgroundTasks composes develop, smart mask, and preload in order', () =>
 		]
 	);
 	assert.equal(tasks[0].task.label, 'reading originals');
+});
+
+test('camera match reveal is visible only while controls are moving', () => {
+	assert.deepEqual(cameraMatchRevealTask('targeting'), {
+		label: 'locating changed controls',
+		detail: null,
+		progress: null,
+		error: null
+	});
+	assert.deepEqual(cameraMatchRevealTask('moving'), {
+		label: 'moving controls',
+		detail: null,
+		progress: null,
+		error: null
+	});
+	assert.equal(cameraMatchRevealTask('idle'), null);
+	assert.equal(cameraMatchRevealTask('settled'), null);
+});
+
+test('camera match reveal temporarily owns the task summary', () => {
+	const tasks = backgroundTasks(
+		loading(),
+		mask({ phase: 'encoding', detail: 'analyzing photo' }),
+		mask(),
+		'moving'
+	);
+	assert.equal(tasks[0].key, 'camera-match');
+	assert.equal(tasks[0].preferredSummary, true);
+	assert.equal(backgroundTaskSummary(tasks)?.label, 'moving controls');
+	assert.equal(tasks.length, 3);
+});
+
+test('ordinary task summaries retain their existing labels', () => {
+	const one = backgroundTasks(loading(), mask(), mask());
+	assert.equal(backgroundTaskSummary(one)?.label, 'developing photo');
+	const many = backgroundTasks(
+		loading(),
+		mask({ phase: 'encoding', detail: 'analyzing photo' }),
+		mask()
+	);
+	assert.equal(backgroundTaskSummary(many)?.label, '2 jobs running');
+	assert.equal(backgroundTaskSummary([]), null);
 });
 
 test('backgroundTasks omits idle, ready, and terminal sources', () => {

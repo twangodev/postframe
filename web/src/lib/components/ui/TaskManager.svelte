@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { BackgroundTask } from '$lib/progress-task';
+	import { backgroundTaskSummary, type BackgroundTask } from '$lib/progress-task';
 	import ProgressCard from './ProgressCard.svelte';
 
 	interface Props {
@@ -10,11 +10,7 @@
 	let { tasks, cancel }: Props = $props();
 	let expanded = $state(false);
 
-	const summary = $derived(
-		tasks.length === 1
-			? { ...tasks[0].task, label: tasks[0].name }
-			: { label: `${tasks.length} jobs running`, detail: null, progress: null, error: null }
-	);
+	const summary = $derived(backgroundTaskSummary(tasks));
 </script>
 
 <svelte:window onkeydown={(event) => event.key === 'Escape' && (expanded = false)} />
@@ -44,9 +40,11 @@
 			class="pointer-events-auto w-56 cursor-pointer text-left"
 			aria-expanded={expanded}
 			aria-label="Background tasks"
+			aria-live="polite"
+			aria-atomic="true"
 			onclick={() => (expanded = !expanded)}
 		>
-			<ProgressCard task={summary} variant="inline" />
+			{#if summary}<ProgressCard task={summary} variant="inline" />{/if}
 		</button>
 	</div>
 {/if}

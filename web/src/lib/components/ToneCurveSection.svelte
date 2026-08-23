@@ -19,6 +19,7 @@
 		binding: DevelopBinding;
 		scope?: ImageScopeData | null;
 		open?: boolean;
+		channels?: readonly CurveChannelName[];
 		revealedChannels?: readonly CurveChannelName[];
 		revealPhase?: ControlRevealPhase;
 		onRevealInteraction?: (channel: CurveChannelName) => void;
@@ -29,6 +30,7 @@
 		binding,
 		scope = null,
 		open = $bindable(false),
+		channels = CURVE_CHANNEL_NAMES,
 		revealedChannels = [],
 		revealPhase = 'idle',
 		onRevealInteraction = () => {},
@@ -61,17 +63,13 @@
 	let channel = $state<CurveChannelName>('luminance');
 	let drag = $state<{ index: number; from: CurvePoints } | null>(null);
 
+	const visibleChannels = $derived(channels);
 	const points = $derived(binding.curve[channel]);
-	const revealCount = $derived(revealedChannels.length);
 	const revealing = $derived(revealPhase === 'targeting' || revealPhase === 'moving');
 	const disabled = $derived(binding.disabled || disabledByPresentation);
-	const shaped = $derived(
-		CURVE_CHANNEL_NAMES.filter((name) => !isIdentityCurve(binding.curve[name]))
-	);
+	const shaped = $derived(visibleChannels.filter((name) => !isIdentityCurve(binding.curve[name])));
 	const drawn = $derived(
-		activeChannelOnTop(
-			CURVE_CHANNEL_NAMES.filter((name) => name === channel || shaped.includes(name))
-		)
+		activeChannelOnTop(visibleChannels.filter((name) => name === channel || shaped.includes(name)))
 	);
 	const histogram = $derived(
 		scope ? histogramProfile(scope.histogram, CHANNEL_SOURCE[channel]) : null
@@ -134,7 +132,9 @@
 	}
 
 	$effect(() => {
-		if (revealedChannels.length > 0 && revealPhase !== 'idle') channel = revealedChannels[0];
+		const revealed = revealPhase === 'idle' ? undefined : revealedChannels[0];
+		if (revealed) channel = revealed;
+		else if (!visibleChannels.includes(channel) && visibleChannels[0]) channel = visibleChannels[0];
 	});
 </script>
 
@@ -146,18 +146,17 @@
 	title="Curve"
 	bind:open
 	meta={shaped.length ? shaped.map((n) => CHANNEL_LABEL[n]).join('') : 'linear'}
-	{revealCount}
 >
 	<div class="space-y-2">
 		<SegmentedControl
-			options={CURVE_CHANNEL_NAMES}
+			options={visibleChannels}
 			bind:value={channel}
 			label="Tone curve channel"
 			{disabled}
 			itemLabel={(name) => `${name} curve`}
 			itemClass="border-transparent text-[11px] hover:border-subtle disabled:cursor-default data-[state=on]:border-subtle data-[state=on]:bg-surface"
 			itemStyle={(name) =>
-				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}; ${revealedChannels.includes(name) ? 'box-shadow: inset 0 0 0 1px var(--color-accent)' : ''}`}
+				`color: ${channel === name || shaped.includes(name) ? CHANNEL_STROKE[name] : 'var(--color-muted)'}`}
 			item={channelChip}
 		/>
 
@@ -203,10 +202,10 @@
 						class="curve-reveal-halo"
 						cx={point.x * 100}
 						cy={(1 - point.y) * 100}
-						r="3"
+						r="2.55"
 						fill="none"
 						stroke="var(--color-accent)"
-						stroke-width="0.8"
+						stroke-width="0.7"
 						vector-effect="non-scaling-stroke"
 					/>
 				{/if}
@@ -232,22 +231,22 @@
 
 	.curve-reveal-halo[data-phase='moving'] {
 		opacity: 0.65;
-		scale: 0.95;
+		scale: 0.9;
 	}
 
 	.curve-reveal-halo[data-phase='settled'] {
 		opacity: 0.32;
-		scale: 0.9;
+		scale: 0.82;
 	}
 
 	@keyframes target-curve-control {
 		from {
 			opacity: 0;
-			scale: 1.75;
+			scale: 1.55;
 		}
 		to {
 			opacity: 0.85;
-			scale: 1;
+			scale: 0.95;
 		}
 	}
 </style>

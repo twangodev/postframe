@@ -181,9 +181,7 @@
 				<Slider.Thumb
 					index={thumb.index}
 					aria-label={label}
-					class="relative block size-2.5 rounded-full border bg-surface transition-transform hover:scale-125 focus-visible:outline-2 focus-visible:outline-accent {revealed
-						? 'border-accent'
-						: 'border-control-active'}"
+					class="relative block size-2.5 rounded-full border border-control-active bg-surface transition-transform hover:scale-125 focus-visible:outline-2 focus-visible:outline-accent"
 				>
 					{#if revealed}
 						<span

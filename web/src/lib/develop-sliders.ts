@@ -21,6 +21,13 @@ export interface SliderSpec<Control extends string = string> {
 	readonly defaultValue: number;
 }
 
+export function slidersForControls<Control extends string>(
+	sliders: readonly SliderSpec<Control>[],
+	controls: readonly Control[] | undefined
+) {
+	return controls ? sliders.filter(({ control }) => controls.includes(control)) : sliders;
+}
+
 type SliderShape<Control extends string> = Omit<SliderSpec<Control>, 'signed' | 'defaultValue'>;
 
 function sliders<Control extends string>(

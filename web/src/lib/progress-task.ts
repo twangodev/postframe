@@ -1,5 +1,6 @@
 import { formatBytes } from './format-bytes.ts';
 import { formatDuration } from './format-duration.ts';
+import type { ControlRevealPhase } from './adjustment-reveal.ts';
 import type { SmartMaskTransfer } from './smart-mask.ts';
 import type { DevelopPhase } from './worker';
 import type { DevelopPreviewPhase, DocumentStatus, SmartMaskStatus } from './workspace.svelte';
@@ -101,6 +102,7 @@ export interface BackgroundTask {
 	name: string;
 	kind: ProgressKind;
 	task: ProgressTask;
+	preferredSummary?: boolean;
 }
 
 export function progressKind(task: ProgressTask): ProgressKind {
@@ -110,9 +112,12 @@ export function progressKind(task: ProgressTask): ProgressKind {
 export function backgroundTasks(
 	status: DocumentStatus,
 	smartMask: SmartMaskStatus,
-	preload: SmartMaskStatus
+	preload: SmartMaskStatus,
+	cameraMatchPhase: ControlRevealPhase = 'idle'
 ): BackgroundTask[] {
 	const entries: BackgroundTask[] = [];
+	const revealTask = cameraMatchRevealTask(cameraMatchPhase);
+	if (revealTask) entries.push(entry('camera-match', 'camera match', revealTask, true));
 	if (status.kind === 'loading') {
 		entries.push(entry('develop', 'developing photo', developTask(status)));
 	}
@@ -123,6 +128,29 @@ export function backgroundTasks(
 	return entries;
 }
 
-function entry(key: string, name: string, task: ProgressTask): BackgroundTask {
-	return { key, name, kind: progressKind(task), task };
+export function cameraMatchRevealTask(phase: ControlRevealPhase): ProgressTask | null {
+	if (phase === 'targeting') return progressTask('locating changed controls');
+	if (phase === 'moving') return progressTask('moving controls');
+	return null;
+}
+
+export function backgroundTaskSummary(tasks: readonly BackgroundTask[]): ProgressTask | null {
+	const preferred = tasks.find(({ preferredSummary }) => preferredSummary);
+	if (preferred) return preferred.task;
+	if (tasks.length === 1) return { ...tasks[0].task, label: tasks[0].name };
+	if (tasks.length > 1) return progressTask(`${tasks.length} jobs running`);
+	return null;
+}
+
+function progressTask(label: string): ProgressTask {
+	return { label, detail: null, progress: null, error: null };
+}
+
+function entry(
+	key: string,
+	name: string,
+	task: ProgressTask,
+	preferredSummary = false
+): BackgroundTask {
+	return { key, name, kind: progressKind(task), task, preferredSummary };
 }

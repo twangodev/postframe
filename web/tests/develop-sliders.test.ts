@@ -10,6 +10,7 @@ import {
 	LIGHT_SLIDERS,
 	MASK_EDGE_SLIDERS,
 	PRESENCE_SLIDERS,
+	slidersForControls,
 	type SliderSpec
 } from '../src/lib/develop-sliders.ts';
 
@@ -47,6 +48,14 @@ test('the tables keep every slider label verbatim', () => {
 	]);
 	assert.deepEqual(labels(MASK_EDGE_SLIDERS), ['Definition', 'Feather', 'Shift']);
 	assert.deepEqual(labels(GRADING_BLEND_SLIDERS), ['blending', 'balance']);
+});
+
+test('review controls retain canonical slider order', () => {
+	assert.deepEqual(
+		slidersForControls(LIGHT_SLIDERS, ['shadows', 'exposure']).map(({ control }) => control),
+		['exposure', 'shadows']
+	);
+	assert.equal(slidersForControls(COLOR_SLIDERS, undefined), COLOR_SLIDERS);
 });
 
 test('exposure keeps its fine-grained EV shape', () => {

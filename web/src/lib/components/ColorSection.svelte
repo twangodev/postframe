@@ -5,7 +5,7 @@
 	import Panel from './ui/Panel.svelte';
 	import type { ControlRevealPhase } from '$lib/adjustment-reveal';
 	import type { ColorControlName } from '$lib/develop-settings';
-	import { COLOR_SLIDERS } from '$lib/develop-sliders';
+	import { COLOR_SLIDERS, slidersForControls } from '$lib/develop-sliders';
 	import type { CameraMatchPreference } from '$lib/camera-match';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -19,6 +19,7 @@
 		onRevealInteraction?: (control: ColorControlName) => void;
 		disabled?: boolean;
 		focused?: boolean;
+		controls?: readonly ColorControlName[];
 	}
 
 	let {
@@ -30,11 +31,12 @@
 		reveals = {},
 		onRevealInteraction = () => {},
 		disabled = false,
-		focused = false
+		focused = false,
+		controls
 	}: Props = $props();
 
 	const eyedropperActive = $derived(activeTool === 'eyedropper');
-	const revealCount = $derived(Object.values(reveals).filter((phase) => phase !== 'idle').length);
+	const sliders = $derived(slidersForControls(COLOR_SLIDERS, controls));
 	const controlsDisabled = $derived(disabled || !workspace.canAdjustLight);
 	let reviewOpen = $state(false);
 	let matching = $state(false);
@@ -66,7 +68,7 @@
 	}
 </script>
 
-<Panel title="Color" bind:open {revealCount}>
+<Panel title="Color" bind:open>
 	{#if !focused}
 		<div class="mb-3 flex gap-1">
 			<button
@@ -93,7 +95,7 @@
 		</div>
 	{/if}
 	<AdjustmentSliders
-		sliders={COLOR_SLIDERS}
+		{sliders}
 		values={workspace.adjustments}
 		disabled={controlsDisabled}
 		{reveals}

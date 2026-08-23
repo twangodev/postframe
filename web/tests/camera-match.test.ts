@@ -4,9 +4,12 @@ import test from 'node:test';
 import {
 	applyCameraMatchSettings,
 	cameraMatchChanges,
+	cameraMatchControlCount,
 	cameraMatchMode,
 	cameraMatchOpening,
-	interpolateCameraMatchSettings
+	cameraMatchReviewSummary,
+	interpolateCameraMatchSettings,
+	type CameraMatchChanges
 } from '../src/lib/camera-match.ts';
 import { defaultDevelopSettings } from '../src/lib/develop-settings.ts';
 
@@ -43,6 +46,24 @@ test('finds only the scalar controls and curve channels changed by the fit', () 
 		color: ['tint'],
 		curve: ['red']
 	});
+});
+
+test('summarizes the fitted profile and editable control count', () => {
+	assert.equal(
+		cameraMatchReviewSummary({ light: ['exposure'], color: [], curve: [] }),
+		'fitted camera profile + 1 editable control'
+	);
+	const changes: CameraMatchChanges = {
+		light: ['exposure'],
+		color: ['tint'],
+		curve: ['red']
+	};
+	assert.equal(cameraMatchControlCount(changes), 3);
+	assert.equal(cameraMatchReviewSummary(changes), 'fitted camera profile + 3 editable controls');
+	assert.equal(
+		cameraMatchReviewSummary({ light: [], color: [], curve: [] }),
+		'fitted camera profile + 0 editable controls'
+	);
 });
 
 test('interpolates the actual fitted settings without moving unrelated groups', () => {

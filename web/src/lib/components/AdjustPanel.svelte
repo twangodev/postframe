@@ -62,6 +62,7 @@
 			<LightSection
 				{workspace}
 				bind:open={lightOpen}
+				controls={candidate.affected.light}
 				reveals={lightReveals}
 				disabled={candidate.view !== 'match'}
 				focused
@@ -73,6 +74,7 @@
 				binding={workspace.globalDevelop}
 				scope={workspace.imageScope}
 				bind:open={curveOpen}
+				channels={candidate.affected.curve}
 				revealedChannels={candidate.phase === 'idle' ? [] : candidate.changes.curve}
 				revealPhase={candidate.phase}
 				disabled={candidate.view !== 'match'}
@@ -85,6 +87,7 @@
 				{activeTool}
 				{onPickTool}
 				bind:open={colorOpen}
+				controls={candidate.affected.color}
 				reveals={colorReveals}
 				disabled={candidate.view !== 'match'}
 				focused

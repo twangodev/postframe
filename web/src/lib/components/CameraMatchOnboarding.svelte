@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { primaryButtonClass, secondaryButtonClass } from '$lib/button';
+	import { cameraMatchReviewSummary } from '$lib/camera-match';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
 	interface Props {
@@ -14,13 +15,7 @@
 	);
 	const baselineLabel = $derived(candidate?.firstRun ? 'neutral RAW' : 'current edit');
 	const moving = $derived(candidate?.phase === 'targeting' || candidate?.phase === 'moving');
-	const motionStatus = $derived(
-		candidate?.phase === 'targeting'
-			? 'locating changed controls…'
-			: candidate?.phase === 'moving'
-				? 'moving controls…'
-				: '\u00a0'
-	);
+	const reviewSummary = $derived(candidate ? cameraMatchReviewSummary(candidate.affected) : '');
 	let remember = $state(true);
 	let candidateId = $state(0);
 
@@ -43,11 +38,9 @@
 		class="sticky top-0 z-10 border-b border-accent bg-surface/95 p-3 backdrop-blur"
 	>
 		<h2 id="camera-match-title" class="text-xs font-medium text-text">match the {target}?</h2>
-		<p class="mt-1 text-[10px] leading-relaxed text-muted">
-			See the editable controls Postframe fitted before you keep the starting point.
-		</p>
+		<p class="mt-1 text-[9px] text-muted">{reviewSummary}</p>
 
-		<div class="mt-3 grid grid-cols-2 rounded border border-subtle p-0.5">
+		<div class="mt-2.5 grid grid-cols-2 rounded border border-subtle p-0.5">
 			<button
 				type="button"
 				aria-pressed={candidate.view === 'baseline'}
@@ -72,28 +65,14 @@
 			</button>
 		</div>
 
-		<div class="mt-2 flex items-center justify-between gap-2 text-[9px] text-muted">
-			<span>average fit error</span>
-			<span class="font-mono text-text">{candidate.automatic.meanError.toFixed(2)}/255</span>
-		</div>
-		<p
-			aria-live="polite"
-			aria-hidden={!moving}
-			data-camera-match-motion-status
-			class="mt-2 h-3.5 text-[9px] text-accent transition-opacity"
-			class:opacity-0={!moving}
-		>
-			{motionStatus}
-		</p>
-
 		{#if candidate.firstRun}
-			<label class="mt-3 flex cursor-pointer items-center gap-2 text-[9px] text-muted">
+			<label class="mt-2.5 flex cursor-pointer items-center gap-2 text-[9px] text-muted">
 				<input type="checkbox" bind:checked={remember} class="accent-accent" />
 				remember this choice for new RAWs
 			</label>
 		{/if}
 
-		<div class="mt-3 flex gap-2">
+		<div class="mt-2.5 flex gap-2">
 			<button
 				type="button"
 				onclick={() => workspace.dismissCameraMatchCandidate(remember)}
