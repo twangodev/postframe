@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { primaryButtonClass, secondaryButtonClass } from '$lib/button';
+	import { primaryButtonClass } from '$lib/button';
 	import { cameraMatchReviewSummary } from '$lib/camera-match';
 	import type { WorkspaceState } from '$lib/workspace.svelte';
 
@@ -40,29 +40,32 @@
 		<h2 id="camera-match-title" class="text-xs font-medium text-text">match the {target}?</h2>
 		<p class="mt-1 text-[9px] text-muted">{reviewSummary}</p>
 
-		<div class="mt-2.5 grid grid-cols-2 rounded border border-subtle p-0.5">
-			<button
-				type="button"
-				aria-pressed={candidate.view === 'baseline'}
-				onclick={workspace.showCameraMatchBaseline}
-				class="cursor-pointer rounded px-2 py-1.5 text-[10px] transition-colors {candidate.view ===
-				'baseline'
-					? 'bg-elevated text-text'
-					: 'text-muted hover:text-text'}"
-			>
-				{baselineLabel}
-			</button>
-			<button
-				type="button"
-				aria-pressed={candidate.view === 'match'}
-				onclick={workspace.revealCameraMatch}
-				class="cursor-pointer rounded px-2 py-1.5 text-[10px] transition-colors {candidate.view ===
-				'match'
-					? 'bg-elevated text-text'
-					: 'text-muted hover:text-text'}"
-			>
-				camera match
-			</button>
+		<div class="mt-2.5">
+			<p class="text-[9px] tracking-[0.04em] text-muted">preview</p>
+			<div class="mt-0.5 grid grid-cols-2 border-b border-subtle">
+				<button
+					type="button"
+					aria-pressed={candidate.view === 'baseline'}
+					onclick={workspace.showCameraMatchBaseline}
+					class="-mb-px cursor-pointer border-b px-2 py-1.5 text-[10px] transition-colors {candidate.view ===
+					'baseline'
+						? 'border-accent text-text'
+						: 'border-transparent text-muted hover:text-text'}"
+				>
+					{baselineLabel}
+				</button>
+				<button
+					type="button"
+					aria-pressed={candidate.view === 'match'}
+					onclick={workspace.revealCameraMatch}
+					class="-mb-px cursor-pointer border-b px-2 py-1.5 text-[10px] transition-colors {candidate.view ===
+					'match'
+						? 'border-accent text-text'
+						: 'border-transparent text-muted hover:text-text'}"
+				>
+					camera match
+				</button>
+			</div>
 		</div>
 
 		{#if candidate.firstRun}
@@ -72,20 +75,20 @@
 			</label>
 		{/if}
 
-		<div class="mt-2.5 flex gap-2">
-			<button
-				type="button"
-				onclick={() => workspace.dismissCameraMatchCandidate(remember)}
-				class={secondaryButtonClass}
-			>
-				{candidate.firstRun ? 'start neutral' : 'keep current edit'}
-			</button>
+		<div class="mt-3 flex flex-col">
 			<button
 				type="submit"
 				disabled={candidate.view !== 'match' || moving}
-				class="{primaryButtonClass} disabled:cursor-default disabled:opacity-40"
+				class="{primaryButtonClass} w-full disabled:cursor-default disabled:opacity-40"
 			>
 				use camera match
+			</button>
+			<button
+				type="button"
+				onclick={() => workspace.dismissCameraMatchCandidate(remember)}
+				class="mt-1.5 w-full cursor-pointer py-1 text-center text-[10px] text-muted transition-colors hover:text-text"
+			>
+				{candidate.firstRun ? 'start neutral' : 'keep current edit'}
 			</button>
 		</div>
 	</form>
